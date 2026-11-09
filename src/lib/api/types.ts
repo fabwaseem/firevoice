@@ -347,7 +347,8 @@ export interface STTResult {
   seconds: number;
   model: string;
   device: string;
-  words: WordTime[];
+  words: (WordTime & { speaker?: string })[];
+  segments?: { start: number; end: number; text: string; speaker?: string }[];
 }
 
 export type JobKind = "tts" | "batch" | "design" | "previews";

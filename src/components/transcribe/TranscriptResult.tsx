@@ -82,6 +82,10 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
         <div className="max-h-[42vh] overflow-y-auto rounded-xl bg-surface-2 px-4 py-3 text-[15px] leading-[1.9] text-ink" aria-label="Transcript words">
           {result.words.length ? (
             result.words.map((w, i) => (
+              <span key={i}>
+              {w.speaker && w.speaker !== result.words[i - 1]?.speaker && (
+                <>{i > 0 && <br />}<span className="mr-1.5 rounded-full bg-fire-soft px-2 py-0.5 text-[12px] font-semibold text-fire">{w.speaker}</span></>
+              )}
               <button
                 key={i}
                 ref={i === active ? activeRef : undefined}
@@ -95,6 +99,7 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
               >
                 {w.text}{" "}
               </button>
+              </span>
             ))
           ) : (
             <p>{result.text}</p>

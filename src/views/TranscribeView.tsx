@@ -6,7 +6,7 @@ import { errMessage } from "@/lib/api/hooks";
 import type { STTResult } from "@/lib/api/types";
 import { LANGUAGE_NAMES, uid } from "@/lib/utils";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { Button, Card, CardBody, CardHeader, EmptyState, Label, LabeledSlider, Select } from "@/components/ui";
+import { Button, Card, CardBody, CardHeader, EmptyState, Input, Label, LabeledSlider, Select, Switch } from "@/components/ui";
 import { AudioSource, type SourceFile } from "@/components/transcribe/AudioSource";
 import { TranscriptResult } from "@/components/transcribe/TranscriptResult";
 
@@ -22,6 +22,8 @@ export function TranscribeView() {
   const [source, setSource] = useState<SourceFile | null>(null);
   const [language, setLanguage] = useState("auto");
   const [beam, setBeam] = useState(5);
+  const [keyterms, setKeyterms] = useState("");
+  const [diarize, setDiarize] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ data: STTResult; source: SourceFile; trackId: string } | null>(null);
@@ -34,7 +36,7 @@ export function TranscribeView() {
     const ctl = new AbortController();
     abortRef.current = ctl;
     try {
-      const data = await api.stt(source.blob, { language, beam_size: beam, filename: source.name }, ctl.signal);
+      const data = await api.stt(source.blob, { language, beam_size: beam, filename: source.name, keyterms: keyterms.trim() || undefined, diarize }, ctl.signal);
       setResult({ data, source, trackId: `stt-${uid()}` });
       toast.success(`Transcribed ${data.words.length} words`);
     } catch (e) {
@@ -67,6 +69,11 @@ export function TranscribeView() {
                 <Select value={language} onChange={setLanguage} options={LANG_OPTIONS} ariaLabel="Language" disabled={busy} />
               </div>
               <LabeledSlider label="Beam size" value={beam} onChange={setBeam} min={1} max={10} step={1} hint="Wider beams are more accurate and slower" disabled={busy} onReset={() => setBeam(5)} />
+              <div>
+                <Label htmlFor="stt-keys" hint="comma-separated">Key terms</Label>
+                <Input id="stt-keys" value={keyterms} onChange={(e) => setKeyterms(e.target.value)} placeholder="FireVoice, Ayesha, VoxCPM" disabled={busy} />
+              </div>
+              <Switch checked={diarize} onChange={setDiarize} label="Label who speaks" description="Speaker 1, Speaker 2… for interviews and podcasts" disabled={busy} />
               <div className="flex items-center gap-2 pt-1">
                 {busy ? (
                   <Button variant="danger" size="lg" className="flex-1" leading={<Square className="size-4 fill-current" />} onClick={() => abortRef.current?.abort()}>

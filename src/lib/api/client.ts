@@ -167,11 +167,13 @@ export const api = {
   },
 
   // -------------------------------------------------------------------- stt
-  stt: async (file: Blob, opts: { language?: string; beam_size?: number; filename?: string } = {}, signal?: AbortSignal) => {
+  stt: async (file: Blob, opts: { language?: string; beam_size?: number; filename?: string; keyterms?: string; diarize?: boolean } = {}, signal?: AbortSignal) => {
     const fd = new FormData();
     fd.append("file", file, opts.filename ?? (file instanceof File ? file.name : "recording.webm"));
     fd.append("language", opts.language ?? "auto");
     if (opts.beam_size) fd.append("beam_size", String(opts.beam_size));
+    if (opts.keyterms) fd.append("keyterms", opts.keyterms);
+    if (opts.diarize) fd.append("diarize", "true");
     return request<STTResult>("/api/v1/stt", { method: "POST", body: fd, signal });
   },
 
