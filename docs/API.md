@@ -168,6 +168,18 @@ line that still runs long pushes the next one until the next pause.
 Dub jobs read only their own upload. The jobs API cannot point one at another file. The output is watermarked once,
 after mixing, because time-stretching a line would erase a per-line mark.
 
+### Separation and Urdu
+
+- `POST /api/v1/audio/separate`: multipart `file`, `mode` (`vocals`: voice | music and effects; `denoise`: voice |
+  noise; `dereverb`: voice | room echo), `stem` (`voice`, `rest`, or `zip` for both), `format`. Needs the `separator`
+  engine (`POST /api/v1/engines/separator/install`). `POST /api/v1/audio/clean` also takes `strength: "neural"`, and
+  `POST /api/v1/dub` takes `keep_music` to keep the original's music and effects under the dub.
+- Speech to text in Urdu adds `text_roman`, plus `roman` on every word and segment: Roman Urdu in English letters.
+- Urdu renders (`language: "ur"`) are checked against what Whisper hears, compared by consonant skeleton.
+  A take below 0.8 is retried, like an English take below `accept`.
+- English word times (renders, takes, transcripts) are refined by forced alignment. Cancelling a render (closing the
+  connection, a job's cancel) stops the passage already generating on step-by-step engines.
+
 ### Watermark and consent
 
 Every output is marked as AI speech with an inaudible AudioSeal watermark (16 bits: "FireVoice", then `render` or

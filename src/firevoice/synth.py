@@ -392,7 +392,7 @@ class Synthesizer:
         for u in units:
             if isinstance(u, Pause):
                 # a streamed first passage is heard as it renders, so a pause cannot be cut into it afterwards
-                if cur is not None and bridge and cur["english"] and u.ms <= 3000 and not (stream_first and not chunks):
+                if cur is not None and bridge and cur["english"] is True and u.ms <= 3000 and not (stream_first and not chunks):
                     held.append(u)
                 else:
                     close()

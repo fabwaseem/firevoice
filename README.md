@@ -247,6 +247,29 @@ firevoice voices build-styles --name Ember --styles calm,serious   # the voice's
 firevoice voices avatar --name Ember --image face.png
 ```
 
+## Audio tools: separation, Urdu, exact timing
+
+```bash
+firevoice engines install separator                          # UVR RoFormer models, ~1.5 GB once
+firevoice audio separate song.mp3 -o voice.wav --rest music.wav
+firevoice audio separate noisy.wav --mode denoise -o clean.wav   # or --mode dereverb
+firevoice audio clean clip.wav --strength neural             # neural denoise, then level and trim
+firevoice dub talk.mp4 --to es --keep-music --video talk.es.mp4  # the original music under the dub
+firevoice audio urdu-check                                   # how well Whisper hears your Urdu voices
+```
+
+- **Urdu takes are checked.** Scripts in Roman Urdu are compared with what Whisper hears in Urdu by consonant
+  skeleton, so spelling variants ("hain", "hein") do not count against a take but a wrong word does. Urdu transcripts
+  also come in English letters (`text_roman`). With VoxCPM2 and large-v3-turbo the check passed 94% of takes (mean
+  0.963); the one failure was a genuinely wrong take.
+- **Exact word times.** English word times are refined by CTC forced alignment (wav2vec 2.0, about 8 ms per take
+  on the GPU), so subtitles, splices and pause cuts land on the real word edges. `FIREVOICE_ALIGN=off` turns it off.
+- **Stopping is immediate.** A cancelled render stops the passage already generating on step-by-step engines (VoxCPM2
+  and others that stream), instead of letting it finish.
+- **`--remote` everywhere.** Every command that renders or edits (`say`, `dict`, `renders`, `project`, `dialogue`,
+  `dub`, `sound`, `convert`, `audio`, `styles`, `batch`, `voices`, `engines`, `transcribe`, `jobs`) can run on another
+  machine's `firevoice serve`.
+
 ## Sound effects and music
 
 ```bash
