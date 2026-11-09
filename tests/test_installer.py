@@ -15,7 +15,7 @@ def engines(tmp_path, monkeypatch):
     monkeypatch.setattr(installer, "_repo_size", lambda repo, rev=None: None)
     calls = []
 
-    def fake_run(cmd, log, cancel, env=None, on_line=None):
+    def fake_run(cmd, log, cancel, env=None, on_line=None, cwd=None):
         calls.append(cmd)
         if cmd[1:2] == ["venv"]:
             py = paths.venv_python(cmd[-1].replace("\\", "/").rsplit("/", 1)[-1])
@@ -126,3 +126,13 @@ def test_editable_repo_install(engines, monkeypatch):
     installer.install("indextts25", lambda *a: None, __import__("threading").Event())
     pip = next(" ".join(map(str, c)) for c in engines if " -e " in " ".join(map(str, c)))
     assert "indextts-repo" in pip
+
+
+def test_warmup_runs_once(engines, monkeypatch):
+    monkeypatch.setattr(installer.shutil, "which", lambda name: name)
+    installer.install("indextts25", lambda *a: None, __import__("threading").Event())
+    warm = [c for c in engines if len(c) > 2 and c[1] == "-c" and "IndexTTS2(" in c[2]]
+    assert len(warm) == 1 and "indextts-2.5" in warm[0][2] and "\\" not in warm[0][2].split("cfg_path=")[1].split(",")[0]
+    engines.clear()
+    installer.install("indextts25", lambda *a: None, __import__("threading").Event())
+    assert not [c for c in engines if len(c) > 2 and "IndexTTS2(" in str(c[2])]

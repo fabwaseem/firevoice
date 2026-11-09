@@ -52,6 +52,9 @@ class Manifest:
     requirements: Optional[str] = None          # a requirements file inside the checkout to install
     overrides: list = field(default_factory=list)   # versions forced over what dependencies ask for (uv --override)
     repo_code: bool = False                     # runs code from the model's own repository (cloned or trust_remote_code)
+    # Python run in the venv (cwd: the checkout) once everything is in place: loads the engine so the helper models it
+    # fetches on first load arrive during the install, not during someone's first render. {weights} is its folder.
+    warmup: Optional[str] = None
 
     @property
     def auto(self) -> bool:
@@ -89,10 +92,14 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
              "`gpu` extra (pip install \"firevoice[gpu]\"); the desktop app's bundled backend includes it"),
     Manifest("chatterbox", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),
     Manifest("chatterbox-vc", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),
-    Manifest("indextts2", "indextts", "2.8.0", python="3.11", git=_INDEX_GIT, editable=True, repo_code=True,
+    Manifest("indextts2", "indextts", "2.8.0", python="3.11", git=_INDEX_GIT, editable=True, repo_code=True, packages=["hf_xet"],
+             warmup="from indextts.infer_v2 import IndexTTS2; IndexTTS2(cfg_path='{weights}/config.yaml', model_dir='{weights}', "
+                    "use_fp16=True, use_cuda_kernel=False, use_deepspeed=False); print('ready')",
              weights=[("IndexTeam/IndexTTS-2", "indextts-2", "740dcaff396282ffb241903d150ac011cd4b1ede")], check="indextts",
              notes="runs code from github.com/index-tts/index-tts (pinned); shares its venv with indextts25"),
-    Manifest("indextts25", "indextts", "2.8.0", python="3.11", git=_INDEX_GIT, editable=True, repo_code=True,
+    Manifest("indextts25", "indextts", "2.8.0", python="3.11", git=_INDEX_GIT, editable=True, repo_code=True, packages=["hf_xet"],
+             warmup="from indextts.infer_v2_5 import IndexTTS2; IndexTTS2(cfg_path='{weights}/config.yaml', model_dir='{weights}', "
+                    "use_bf16=True, use_cuda_kernel=False, use_deepspeed=False); print('ready')",
              weights=[("IndexTeam/IndexTTS-2.5", "indextts-2.5", "c39ce5ba981572cb187443877ff559dfb246ce63")], check="indextts",
              notes="runs code from github.com/index-tts/index-tts (pinned); shares its venv with indextts2"),
     Manifest("ming", "ming", "2.8.0", python="3.11", git=("https://github.com/inclusionAI/Ming-3.0-tts.git",
@@ -261,11 +268,12 @@ class InstallCancelled(RuntimeError):
     pass
 
 
-def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = None, on_line: Optional[Callable[[str], None]] = None) -> None:
+def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = None, on_line: Optional[Callable[[str], None]] = None,
+         cwd: Optional[str] = None) -> None:
     log(f"$ {' '.join(cmd)}")
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
-                         env=env, creationflags=flags)
+                         env=env, creationflags=flags, cwd=cwd)
     tail: list[str] = []
 
     def pump():
@@ -344,7 +352,8 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
     py = paths.venv_python(m.venv)
     todo_weights = [(r, f, v) for r, f, v in _weights(m) if force or not weights_ok(f)]
     build = force or not venv_ok(m)
-    steps = (3 + (1 if m.git else 0) if build else 0) + len(todo_weights) + 1
+    warm = bool(m.warmup) and (build or bool(todo_weights) or not (paths.engines_dir() / m.venv / ".warm").exists())
+    steps = (3 + (1 if m.git else 0) if build else 0) + len(todo_weights) + (1 if warm else 0) + 1
     k = 0
     t0 = time.time()
     try:
@@ -407,6 +416,14 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                     _run([sys.executable, "-c", _FETCH, repo, str(dest), rev or ""], log, cancel, env)
                 finally:
                     stop.set()
+                k += 1
+            if warm:
+                progress(k, steps, "first load: fetching the engine's helper models")
+                repo_dir = str(paths.engines_dir() / m.git[2]) if m.git else None
+                wenv = {**env, "PYTHONPATH": repo_dir or "", "PYTHONUTF8": "1"}
+                code = m.warmup.replace("{weights}", str(paths.weights(_weights(m)[0][1])).replace("\\", "/"))
+                _run([str(py), "-c", code], log, cancel, wenv, cwd=repo_dir)
+                (paths.engines_dir() / m.venv / ".warm").write_text(m.engine, encoding="utf-8")
                 k += 1
             if m.check:
                 progress(k, steps, f"checking that {m.check} imports")
