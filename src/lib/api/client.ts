@@ -102,6 +102,17 @@ export const api = {
     if (voice) fd.append("voice", voice);
     return request<QualityReport>("/api/v1/audio/quality", { method: "POST", body: fd });
   },
+  dubLanguages: () => request<{ languages: string[]; model: string; sizes: Record<string, string> }>("/api/v1/dub/languages"),
+  dub: (file: Blob, opts: { target_language: string; source_language?: string; voice?: string; keep_voices?: boolean; consent?: boolean;
+    background?: number; translator?: "fast" | "better"; format?: string; cast?: Record<string, string> }) => {
+    const fd = new FormData();
+    fd.append("file", file, file instanceof File ? file.name : "recording.wav");
+    for (const [k, v] of Object.entries({ format: "mp3", ...opts })) {
+      if (v === undefined || v === null || v === "") continue;
+      fd.append(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+    }
+    return request<Job>("/api/v1/dub", { method: "POST", body: fd });
+  },
   renderQuality: (id: string) => request<QualityReport>(`/api/v1/renders/${encodeURIComponent(id)}/quality`),
   detectWatermark: (file: Blob, name = "audio") => {
     const fd = new FormData();

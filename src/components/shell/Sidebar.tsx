@@ -1,5 +1,5 @@
 import { NavLink } from "react-router";
-import { AudioLines, BookA, BookOpen, Home, MessagesSquare, Repeat2, Library, ListChecks, Mic, Palette, Cpu, Settings, PanelLeftClose, PanelLeftOpen, Moon, Sun, Monitor } from "lucide-react";
+import { AudioLines, BookA, BookOpen, Cpu, Home, Languages, Library, ListChecks, MessagesSquare, Mic, Monitor, Moon, Palette, PanelLeftClose, PanelLeftOpen, Repeat2, Settings, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/stores/settings";
 import { Tooltip } from "@/components/ui";
@@ -12,6 +12,7 @@ const NAV = [
   { to: "/projects", label: "Projects", icon: BookOpen },
   { to: "/dialogue", label: "Dialogue", icon: MessagesSquare },
   { to: "/changer", label: "Changer", icon: Repeat2 },
+  { to: "/dub", label: "Dubbing", icon: Languages },
   { to: "/voices", label: "Voices", icon: Library },
   { to: "/transcribe", label: "Transcribe", icon: Mic },
   { to: "/jobs", label: "Jobs", icon: ListChecks },

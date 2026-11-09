@@ -111,6 +111,18 @@ export interface SetupReport {
 
 export type PathSettingKey = "engines_dir" | "weights_dir" | "ffmpeg" | "watermark";
 
+export interface DubLine {
+  start: number;
+  end: number;
+  text: string;
+  translation: string;
+  speaker: string | null;
+  voice: string;
+  speed: number;
+  at: number;
+  duration: number;
+}
+
 export interface QualityReport {
   duration: number;
   mos: { overall: number; signal: number; background: number; p808: number } | null;
@@ -461,7 +473,7 @@ export interface STTResult {
   segments?: { start: number; end: number; text: string; speaker?: string }[];
 }
 
-export type JobKind = "tts" | "batch" | "design" | "previews" | "project" | "style_refs" | "dialogue" | "install";
+export type JobKind = "tts" | "batch" | "design" | "previews" | "project" | "style_refs" | "dialogue" | "install" | "dub";
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 
 export interface Job {
