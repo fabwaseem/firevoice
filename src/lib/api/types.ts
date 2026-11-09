@@ -161,6 +161,59 @@ export interface DictView {
   builtin: { match: string; say: string }[];
 }
 
+// ---------------------------------------------------------------- projects
+export type ParagraphStatus = "draft" | "rendered" | "stale" | "locked";
+export interface Paragraph {
+  id: string;
+  text: string;
+  voice?: string | null;
+  style?: string | null;
+  pace?: number | null;
+  locked: boolean;
+  status: ParagraphStatus;
+  render: { id: string; key: string; duration: number; at: number } | null;
+}
+export interface Chapter {
+  id: string;
+  title: string;
+  paragraphs: Paragraph[];
+  counts: Record<ParagraphStatus, number>;
+  duration: number;
+}
+export interface Project {
+  id: string;
+  title: string;
+  created: number;
+  updated: number;
+  defaults: Record<string, unknown> & { voice?: string; style?: string; paragraph_gap_ms?: number; chapter_gap_ms?: number };
+  chapters: Chapter[];
+  counts: Record<ParagraphStatus, number>;
+  duration: number;
+  paragraphs: number;
+  words: number;
+}
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  created: number;
+  updated: number;
+  counts: Record<ParagraphStatus, number>;
+  duration: number;
+  paragraphs: number;
+  words: number;
+  chapters: number;
+}
+export interface ChapterEdit {
+  id?: string;
+  title: string;
+  paragraphs: { id?: string; text: string; voice?: string | null; style?: string | null; pace?: number | null; locked?: boolean }[];
+}
+export interface AudiobookCheck {
+  master: string | null;
+  pass: boolean;
+  chapters: { chapter: string; title: string; pass: boolean; note?: string; checks: { name: string; value: number; unit: string; target: string; ok: boolean }[] }[];
+}
+
 // ---------------------------------------------------------------- kept renders (takes and QA)
 export interface QAWord {
   text: string;

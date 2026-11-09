@@ -10,6 +10,8 @@ import { JobsView } from "@/views/JobsView";
 import { EnginesView } from "@/views/EnginesView";
 import { StylesView } from "@/views/StylesView";
 import { DictionaryView } from "@/views/DictionaryView";
+import { ProjectsView } from "@/views/ProjectsView";
+import { ProjectEditorView } from "@/views/ProjectEditorView";
 import { SettingsView } from "@/views/SettingsView";
 
 const queryClient = new QueryClient({
@@ -36,6 +38,8 @@ const router = createHashRouter([
       { path: "styles", element: <StylesView /> },
       { path: "styles/:styleName", element: <StylesView /> },
       { path: "dictionary", element: <DictionaryView /> },
+      { path: "projects", element: <ProjectsView /> },
+      { path: "projects/:projectId", element: <ProjectEditorView /> },
       { path: "settings", element: <SettingsView /> },
     ],
   },

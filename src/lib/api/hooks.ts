@@ -16,11 +16,21 @@ export const qk = {
   jobs: (f?: Record<string, string | number | undefined>) => ["jobs", f ?? {}] as const,
   job: (id: string) => ["job", id] as const,
   dictionary: ["dictionary"] as const,
+  projects: ["projects"] as const,
+  project: (id: string) => ["project", id] as const,
   kept: (id: string) => ["kept", id] as const,
 };
 
 export function useDictionary() {
   return useQuery({ queryKey: qk.dictionary, queryFn: api.dictionary });
+}
+
+export function useProjects() {
+  return useQuery({ queryKey: qk.projects, queryFn: api.projects });
+}
+
+export function useProject(id: string | null | undefined) {
+  return useQuery({ queryKey: qk.project(id ?? ""), queryFn: () => api.project(id!), enabled: !!id });
 }
 
 export function useKeptRender(id: string | null | undefined) {

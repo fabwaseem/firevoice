@@ -2,6 +2,7 @@ import { useSettings } from "@/stores/settings";
 import type {
   ApiErrorBody, Engine, Health, Job, JobEvent, JobKind, Options, Style, STTResult, SystemInfo, TTSJson, TTSRequest,
   Voice, VoiceCollection, StreamEvent, DictRule, DictRuleInput, DictView, KeptRender, WordTime,
+  Project, ProjectSummary, ChapterEdit, AudiobookCheck,
 } from "./types";
 
 export class ApiError extends Error {
@@ -190,6 +191,42 @@ export const api = {
   replaceRules: (rules: DictRuleInput[]) => request<{ rules: DictRule[] }>("/api/v1/dictionary", { method: "PUT", body: json({ rules }) }),
   testDictionary: (text: string, engine?: string | null) =>
     request<{ text: string; spoken: string; engine: string }>("/api/v1/dictionary/test", { method: "POST", body: json({ text, engine: engine ?? undefined }) }),
+
+  // ---- projects
+  projects: async () => (await request<{ projects: ProjectSummary[] }>("/api/v1/projects")).projects,
+  project: (id: string) => request<Project>(`/api/v1/projects/${encodeURIComponent(id)}`),
+  createProject: (body: { title: string; text?: string; defaults?: Record<string, unknown> }) =>
+    request<Project>("/api/v1/projects", { method: "POST", body: json(body) }),
+  updateProject: (id: string, body: { title?: string; defaults?: Record<string, unknown>; chapters?: ChapterEdit[] }) =>
+    request<Project>(`/api/v1/projects/${encodeURIComponent(id)}`, { method: "PATCH", body: json(body) }),
+  deleteProject: (id: string) => request<unknown>(`/api/v1/projects/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  renderParagraph: (id: string, para: string, signal?: AbortSignal) =>
+    request<Project>(`/api/v1/projects/${encodeURIComponent(id)}/paragraphs/${encodeURIComponent(para)}/render`, { method: "POST", signal }),
+  lockParagraph: (id: string, para: string, locked: boolean) =>
+    request<Project>(`/api/v1/projects/${encodeURIComponent(id)}/paragraphs/${encodeURIComponent(para)}/lock`, { method: "POST", body: json({ locked }) }),
+  paragraphAudioUrl: (id: string, para: string) => withToken(url(`/api/v1/projects/${encodeURIComponent(id)}/paragraphs/${encodeURIComponent(para)}/audio`, { format: "mp3" })),
+  chapterAudioUrl: (id: string, chapter: string) =>
+    withToken(url(`/api/v1/projects/${encodeURIComponent(id)}/export`, { format: "mp3", chapter, allow_missing: true })),
+  renderProject: (id: string, scope: "stale" | "all" = "stale", chapter?: string) =>
+    request<Job>(`/api/v1/projects/${encodeURIComponent(id)}/render`, { method: "POST", body: json({ scope, chapter: chapter ?? null }) }),
+  exportProject: async (id: string, format: string, master?: "audiobook" | null) => {
+    const res = await fetch(url(`/api/v1/projects/${encodeURIComponent(id)}/export`, { format, master: master ?? undefined }), { headers: authHeaders() });
+    if (!res.ok) throw await parseError(res);
+    const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? `project.${format}`;
+    return { blob: await res.blob(), name };
+  },
+  checkProject: (id: string, master?: "audiobook" | null) => request<AudiobookCheck>(`/api/v1/projects/${encodeURIComponent(id)}/check`, {}, { master: master ?? undefined }),
+  projectBundle: async (id: string) => {
+    const res = await fetch(url(`/api/v1/projects/${encodeURIComponent(id)}/bundle`), { headers: authHeaders() });
+    if (!res.ok) throw await parseError(res);
+    const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "project.fvproject.zip";
+    return { blob: await res.blob(), name };
+  },
+  importProject: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<Project>("/api/v1/projects/import", { method: "POST", body: fd });
+  },
 
   // ---- kept renders: takes and QA
   keptRender: (id: string) => request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}`),
