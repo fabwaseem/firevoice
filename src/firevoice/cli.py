@@ -333,6 +333,44 @@ def cmd_project(a) -> int:
         svc.close()
 
 
+def cmd_dialogue(a) -> int:
+    from .service import FireVoiceError
+    svc = _service(a)
+    try:
+        script = Path(a.script).read_text(encoding="utf-8") if Path(a.script).exists() else _read_text(a.script)
+        cast = {}
+        for item in (a.cast or "").split(","):
+            if "=" in item:
+                k, v = item.split("=", 1)
+                cast[k.strip()] = {"voice": v.strip()}
+        info = svc.dialogue_parse(script, cast)
+        for n in info["speakers"]:
+            print(f"  {n}: {info['cast'][n]['voice']}")
+        if a.dry_run:
+            for t in info["turns"]:
+                print(f"{t['speaker']}: {t['text'][:100]}")
+            return 0
+        defaults = {k: v for k, v in (("style", a.style), ("engine", a.engine)) if v}
+        d = svc.dialogue(script, cast=info["cast"], defaults=defaults, gap_ms=a.gap,
+                         on_turn=lambda k, n: print(f"\r  turn {k}/{n}", end="", file=sys.stderr, flush=True))
+        print(file=sys.stderr)
+        out = Path(a.out)
+        out.write_bytes(svc.encode(d["audio"], _fmt_for(out, None), sr=d["sr"]))
+        if a.stems:
+            sd = Path(a.stems)
+            sd.mkdir(parents=True, exist_ok=True)
+            for n, x in d["stems"].items():
+                (sd / f"{n}.wav").write_bytes(svc.encode(x, "wav", sr=d["sr"]))
+        if a.srt:
+            Path(a.srt).write_text(svc.dialogue_subtitles(d["turns"], "vtt" if a.srt.endswith(".vtt") else "srt"), encoding="utf-8")
+        print(f"{out}: {len(d['audio']) / d['sr']:.1f}s, {len(d['turns'])} turns, {len(d['stems'])} speakers")
+        return 0
+    except FireVoiceError as e:
+        return _fail(e)
+    finally:
+        svc.close()
+
+
 def cmd_convert(a) -> int:
     """Voice changer: say what the source recording says, the way it says it, in a library voice."""
     from .service import FireVoiceError
@@ -1012,6 +1050,18 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--seed", type=int, default=None, help="take: seed for the new take (default: random)")
     rd.add_argument("--limit", type=int, default=30)
     rd.set_defaults(fn=cmd_renders)
+
+    dg = sub.add_parser("dialogue", help="multi-speaker script ('Name: line' per turn) -> one mix, stems and subtitles")
+    dg.add_argument("script", help="the script file (or @file / - for stdin)")
+    dg.add_argument("--cast", default=None, help='who speaks with which voice: "Ayesha=urd-f-cv01,Bilal=Bilal" (missing speakers get one automatically)')
+    dg.add_argument("-o", "--out", default="dialogue.mp3")
+    dg.add_argument("--stems", default=None, metavar="DIR", help="also write one track per speaker into DIR")
+    dg.add_argument("--srt", default=None, metavar="FILE", help="also write speaker-labelled subtitles")
+    dg.add_argument("--gap", type=int, default=350, help="milliseconds between speakers")
+    dg.add_argument("--style", default=None)
+    dg.add_argument("--engine", default=None)
+    dg.add_argument("--dry-run", action="store_true", help="only show the turns and the cast")
+    dg.set_defaults(fn=cmd_dialogue)
 
     cv = sub.add_parser("convert", help="voice changer: a recording's words, timing and delivery in a library voice")
     cv.add_argument("source", help="the recording (any format ffmpeg reads is fine once converted to wav)")

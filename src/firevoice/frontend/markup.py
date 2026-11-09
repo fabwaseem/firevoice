@@ -15,6 +15,10 @@ from typing import Union
 from ..types import Pause, Segment
 
 _DIRECTIVE = re.compile(r"\[(pause|style|pace)\s+([^\]]+)\]", re.I)
+# delivery tags: shorthand for a style switch that lasts until [normal] (or another tag / [style ...])
+DELIVERY_TAGS = {"whisper": "asmr", "whispering": "asmr", "excited": "excited", "calm": "calm", "sad": "sad", "angry": "angry",
+                 "serious": "serious", "dramatic": "dramatic", "curious": "curious", "deadpan": "deadpan", "storytelling": "storyteller"}
+_DELIVERY = re.compile(r"\[(%s|normal)\]" % "|".join(DELIVERY_TAGS), re.I)
 
 
 def _ms(arg: str) -> int:
@@ -27,6 +31,8 @@ def _ms(arg: str) -> int:
 
 
 def parse(text: str, default_style: str = "neutral", default_pace: float = 1.0) -> list[Union[Segment, Pause]]:
+    # delivery tags become style directives ([normal] goes back to the request's own style)
+    text = _DELIVERY.sub(lambda m: f"[style {default_style if m.group(1).lower() == 'normal' else DELIVERY_TAGS[m.group(1).lower()]}]", text or "")
     items: list[Union[Segment, Pause]] = []
     style, pace = default_style, default_pace
     pos = 0

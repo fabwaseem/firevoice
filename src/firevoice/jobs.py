@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design", "previews", "project", "style_refs")
+KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue")
 
 
 @dataclass
@@ -106,6 +106,10 @@ class JobManager:
             title = title or f"design voice {payload['name']}"
         elif kind == "previews":
             title = title or f"voice previews ({len(payload.get('voices') or []) or 'all'})"
+        elif kind == "dialogue":
+            info = self.svc.dialogue_parse(str(payload.get("script") or ""), payload.get("cast"))
+            _check_format(payload.get("format", "mp3"))
+            title = title or f"dialogue: {', '.join(info['speakers'][:4])} ({len(info['turns'])} turns)"
         elif kind == "style_refs":
             v = self.svc.voice(str(payload.get("voice") or ""))
             styles = payload.get("styles") or []
@@ -374,6 +378,27 @@ class JobManager:
                 failed.append({"paragraph": para, "chapter": ch, "error": e.message[:200]})
         self._progress(j, len(todo), max(1, len(todo)))
         j.result = {"project": p["project"], "rendered": len(done), "failed": failed}
+
+    def _run_dialogue(self, j: Job, cancel: threading.Event) -> None:
+        """A dialogue in the background: the mix, a stem per speaker, turns, words and subtitles in the job folder."""
+        p = j.payload
+        fmt = p.get("format", "mp3")
+        d = self.svc.dialogue(p["script"], cast=p.get("cast"), defaults=p.get("defaults"), gap_ms=int(p.get("gap_ms", 350)), cancel=cancel,
+                              priority=1, on_turn=lambda k, n: self._progress(j, k, n, message=f"turn {k} of {n}"))
+        out = self.root / j.id
+        (out / "stems").mkdir(parents=True, exist_ok=True)
+        name = f"audio.{_ext(fmt)}"
+        (out / name).write_bytes(self.svc.encode(d["audio"], fmt, sr=d["sr"]))
+        stems = []
+        for spk, a in d["stems"].items():
+            fn = f"stems/{_safe_name(spk)}.{_ext(fmt)}"
+            (out / fn).write_bytes(self.svc.encode(a, fmt, sr=d["sr"]))
+            stems.append(fn)
+        (out / "words.json").write_text(json.dumps(d["words"], indent=1), encoding="utf-8")
+        (out / "turns.json").write_text(json.dumps({"turns": d["turns"], "cast": d["cast"]}, indent=1, ensure_ascii=False), encoding="utf-8")
+        (out / "dialogue.srt").write_text(self.svc.dialogue_subtitles(d["turns"], "srt"), encoding="utf-8")
+        j.result = {"audio": name, "stems": stems, "words": "words.json", "turns": "turns.json", "subtitles": "dialogue.srt", "format": fmt,
+                    "duration": round(len(d["audio"]) / d["sr"], 2), "speakers": list(d["stems"])}
 
     def _run_style_refs(self, j: Job, cancel: threading.Event) -> None:
         """Build a voice's own clip for each listed style, one by one."""

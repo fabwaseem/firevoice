@@ -109,3 +109,16 @@ def test_subtitles_route(svc):
     r = c.post("/api/v1/subtitles", json={"words": [{"text": "Hi.", "start": 0.1, "end": 0.5}], "format": "srt"})
     assert r.status_code == 200 and "Hi." in r.text
     assert c.post("/api/v1/subtitles", json={"words": [], "format": "ass"}).status_code == 400
+
+
+
+def test_script_style_switches_reach_the_engine(make):
+    from firevoice.frontend import parse
+    from firevoice.styles import get_style
+    s = make()
+    base = get_style("conversational")
+    chunks, _ = s._plan(parse("Hello there, friend of mine. [whisper] This is a secret between us. [normal] Back to the normal voice now.", "custom", 1.0),
+                        base, base, "en", 1, {"passage_chars": 0})
+    assert [c.style.name for c in chunks] == ["conversational", "asmr", "conversational"]
+    chunks, _ = s._plan(parse("Calm words first, and slowly. [style horror] Then the dark part of the story.", "custom", 1.0), base, base, "en", 1, {})
+    assert [c.style.name for c in chunks] == ["conversational", "horror"]

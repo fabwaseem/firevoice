@@ -47,6 +47,7 @@ Errors are JSON: {"error": {"code": "bad_request|not_found|conflict|unavailable|
 import base64
 import json
 import os
+import re
 import tempfile
 import threading
 from pathlib import Path
@@ -66,6 +67,7 @@ TAGS = [
     {"name": "jobs", "description": "Background renders, batches and voice design with progress events and history."},
     {"name": "takes", "description": "Kept renders (keep_takes): every take of every passage with its speech check. Compare, swap, re-take, lock, export."},
     {"name": "dictionary", "description": "Pronunciation dictionary: your rules for how words are said, plus the built-in list."},
+    {"name": "dialogue", "description": "Multi-speaker scripts: 'Name: line' turns, a cast of voices, one mix plus stems and speaker-labelled subtitles."},
     {"name": "audio tools", "description": "Check and clean recordings, and the voice changer (speech to speech in any library voice)."},
     {"name": "projects", "description": "Long-form projects: chapters of paragraphs, each rendered with every take kept; render what changed, export WAV/MP3/M4B with chapters, audiobook check, bundles."},
     {"name": "elevenlabs", "description": "ElevenLabs-compatible routes for existing clients."},
@@ -232,7 +234,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     class JobBody(BaseModel):
         model_config = ConfigDict(extra="forbid")
-        kind: Literal["tts", "batch", "design", "previews"]
+        kind: Literal["tts", "batch", "design", "previews", "project", "style_refs", "dialogue"]
         payload: dict[str, Any]
         title: str = ""
 
@@ -273,6 +275,19 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     class RegenBody(BaseModel):
         chunks: Optional[list[int]] = Field(None, description="passage indexes; null = every unlocked passage")
+
+    class DialogueParse(BaseModel):
+        script: str = Field(..., min_length=1, max_length=500_000)
+        cast: Optional[dict[str, Any]] = Field(None, description='{"Ayesha": {"voice": "urd-f-cv01", "style": "podcast"}, "Bilal": "Bilal"}')
+
+    class DialogueBody(DialogueParse):
+        defaults: Optional[dict[str, Any]] = Field(None, description="TTS request fields for every turn (engine, style, pace...)")
+        gap_ms: int = Field(350, ge=0, le=5000, description="silence between speakers")
+        seed: int = 1234
+        lufs: Optional[float] = -16.0
+        format: Literal["wav", "mp3", "flac", "ogg", "opus", "m4a"] = "mp3"
+        response: Literal["audio", "json", "zip"] = Field("audio", description="audio = the mix; json = mix, turns, words (stems with stems=true); zip = mix, stems, subtitles, turns")
+        stems: bool = False
 
     class StyleBuild(BaseModel):
         engine: Optional[str] = None
@@ -737,6 +752,55 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     @app.delete("/api/v1/renders/{rid}", dependencies=deps, tags=["takes"])
     def render_delete(rid: str):
         return svc.render_delete(rid)
+
+    # ------------------------------------------------------------------ dialogue and tags
+    @app.post("/api/v1/dialogue/parse", dependencies=deps, tags=["dialogue"])
+    def dialogue_parse(body: DialogueParse):
+        """The turns and speakers of a script, and a cast with a voice for every speaker (a library voice with the
+        speaker's name first, then distinct voices)."""
+        return svc.dialogue_parse(body.script, body.cast)
+
+    @app.post("/api/v1/dialogue", dependencies=deps, tags=["dialogue"])
+    async def dialogue(request: Request, body: DialogueBody):
+        """Render a dialogue: each turn in its speaker's voice. Long scripts: a job of kind "dialogue"."""
+        import asyncio
+        import io
+        import zipfile
+        cancel = threading.Event()
+        task = asyncio.ensure_future(run_in_threadpool(lambda: svc.dialogue(body.script, cast=body.cast, defaults=body.defaults, gap_ms=body.gap_ms,
+                                                                             lufs=body.lufs, seed=body.seed, cancel=cancel)))
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done and await request.is_disconnected():
+                cancel.set()
+        d = task.result()
+        mix = svc.encode(d["audio"], body.format, sr=d["sr"])
+        dur = round(len(d["audio"]) / d["sr"], 3)
+        if body.response == "audio":
+            return Response(mix, media_type=A.media_type(body.format), headers={"X-Duration": str(dur), "X-Sample-Rate": str(d["sr"])})
+        if body.response == "json":
+            out = {"audio_base64": base64.b64encode(mix).decode(), "format": body.format, "duration": dur, "sample_rate": d["sr"],
+                   "turns": d["turns"], "words": d["words"], "cast": d["cast"]}
+            if body.stems:
+                out["stems"] = {n: base64.b64encode(svc.encode(a, body.format, sr=d["sr"])).decode() for n, a in d["stems"].items()}
+            return out
+        buf = io.BytesIO()
+        ext = A.FORMATS[body.format][2]
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+            z.writestr(f"dialogue.{ext}", mix)
+            for n, a in d["stems"].items():
+                stem = re.sub(r"[^\w -]+", "", n).strip() or "speaker"
+                z.writestr(f"stems/{stem}.{ext}", svc.encode(a, body.format, sr=d["sr"]))
+            z.writestr("dialogue.srt", svc.dialogue_subtitles(d["turns"], "srt"))
+            z.writestr("dialogue.vtt", svc.dialogue_subtitles(d["turns"], "vtt"))
+            z.writestr("turns.json", json.dumps({"turns": d["turns"], "cast": d["cast"]}, indent=1, ensure_ascii=False))
+        return Response(buf.getvalue(), media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="dialogue.zip"'})
+
+    @app.get("/api/v1/tags", dependencies=deps, tags=["tts"])
+    def tags():
+        """Inline tags for scripts: sound tags ([laugh]...) with the engines that perform them (others drop them),
+        delivery tags ([whisper]... [normal]) that switch style, and the markup directives."""
+        return svc.tag_catalog()
 
     # ------------------------------------------------------------------ audio tools
     @app.post("/api/v1/audio/analyze", dependencies=deps, tags=["audio tools"])

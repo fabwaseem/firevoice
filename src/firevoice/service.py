@@ -803,6 +803,104 @@ class FireVoice:
             self.voices.update(vid, name=f"{name} ({vid})")
         return self.voice(vid)
 
+    # -------------------------------------------------------------------- dialogue
+    def dialogue_parse(self, script: str, cast: Optional[dict] = None) -> dict:
+        """The turns, the speakers, and a cast with a voice for every speaker (yours where given)."""
+        from .dialogue import auto_cast, parse, speakers
+        turns = parse(script)
+        if not turns:
+            raise FireVoiceError("bad_request", "the script has no lines")
+        names = speakers(turns)
+        return {"turns": turns, "speakers": names, "cast": auto_cast(names, self.voice_list(), cast)}
+
+    def dialogue(self, script: str, *, cast: Optional[dict] = None, defaults: Optional[dict] = None, gap_ms: int = 350,
+                 lufs: Optional[float] = -16.0, seed: int = 1234, priority: int = 0, cancel: Optional[threading.Event] = None,
+                 on_turn: Optional[Callable[[int, int], None]] = None) -> dict:
+        """Render a dialogue: every turn in its speaker's voice (and style), in order, with a short gap between
+        speakers. -> {audio, sr, stems: {speaker: audio on the same timeline}, turns: [{speaker, voice, text, start,
+        end}], words: [{text, start, end, speaker}], cast}"""
+        from concurrent.futures import ThreadPoolExecutor
+        info = self.dialogue_parse(script, cast)
+        turns, cast = info["turns"], info["cast"]
+        base = {k: v for k, v in (defaults or {}).items() if k not in ("text", "voice", "keep_takes")}
+        reqs = []
+        for i, t in enumerate(turns):
+            c = cast[t["speaker"]]
+            d = {**base, "text": t["text"], "voice": c.get("voice") or "default", "seed": seed + i * 101, "lufs": None, "lead_ms": 0, "tail_ms": 0}
+            for k in ("style", "pace", "engine", "instruct", "language"):
+                if c.get(k) not in (None, ""):
+                    d[k] = c[k]
+            req = TTSRequest.from_dict(d)
+            self.prepare(req)                      # fail before rendering anything
+            reqs.append(req)
+        done = {"n": 0}
+
+        def one(i):
+            if cancel is not None and cancel.is_set():
+                raise Cancelled("cancelled")
+            r = self.tts(reqs[i], cancel=cancel, priority=priority)
+            done["n"] += 1
+            if on_turn:
+                on_turn(done["n"], len(reqs))
+            return r
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="fv-dialogue") as ex:
+            renders = list(ex.map(one, range(len(reqs))))
+        sr = max(r.sr for r in renders)
+        names = info["speakers"]
+        mix, stems = [], {n: [] for n in names}
+        out_turns, words = [], []
+        t = 0.15
+        lead = A.silence(150, sr)
+        mix.append(lead)
+        for n in names:
+            stems[n].append(lead)
+        for i, (turn, r) in enumerate(zip(turns, renders)):
+            a = A.resample(r.audio, r.sr, sr)
+            if i:
+                g = A.silence(int(gap_ms), sr)
+                mix.append(g)
+                for n in names:
+                    stems[n].append(g)
+                t += len(g) / sr
+            start = t
+            mix.append(a)
+            for n in names:
+                stems[n].append(a if n == turn["speaker"] else np.zeros(len(a), np.float32))
+            factor = len(a) / max(1, len(r.audio))
+            words += [{"text": w.text, "start": round(t + w.start * factor, 3), "end": round(t + w.end * factor, 3), "speaker": turn["speaker"]}
+                      for w in r.result.words]
+            t += len(a) / sr
+            out_turns.append({"speaker": turn["speaker"], "voice": cast[turn["speaker"]].get("voice"), "text": turn["text"],
+                              "start": round(start, 3), "end": round(t, 3)})
+        tail = A.silence(400, sr)
+        mix.append(tail)
+        for n in names:
+            stems[n].append(tail)
+        audio = np.concatenate(mix).astype(np.float32)
+        if lufs is not None and len(audio) > sr // 10:
+            audio = A.studio_chain(audio, sr, lufs)
+        return {"audio": audio, "sr": sr, "stems": {n: np.concatenate(v).astype(np.float32) for n, v in stems.items()},
+                "turns": out_turns, "words": words, "cast": cast}
+
+    def dialogue_subtitles(self, turns: list[dict], fmt: str = "srt") -> str:
+        """One cue per turn (split when long), labelled with the speaker."""
+        from . import subtitles as S
+        cues = []
+        for t in turns:
+            cues.append({"start": t["start"], "end": t["end"], "text": f"{t['speaker']}: {t['text']}"})
+        if fmt == "vtt":
+            return "WEBVTT\n\n" + "\n".join(f"{S._ts(c['start'], '.')} --> {S._ts(c['end'], '.')}\n{S._wrap(c['text'])}\n" for c in cues)
+        return "\n".join(f"{i}\n{S._ts(c['start'], ',')} --> {S._ts(c['end'], ',')}\n{S._wrap(c['text'])}\n" for i, c in enumerate(cues, 1))
+
+    def tag_catalog(self) -> dict:
+        """Sound tags (engines with tag support read them; others drop them) and delivery tags (a style switch)."""
+        from .frontend.markup import DELIVERY_TAGS
+        sound = ["laugh", "chuckle", "giggle", "sigh", "gasp", "cough", "clear throat", "sniff", "groan", "hmm"]
+        engines = [e["name"] for e in self.engines() if e.get("tags")]
+        return {"sound": [{"tag": f"[{t}]", "engines": engines} for t in sound],
+                "delivery": [{"tag": f"[{k}]", "style": v} for k, v in DELIVERY_TAGS.items()] + [{"tag": "[normal]", "style": None}],
+                "markup": ["[pause 500ms]", "[pause 2s]", "[style NAME]", "[pace 0.9]"]}
+
     def subtitles(self, words, fmt: str = "srt") -> tuple[str, str]:
         from . import subtitles as S
         try:

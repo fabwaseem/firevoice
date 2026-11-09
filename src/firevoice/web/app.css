@@ -492,3 +492,10 @@ details.adv-card > summary::-webkit-details-marker { display: none; }
 .vt-sec { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .chip .x { background: none; border: 0; color: inherit; padding: 0 0 0 4px; cursor: pointer; opacity: 0.7; }
 .chip .x:hover { opacity: 1; }
+
+/* ---------------------------------------------------------------- dialogue */
+.dg-turns { margin-top: 12px; max-height: 320px; overflow-y: auto; }
+.dg-turn { padding: 7px 10px; border-radius: 10px; cursor: pointer; font-size: 14px; line-height: 1.5; color: var(--fg-2); }
+.dg-turn:hover { background: var(--surface-2); }
+.dg-turn.on { background: var(--acc-soft); color: var(--fg); }
+select.chip { appearance: none; padding-right: 10px; cursor: pointer; }

@@ -337,9 +337,17 @@ class Synthesizer:
             if isinstance(it, Pause):
                 units.append(it)
                 continue
-            st = base_style if custom_style is not None else get_style(it.style)
-            if it.style == "custom" and custom_style is not None:
+            # the request's own style, unless the script switched style ([style horror], [whisper], ...). A switched-to
+            # style keeps the request's engine settings (params) so the engine stays configured the same way.
+            if custom_style is not None and it.style == "custom":
                 st = custom_style
+            else:
+                try:
+                    st = get_style(it.style)
+                except KeyError:
+                    raise ValueError(f"unknown style {it.style!r} in the script")
+                if custom_style is not None:
+                    st = replace(st, extra={**st.extra, **custom_style.extra})
             english = is_english_text(it.text, lang)
             spoken = normalize(it.text, self.lexicon, lang, spell_acronyms=caps.get("spell_acronyms", True), rules=rules)
             if not caps.get("supports_tags", False):

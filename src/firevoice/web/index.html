@@ -19,6 +19,7 @@
     <nav class="nav" id="nav">
       <a href="#speak" data-page="speak"><svg class="i"><use href="#i-wave"/></svg><span class="lbl">Speak</span></a>
       <a href="#projects" data-page="projects"><svg class="i"><use href="#i-book"/></svg><span class="lbl">Projects</span><span class="count" id="n-projects"></span></a>
+      <a href="#dialogue" data-page="dialogue"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Dialogue</span></a>
       <a href="#changer" data-page="changer"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Voice changer</span></a>
       <a href="#voices" data-page="voices"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Voices</span><span class="count" id="n-voices"></span></a>
       <a href="#stt" data-page="stt"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Speech to text</span></a>
@@ -63,6 +64,10 @@
               <span class="small dim">Insert</span>
               <button class="chip" data-ins="[pause 500ms]">pause</button>
               <button class="chip" data-ins="[pause 1200ms]">long pause</button>
+              <select class="chip" id="ins-delivery" title="Switch the delivery until [normal]"><option value="">delivery…</option>
+                <option value="[whisper]">[whisper]</option><option value="[excited]">[excited]</option><option value="[calm]">[calm]</option>
+                <option value="[sad]">[sad]</option><option value="[angry]">[angry]</option><option value="[serious]">[serious]</option>
+                <option value="[dramatic]">[dramatic]</option><option value="[curious]">[curious]</option><option value="[normal]">[normal]</option></select>
               <span id="tag-chips" class="chips"></span>
               <div class="grow"></div>
               <span class="stat"><b id="st-words">0</b> words · <b id="st-chars">0</b> chars · ~<b id="st-dur">0s</b></span>
@@ -213,6 +218,23 @@
       <div class="scards" id="scards"></div>
     </section>
 
+    <!-- ============================================================== DIALOGUE -->
+    <section class="page" id="page-dialogue">
+      <div class="page-head"><div><h1>Dialogue</h1><p>One line per turn as <b>Name: what they say</b>. Every speaker keeps their own voice; you get one mix, a track per speaker and labelled subtitles.</p></div></div>
+      <div class="grid2" style="align-items:start">
+        <div class="card"><div class="card-h"><h3>Script</h3><div class="grow"></div><button class="btn sm ghost" id="dg-example">Example</button></div><div class="card-b">
+          <textarea class="inp" id="dg-script" rows="14" placeholder="Ayesha: Assalam o Alaikum! Welcome to the show.&#10;Bilal: Thanks for having me. (laughs)&#10;Narrator: And so it began."></textarea>
+          <div class="row" style="margin-top:10px;gap:8px"><button class="btn" id="dg-detect"><svg class="i"><use href="#i-search"/></svg>Find speakers</button><span class="small dim" id="dg-info"></span></div>
+        </div></div>
+        <div class="card"><div class="card-h"><h3>Cast</h3></div><div class="card-b">
+          <div id="dg-cast"><span class="small dim">Write a script and press Find speakers.</span></div>
+          <div class="field" style="margin-top:12px"><label class="f">Pause between speakers <span class="hint" id="dg-gap-v">350 ms</span></label><input type="range" id="dg-gap" min="0" max="1500" step="50" value="350"></div>
+          <button class="btn primary" id="dg-go" disabled><svg class="i"><use href="#i-play"/></svg>Render dialogue</button>
+          <div id="dg-out" style="margin-top:14px"></div>
+        </div></div>
+      </div>
+    </section>
+
     <!-- ============================================================== VOICE CHANGER -->
     <section class="page" id="page-changer">
       <div class="page-head"><div><h1>Voice changer</h1><p>Record or upload a performance: FireVoice keeps your words, timing and delivery and swaps the voice for any library voice.</p></div></div>
@@ -322,5 +344,6 @@
 <script src="/web/app.js"></script>
 <script src="/web/projects.js"></script>
 <script src="/web/tools.js"></script>
+<script src="/web/dialogue.js"></script>
 </body>
 </html>

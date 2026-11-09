@@ -74,7 +74,7 @@ function busyBtn(btn, on, label) {
 }
 
 // ------------------------------------------------------------------------------------------------ router
-const PAGES = ["speak", "projects", "changer", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
+const PAGES = ["speak", "projects", "dialogue", "changer", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
 function route() {
   const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "speak";
   $$(".page").forEach(s => s.classList.toggle("on", s.id === "page-" + p));
@@ -87,6 +87,7 @@ function route() {
   if (p === "dictionary") loadDict();
   if (p === "projects") window.loadProjects?.();
   if (p === "changer") window.loadChanger?.();
+  if (p === "dialogue") window.loadDialogue?.();
 }
 window.addEventListener("hashchange", route);
 
@@ -155,6 +156,7 @@ function updateStats() {
 $("#text").addEventListener("input", updateStats);
 $("#clear-text").onclick = () => { $("#text").value = ""; updateStats(); saveForm(); $("#text").focus(); };
 $$("[data-ins]").forEach(b => b.onclick = () => insert(b.dataset.ins));
+$("#ins-delivery")?.addEventListener("change", e => { if (e.target.value) insert(e.target.value); e.target.value = ""; });
 function insert(s) {
   const ta = $("#text"); const a = ta.selectionStart, b = ta.selectionEnd; const pad = a > 0 && !/\s$/.test(ta.value.slice(0, a)) ? " " : "";
   ta.setRangeText(pad + s + " ", a, b, "end"); ta.focus(); updateStats(); saveForm();
@@ -233,7 +235,7 @@ function renderEngineInfo() {
   $("#engine-badges").innerHTML = [e.loaded ? `<span class="tag ok">loaded</span>` : `<span class="tag">idle</span>`, e.commercial ? "" : `<span class="tag warn">non-commercial</span>`].join("");
   const caps = ["clone", "design", "instruct", "tags"].filter(k => e[k]);
   $("#engine-note").innerHTML = `${e.sample_rate / 1000} kHz · ${esc(e.license)} · can ${caps.join(", ") || "speak"}${e.speed_rtf ? ` · RTF ${e.speed_rtf}` : ""}${e.notes ? "<br>" + esc(e.notes) : ""}`;
-  $("#tag-chips").innerHTML = e.tags ? ["laugh", "sigh", "chuckle", "gasp"].map(t => `<button class="chip" data-ins="[${t}]">[${t}]</button>`).join("") : "";
+  $("#tag-chips").innerHTML = e.tags ? ["laugh", "chuckle", "giggle", "sigh", "gasp", "cough", "clear throat", "sniff", "groan", "hmm"].map(t => `<button class="chip" data-ins="[${t}]">[${t}]</button>`).join("") : "";
   $$("#tag-chips [data-ins]").forEach(b => b.onclick = () => insert(b.dataset.ins));
   checkCompat();
 }

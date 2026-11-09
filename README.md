@@ -178,6 +178,16 @@ firevoice voices pack Ember --pack ember.zip ; firevoice voices import --pack em
 The Projects page in the playground and the desktop app edits chapters and paragraphs (each with its own voice and
 style if you like), saves as you type, renders only what changed in the background, and opens each paragraph's takes.
 
+## Dialogue
+
+```bash
+firevoice dialogue script.txt -o show.mp3 --stems stems/ --srt show.srt   # "Name: line" per turn
+firevoice dialogue script.txt --cast "Ayesha=urd-f-cv01,Bilal=Bilal" --dry-run   # see the turns and who speaks
+```
+
+Delivery tags work in any script: `[whisper]`, `[excited]`, `[calm]`, `[sad]`, `[angry]`, `[serious]`, `[dramatic]`
+switch the style until `[normal]`.
+
 ## Voice tools
 
 ```bash
