@@ -2003,6 +2003,8 @@ def _voice_view(v: dict, default: Optional[str]) -> dict:
 def _language_param(inf, code: str):
     """Map an ISO code onto an engine's language parameter (Qwen wants English names)."""
     p = inf.param("language")
+    if p is not None and p.type == "enum" and code.split("-")[0] in (p.choices or []):
+        return code.split("-")[0]
     names = {"zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean", "de": "German", "fr": "French", "ru": "Russian",
              "pt": "Portuguese", "es": "Spanish", "it": "Italian", "ar": "Arabic", "hi": "Hindi", "ur": "Urdu", "tr": "Turkish"}
     if p is not None and p.type == "enum":

@@ -98,7 +98,7 @@ class EngineInfo:
             py = ENVS / self.venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
             venv_ok = py.exists()
         w = _weights_path(self.weights) if self.weights else None
-        weights_ok = w is None or (w.exists() and any(w.glob("*")) and not any(w.rglob("*.incomplete")))
+        weights_ok = w is None or (w.exists() and any(w.glob("*")) and not any(".cache" not in f.parts for f in w.rglob("*.incomplete")))
         problems = []
         if not venv_ok:
             problems.append(f"python package {self.requires!r} is not installed" if self.venv is None else f"missing venv {ENVS / self.venv}")
@@ -155,6 +155,24 @@ CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
                        Param("emo_alpha", "float", 0.6, 0.0, 1.0, 0.05, label="Emotion strength"),
                        Param("emo_text", "str", None, label="Emotion text", help="describe the emotion in words"),
                        Param("emo_ref", "str", None, label="Emotion reference clip", help="path to a clip whose emotion to copy")]),
+    EngineInfo("indextts25", "IndexTTS-2.5", languages=["en", "zh", "ja", "es", "ar"], sample_rate=22050, venv="indextts", weights="indextts-2.5",
+               notes="faster IndexTTS with native speech rate; emotion independent of timbre; non-commercial weights; runs code from its repository",
+               params=[Param("language", "enum", "en", choices=["en", "zh", "ja", "es", "ar"], label="Language"),
+                       Param("rate", "float", 1.0, 0.5, 2.0, 0.05, label="Speech rate", help="native rate control, no time-stretching"),
+                       Param("emo_vector", "vector", None, 0.0, 1.0, length=8, labels=EMO_LABELS, label="Emotion mix"),
+                       Param("emo_alpha", "float", 0.8, 0.0, 1.0, 0.05, label="Emotion strength")]),
+    EngineInfo("ming", "Ming-3.0-tts 0.5B", needs_reference=False, design=True, tags=True, instruct=True,
+               languages=["en", "zh", "es", "fr", "de", "ko", "ja"], sample_rate=44100, venv="ming", weights="ming-3.0-tts-0.5b",
+               notes="MIT; clone from a clip or design a voice from a description; runs code from its repository",
+               params=[Param("language", "enum", "en", choices=["en", "zh", "es", "fr", "de", "ko", "ja"], label="Language"),
+                       Param("cfg", "float", 2.0, 1.0, 4.0, 0.1, label="Guidance")]),
+    EngineInfo("moss", "MOSS-TTS Local v1.5", needs_transcript=False, sample_rate=48000, venv="moss", weights="moss-tts-local-v1.5",
+               languages=["en", "zh", "hi", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "ar", "fa", "tr"],
+               notes="Apache-2.0; 48 kHz; about 14 GB of VRAM, so unload other engines first; model code ships with its weights",
+               params=[Param("language", "enum", "en", choices=["en", "zh", "hi", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "ar", "fa", "tr"],
+                             label="Language"),
+                       Param("temperature", "float", 1.7, 0.5, 2.5, 0.05, label="Temperature"),
+                       Param("top_p", "float", 0.8, 0.1, 1.0, 0.05, label="Top p"), Param("top_k", "int", 25, 1, 100, 1, label="Top k")]),
     EngineInfo("breeze", "Breeze TTS 2 3B", needs_reference=False, needs_transcript=True, design=True, instruct=True, languages=["en", "zh"],
                venv="breeze", weights="breeze-tts-2", notes="voice direction; non-commercial weights",
                params=[Param("cfg_scale", "float", None, 1.0, 8.0, 0.5, label="Instruction strength", help="default 4 with an instruction, 1 without")]),

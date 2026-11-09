@@ -11,7 +11,9 @@ An install is a background job with these steps:
 
 All venvs share uv's cache (UV_CACHE_DIR moves it) and uv hardlinks from it, so torch is stored once per version on
 that drive instead of once per engine (uv copies instead when the cache is on another drive). Engines whose code lives in a cloned repository (IndexTTS-2, Breeze) are not installed automatically: running
-code from a cloned repo is a decision for the user, so their manifest carries the manual steps instead.
+code from a cloned repo is a decision for the user. Engines that do run code from their own repository (a git checkout
+pinned to a commit, or transformers `trust_remote_code` from pinned weights) say so with `repo_code`, and the plan and
+the apps show it before installing.
 """
 from __future__ import annotations
 
@@ -44,6 +46,12 @@ class Manifest:
     venv_gb: float = 5.0                        # size of a fresh venv without a shared cache
     manual: Optional[str] = None                # why it is not automatic, and what to do instead
     notes: str = ""
+    python: str = "3.12"
+    git: Optional[tuple] = None                 # (url, full commit, folder under the engines dir): checked out, then installed
+    editable: bool = False                      # install the checkout itself (pip -e), with its own dependencies
+    requirements: Optional[str] = None          # a requirements file inside the checkout to install
+    overrides: list = field(default_factory=list)   # versions forced over what dependencies ask for (uv --override)
+    repo_code: bool = False                     # runs code from the model's own repository (cloned or trust_remote_code)
 
     @property
     def auto(self) -> bool:
@@ -51,6 +59,7 @@ class Manifest:
 
 
 _T211 = "2.11.0"
+_INDEX_GIT = ("https://github.com/index-tts/index-tts.git", "d9e41aac89fd00b3d71497fddb287b7f24613712", "indextts-repo")
 MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
     Manifest("voxcpm2", "voxcpm", _T211, packages=["voxcpm==2.0.3", "transformers==5.22.2", "soundfile", "numpy"],
              windows_extra=["triton-windows==3.7.1.post27"], weights=[("openbmb/VoxCPM2", "voxcpm2")], check="voxcpm", venv_gb=5.4,
@@ -80,10 +89,22 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
              "`gpu` extra (pip install \"firevoice[gpu]\"); the desktop app's bundled backend includes it"),
     Manifest("chatterbox", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),
     Manifest("chatterbox-vc", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),
-    Manifest("indextts2", "indextts", "2.8.0", manual="IndexTTS-2 runs from a clone of its GitHub repository: clone "
-             "https://github.com/index-tts/index-tts into <engines>/indextts-repo, build <engines>/indextts with its "
-             "requirements, and download IndexTeam/IndexTTS-2 into <weights>/indextts-2",
-             weights=[("IndexTeam/IndexTTS-2", "indextts-2")]),
+    Manifest("indextts2", "indextts", "2.8.0", python="3.11", git=_INDEX_GIT, editable=True, repo_code=True,
+             weights=[("IndexTeam/IndexTTS-2", "indextts-2", "740dcaff396282ffb241903d150ac011cd4b1ede")], check="indextts",
+             notes="runs code from github.com/index-tts/index-tts (pinned); shares its venv with indextts25"),
+    Manifest("indextts25", "indextts", "2.8.0", python="3.11", git=_INDEX_GIT, editable=True, repo_code=True,
+             weights=[("IndexTeam/IndexTTS-2.5", "indextts-2.5", "c39ce5ba981572cb187443877ff559dfb246ce63")], check="indextts",
+             notes="runs code from github.com/index-tts/index-tts (pinned); shares its venv with indextts2"),
+    Manifest("ming", "ming", "2.8.0", python="3.11", git=("https://github.com/inclusionAI/Ming-3.0-tts.git",
+                                                         "a39b80660bdc5a4394d5e1d41af6dbfd9c443a54", "ming-repo"),
+             requirements="requirements.txt", overrides=["torch==2.8.0", "torchaudio==2.8.0"], repo_code=True,
+             weights=[("inclusionAI/Ming-3.0-tts-0.5b", "ming-3.0-tts-0.5b", "7247f4c94a5b2e987404ed28a5cfec41b1a4ca61")], check="x_transformers",
+             notes="runs code from github.com/inclusionAI/Ming-3.0-tts (pinned); its torch 2.6 pin is lifted to 2.8 for RTX 50-series cards"),
+    Manifest("moss", "moss", "2.9.1", packages=["transformers==5.0.0", "accelerate==1.12.0", "safetensors", "soundfile"], repo_code=True,
+             weights=[("OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5", "moss-tts-local-v1.5", "be7766a6735b98bd793f7c79fb720b4d0f5d13b8"),
+                      ("OpenMOSS-Team/MOSS-Audio-Tokenizer-v2", "moss-audio-tokenizer-v2", "f6e20e543b33d2c252a7ef71bdf8aa71e5ff9169")],
+             check="transformers", venv_gb=5.0,
+             notes="model and codec code ship with the weights (trust_remote_code, pinned revisions); about 18 GB to download"),
     Manifest("breeze", "breeze", "2.9.1", manual="Breeze TTS 2 runs from a clone of its repository into <engines>/breeze-repo; "
              "its weights are research-only (BreezeBlue licence)", weights=[("MediaTek-Research/Breeze-TTS-2", "breeze-tts-2")]),
 ]}
@@ -127,7 +148,20 @@ MARKER = ".firevoice-install.json"
 
 
 def _wanted(m: Manifest) -> list:
-    return sorted([f"torch=={m.torch}"] if m.torch else []) + sorted(m.packages + (m.windows_extra if os.name == "nt" else []))
+    return (sorted([f"torch=={m.torch}"] if m.torch else []) + sorted(m.packages + (m.windows_extra if os.name == "nt" else []))
+            + ([f"git:{m.git[1]}"] if m.git else []))
+
+
+def _weights(m: Manifest) -> list[tuple]:
+    """(hub repo, folder, revision or None) for every weights entry (entries may omit the revision)."""
+    return [(w[0], w[1], w[2] if len(w) > 2 else None) for w in m.weights]
+
+
+def _git(args: list[str], log, cancel, env) -> None:
+    git = shutil.which("git")
+    if not git:
+        raise InstallError("git is needed to fetch this engine's code: install Git for Windows (https://git-scm.com)")
+    _run([git, *args], log, cancel, env)
 
 
 def _marker(m: Manifest) -> Optional[dict]:
@@ -166,13 +200,13 @@ def venv_ok(m: Manifest) -> bool:
 
 def weights_ok(folder: str) -> bool:
     w = paths.weights(folder)
-    return w.exists() and any(w.glob("*")) and not any(w.rglob("*.incomplete"))
+    return w.exists() and any(w.glob("*")) and not any(".cache" not in f.parts for f in w.rglob("*.incomplete"))
 
 
-def _repo_size(repo: str) -> Optional[int]:
+def _repo_size(repo: str, revision: Optional[str] = None) -> Optional[int]:
     try:
         from huggingface_hub import HfApi
-        info = HfApi().model_info(repo, files_metadata=True)
+        info = HfApi().model_info(repo, revision=revision, files_metadata=True)
         return sum((s.size or 0) for s in info.siblings or [])
     except Exception:
         return None
@@ -183,16 +217,19 @@ def plan(engine: str, sizes: bool = False) -> dict:
     m = manifest(engine)
     steps = []
     if m.venv:
-        steps.append({"step": "venv", "what": f"Python {PYTHON} venv at {paths.engines_dir() / m.venv}", "done": venv_ok(m)})
+        steps.append({"step": "venv", "what": f"Python {m.python} venv at {paths.engines_dir() / m.venv}", "done": venv_ok(m)})
+        if m.git:
+            steps.append({"step": "code", "what": f"{m.git[0]} at {m.git[1][:10]} -> {paths.engines_dir() / m.git[2]}", "done": venv_ok(m)})
         if m.torch:
             steps.append({"step": "torch", "what": f"torch {m.torch} (CUDA 12.8)", "done": venv_ok(m)})
         pk = m.packages + (m.windows_extra if os.name == "nt" else [])
         if pk:
             steps.append({"step": "packages", "what": ", ".join(pk), "done": venv_ok(m)})
-    for repo, folder in m.weights:
-        st = {"step": "weights", "what": f"{repo} -> {paths.weights(folder)}", "repo": repo, "folder": folder, "done": weights_ok(folder)}
+    for repo, folder, rev in _weights(m):
+        st = {"step": "weights", "what": f"{repo}{'@' + rev[:10] if rev else ''} -> {paths.weights(folder)}", "repo": repo, "folder": folder,
+              "done": weights_ok(folder)}
         if sizes and not st["done"]:
-            b = _repo_size(repo)
+            b = _repo_size(repo, rev)
             st["gb"] = round(b / 1e9, 2) if b else None
         steps.append(st)
     if m.check:
@@ -200,7 +237,7 @@ def plan(engine: str, sizes: bool = False) -> dict:
     todo_gb = sum(s.get("gb") or 0 for s in steps if s["step"] == "weights" and not s["done"])
     if m.venv and not venv_ok(m):
         todo_gb += m.venv_gb
-    return {"engine": m.engine, "auto": m.auto, "manual": m.manual, "notes": m.notes, "venv": m.venv,
+    return {"engine": m.engine, "auto": m.auto, "manual": m.manual, "notes": m.notes, "venv": m.venv, "repo_code": m.repo_code,
             "venv_state": venv_state(m) if m.venv else None,
             "installed": all(s["done"] for s in steps) if steps else m.venv is None,
             "steps": steps, "estimated_gb": round(todo_gb, 1) if sizes else None, "uv": uv(),
@@ -258,7 +295,7 @@ def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = Non
 _FETCH = """
 import os, shutil, sys
 from huggingface_hub import snapshot_download
-src, dst = snapshot_download(sys.argv[1]), sys.argv[2]
+src, dst = snapshot_download(sys.argv[1], revision=(sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None)), sys.argv[2]
 for root, _dirs, files in os.walk(src):
     rel = os.path.relpath(root, src)
     os.makedirs(os.path.join(dst, rel), exist_ok=True)
@@ -305,17 +342,17 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
             fh.flush()
     env = uv_env()
     py = paths.venv_python(m.venv)
-    todo_weights = [(r, f) for r, f in m.weights if force or not weights_ok(f)]
+    todo_weights = [(r, f, v) for r, f, v in _weights(m) if force or not weights_ok(f)]
     build = force or not venv_ok(m)
-    steps = (3 if build else 0) + len(todo_weights) + 1
+    steps = (3 + (1 if m.git else 0) if build else 0) + len(todo_weights) + 1
     k = 0
     t0 = time.time()
     try:
         with _venv_lock(m.venv):
             if build:
                 paths.engines_dir().mkdir(parents=True, exist_ok=True)
-                progress(k, steps, f"creating the {m.venv} venv (Python {PYTHON})")
-                _run([u, "venv", "--allow-existing", "--python", PYTHON, str(paths.engines_dir() / m.venv)], log, cancel, env)
+                progress(k, steps, f"creating the {m.venv} venv (Python {m.python})")
+                _run([u, "venv", "--allow-existing", "--python", m.python, str(paths.engines_dir() / m.venv)], log, cancel, env)
                 _write_marker(m, "building")
                 k += 1
                 if m.torch:
@@ -323,17 +360,36 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                     pk = [f"torch=={m.torch}"] + ([f"torchaudio=={m.torch}"] if m.torchaudio else [])
                     _run([u, "pip", "install", "--python", str(py), *pk, "--index-url", TORCH_INDEX], log, cancel, env)
                 k += 1
+                extra: list[str] = []
+                if m.git:
+                    url, commit, folder = m.git
+                    repo_dir = paths.engines_dir() / folder
+                    progress(k, steps, f"fetching the engine's code ({url.rsplit('/', 1)[-1]} at {commit[:10]})")
+                    if not (repo_dir / ".git").exists():
+                        _git(["clone", "--filter=blob:none", "--no-checkout", url, str(repo_dir)], log, cancel, env)
+                    _git(["-C", str(repo_dir), "fetch", "--depth", "1", "origin", commit], log, cancel, env)
+                    _git(["-C", str(repo_dir), "checkout", "--force", commit], log, cancel, env)
+                    k += 1
+                    if m.requirements:
+                        extra += ["-r", str(repo_dir / m.requirements)]
+                    if m.editable:
+                        extra += ["-e", str(repo_dir)]
                 pk = m.packages + (m.windows_extra if os.name == "nt" else [])
-                progress(k, steps, f"installing {', '.join(p.split('==')[0] for p in pk)}")
+                progress(k, steps, f"installing {', '.join([p.split('==')[0] for p in pk] + (['the engine code'] if extra else []))}")
                 # keep the CUDA torch: the engine packages must not swap it for PyPI's CPU build
                 pin = [f"torch=={m.torch}"] + ([f"torchaudio=={m.torch}"] if m.torchaudio else []) if m.torch else []
-                _run([u, "pip", "install", "--python", str(py), *pk, *pin, "--extra-index-url", TORCH_INDEX,
+                ovr: list[str] = []
+                if m.overrides:
+                    of = paths.engines_dir() / f".{m.venv}-overrides.txt"
+                    of.write_text("\n".join(m.overrides), encoding="utf-8")
+                    ovr = ["--override", str(of)]
+                _run([u, "pip", "install", "--python", str(py), *pk, *extra, *pin, *ovr, "--extra-index-url", TORCH_INDEX,
                       "--index-strategy", "unsafe-best-match"], log, cancel, env)
                 k += 1
-            for repo, folder in todo_weights:
+            for repo, folder, rev in todo_weights:
                 dest = paths.weights(folder)
                 dest.mkdir(parents=True, exist_ok=True)
-                total = _repo_size(repo)
+                total = _repo_size(repo, rev)
                 label = f"downloading {repo}" + (f" ({total / 1e9:.1f} GB)" if total else "")
                 progress(k, steps, label)
                 stop = threading.Event()
@@ -348,7 +404,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 w = threading.Thread(target=watch, daemon=True)
                 w.start()
                 try:
-                    _run([sys.executable, "-c", _FETCH, repo, str(dest)], log, cancel, env)
+                    _run([sys.executable, "-c", _FETCH, repo, str(dest), rev or ""], log, cancel, env)
                 finally:
                     stop.set()
                 k += 1
@@ -363,7 +419,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
             fh.close()
     progress(steps, steps, "installed")
     return {"engine": m.engine, "venv": str(paths.engines_dir() / m.venv), "built_venv": build,
-            "weights": [f for _, f in todo_weights], "seconds": round(time.time() - t0, 1)}
+            "weights": [f for _, f, _ in todo_weights], "seconds": round(time.time() - t0, 1)}
 
 
 def uninstall(engine: str, weights: bool = False) -> dict:
@@ -378,7 +434,7 @@ def uninstall(engine: str, weights: bool = False) -> dict:
             shutil.rmtree(d)
             removed.append(str(d))
         if weights:
-            for _, folder in m.weights:
+            for _, folder, _rev in _weights(m):
                 w = paths.weights(folder)
                 if w.exists():
                     shutil.rmtree(w)

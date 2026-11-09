@@ -51,7 +51,9 @@ firevoice engines uninstall f5 --weights
 
 The same install runs as a background job from the API (`POST /api/v1/engines/{name}/install`), the playground's
 Engines page and the desktop app. Every venv hardlinks from uv's shared cache, so a torch build is stored once, not once
-per engine. IndexTTS-2 and Breeze run from cloned repositories and stay manual (`engines plan` prints the steps).
+per engine. IndexTTS-2, IndexTTS-2.5 and Ming run code from their GitHub repositories, and MOSS runs model code that
+ships with its weights (`trust_remote_code`). All of them are pinned to fixed commits and revisions, and `engines plan`
+and the apps say so before installing. Breeze stays manual (research-only weights).
 
 ### Where things live
 
@@ -83,6 +85,9 @@ hf download Qwen/Qwen3-TTS-12Hz-1.7B-Base --local-dir .envs/weights/qwen3-tts-1.
 | `maya1` | Maya1 3B | Apache-2.0 | yes | description-designed voices, 20 emotion tags, ~9 GB |
 | `kokoro` | Kokoro 82M | Apache-2.0 | yes | preset voices, RTF 0.01, no cloning |
 | `indextts2` | IndexTTS-2 | bilibili licence | no | emotion vector / emotion text independent of timbre |
+| `indextts25` | IndexTTS-2.5 | bilibili licence | no | 2.3x faster IndexTTS, native speech rate, zh/en/ja/es/ar; shares the indextts venv |
+| `ming` | Ming-3.0-tts 0.5B | MIT | yes | clone or design a voice, paralinguistic tags, 7 languages, 44.1 kHz |
+| `moss` | MOSS-TTS Local-Transformer v1.5 (5B) | Apache-2.0 | yes | 48 kHz cloning, 31 languages incl. Hindi, long passages; ~14 GB VRAM, wants the GPU to itself |
 | `breeze` | Breeze TTS 2 3B | BreezeBlue research | no | top open model on the Speech Arena; voice direction |
 | `omnivoice` | OmniVoice 0.6B | CC-BY-NC | no | very fast clone + design |
 | `f5` | F5-TTS v1 | CC-BY-NC | no | flow-matching clone |

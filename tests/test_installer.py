@@ -1,5 +1,6 @@
 """Engine installer: plans, the install marker, and install jobs (commands stubbed, nothing is downloaded)."""
 import time
+from pathlib import Path
 
 import pytest
 
@@ -11,7 +12,7 @@ def engines(tmp_path, monkeypatch):
     monkeypatch.setenv("FIREVOICE_ENGINES_DIR", str(tmp_path / "engines"))
     monkeypatch.setenv("FIREVOICE_WEIGHTS_DIR", str(tmp_path / "weights"))
     monkeypatch.setattr(installer, "uv", lambda: "uv")
-    monkeypatch.setattr(installer, "_repo_size", lambda repo: None)
+    monkeypatch.setattr(installer, "_repo_size", lambda repo, rev=None: None)
     calls = []
 
     def fake_run(cmd, log, cancel, env=None, on_line=None):
@@ -21,7 +22,8 @@ def engines(tmp_path, monkeypatch):
             py.parent.mkdir(parents=True, exist_ok=True)
             py.write_text("")
         if "snapshot_download" in " ".join(cmd):
-            d = paths.weights_dir() / cmd[-1].replace("\\", "/").rsplit("/", 1)[-1]
+            d = Path(cmd[4])
+            d.mkdir(parents=True, exist_ok=True)
             (d / "config.json").write_text("{}")
     monkeypatch.setattr(installer, "_run", fake_run)
     return calls
@@ -31,7 +33,7 @@ def test_plan_states(engines):
     p = installer.plan("kokoro")
     assert p["auto"] and not p["installed"] and p["venv_state"] == "missing"
     assert [s["step"] for s in p["steps"]] == ["venv", "torch", "packages", "check"]
-    assert not installer.plan("indextts2")["auto"] and "clone" in installer.plan("indextts2")["manual"]
+    assert not installer.plan("breeze")["auto"] and installer.plan("ming")["repo_code"]
     assert installer.plan("chatterbox-turbo")["venv"] is None
 
 
@@ -88,7 +90,7 @@ def test_install_job(svc, engines, monkeypatch):
 
     from firevoice.server import create_app
     c = TestClient(create_app(svc))
-    assert c.post("/api/v1/engines/indextts2/install").status_code == 400
+    assert c.post("/api/v1/engines/breeze/install").status_code == 400
     assert c.post("/api/v1/engines/nope/install").status_code == 404
     j = c.post("/api/v1/engines/kokoro/install").json()
     for _ in range(100):
@@ -100,3 +102,27 @@ def test_install_job(svc, engines, monkeypatch):
     assert c.get(f"/api/v1/jobs/{j['id']}/files/install.log").status_code == 200
     assert c.get("/api/v1/engines/kokoro/install?sizes=false").json()["installed"]
     assert c.delete("/api/v1/engines/kokoro/install").json()["removed"]
+
+
+def test_repo_engine_clones_pins_and_overrides(engines, monkeypatch):
+    """A repo engine: checkout at the pinned commit, requirements with the torch override, pinned weights revision."""
+    monkeypatch.setattr(installer.shutil, "which", lambda name: name)
+    installer.install("ming", lambda *a: None, __import__("threading").Event())
+    cmds = [" ".join(map(str, c)) for c in engines]
+    m = installer.MANIFESTS["ming"]
+    assert any("clone" in c and m.git[0] in c for c in cmds)
+    assert any("checkout --force " + m.git[1] in c for c in cmds)
+    pip = next(c for c in cmds if " -r " in c)
+    assert "requirements.txt" in pip and "--override" in pip
+    assert (paths.engines_dir() / ".ming-overrides.txt").read_text().split("\n") == m.overrides
+    fetch = next(c for c in engines if "snapshot_download" in " ".join(map(str, c)))
+    assert fetch[-1] == m.weights[0][2]
+    p = installer.plan("ming", sizes=False)
+    assert p["repo_code"] and any(s["step"] == "code" for s in p["steps"])
+
+
+def test_editable_repo_install(engines, monkeypatch):
+    monkeypatch.setattr(installer.shutil, "which", lambda name: name)
+    installer.install("indextts25", lambda *a: None, __import__("threading").Event())
+    pip = next(" ".join(map(str, c)) for c in engines if " -e " in " ".join(map(str, c)))
+    assert "indextts-repo" in pip

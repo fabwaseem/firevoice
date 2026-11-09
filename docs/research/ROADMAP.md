@@ -42,7 +42,7 @@ Phases 0 to 6 are built in the API, the CLI, the playground and the desktop app.
 | Better metrics | Done. WavLM speaker similarity, DNSMOS, and a drift check, for files and kept renders. |
 | Dubbing | Done. Local Whisper, M2M100 (418M fast, 1.2B better), the original timeline, video re-mux, and an option to keep the original voices (with consent). |
 | Sound effects and music | Done. AudioLDM 2 and MusicGen engines (non-commercial weights), installable, with `/sound`. Not yet: `[sfx: ...]` cues inside scripts and dialogue. |
-| New engines (Ming-3.0, IndexTTS-2.5, MOSS-TTS, MOSS-TTSD, Step-Audio-EditX) | Waiting on a decision. They run code from their own repositories (`trust_remote_code` or a cloned repo), which this setup does not do without your go-ahead. |
+| New engines | Added with the user's go-ahead (2026-11-09): IndexTTS-2.5, Ming-3.0-tts 0.5B and MOSS-TTS Local-Transformer v1.5, installable from pinned commits and revisions and labelled as running repository code. Not yet: MOSS-TTSD and the 8B MOSS-TTS (need quantisation for 16 GB), Step-Audio-EditX. |
 | Deferred | Aborting a generation already on the GPU; a CTC forced aligner; a neural denoiser (DeepFilterNet clashes with torch 2.11) and music/voice separation (3.3); Urdu ASR validation (5.3); `--remote` on every CLI command. |
 
 ## Where we stand

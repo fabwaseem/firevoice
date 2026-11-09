@@ -907,7 +907,10 @@ async function installEngine(name, btn) {
   try {
     const plan = await API.req(`/api/v1/engines/${name}/install`);
     const todo = plan.steps.filter(s => !s.done).map(s => "• " + s.what).join("\n");
-    if (!confirm(`Install ${name}?\n\n${todo}\n\nAbout ${plan.estimated_gb ?? "?"} GB to download (less when another engine already fetched the same torch).`)) return;
+    const code = plan.repo_code ? `
+
+This engine runs code from its own repository (pinned to a fixed version). Install only engines you trust.` : "";
+    if (!confirm(`Install ${name}?\n\n${todo}\n\nAbout ${plan.estimated_gb ?? "?"} GB to download (less when another engine already fetched the same torch).${code}`)) return;
     busyBtn(btn, true, "Starting…");
     const j = await API.req(`/api/v1/engines/${name}/install`, { method: "POST" });
     S.installing = { ...(S.installing || {}), [name]: j }; drawInstall(name, j);
