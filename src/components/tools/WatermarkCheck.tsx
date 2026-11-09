@@ -1,0 +1,61 @@
+import { useState } from "react";
+import { ScanSearch } from "lucide-react";
+import { toast } from "sonner";
+import { api } from "@/lib/api/client";
+import { errMessage } from "@/lib/api/hooks";
+import type { WatermarkResult } from "@/lib/api/types";
+import { Badge, Button, Card } from "@/components/ui";
+
+/** Is a file AI speech? Every FireVoice output carries an inaudible AudioSeal watermark; this finds it again. */
+export function WatermarkCheck() {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [r, setR] = useState<WatermarkResult | null>(null);
+
+  const check = async () => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      setR(await api.detectWatermark(file));
+    } catch (e) {
+      toast.error(errMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="p-5">
+      <h3 className="text-[14px] font-semibold text-ink">Is it AI speech?</h3>
+      <p className="mt-1 text-[12.5px] text-muted">Everything FireVoice makes carries an inaudible watermark that survives MP3 and editing. Check any file for it.</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          type="file"
+          accept="audio/*,video/*"
+          onChange={(e) => {
+            setFile(e.target.files?.[0] ?? null);
+            setR(null);
+          }}
+          className="min-w-0 flex-1 text-[12.5px] text-ink-2 file:mr-3 file:rounded-md file:border-0 file:bg-surface-3 file:px-3 file:py-1.5 file:text-ink"
+        />
+        <Button size="sm" variant="soft" leading={<ScanSearch className="size-4" />} disabled={!file} loading={busy} onClick={check}>
+          Check
+        </Button>
+      </div>
+      {r && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[12.5px]">
+          {r.firevoice ? (
+            <Badge tone="ok">made by FireVoice{r.kind ? ` · ${r.kind}` : ""}</Badge>
+          ) : r.watermarked ? (
+            <Badge tone="warn">AI watermark, not FireVoice's</Badge>
+          ) : (
+            <Badge>no watermark found</Badge>
+          )}
+          <span className="text-muted">
+            {Math.round(r.probability * 100)}% of {r.seconds}s carries a mark
+          </span>
+        </div>
+      )}
+    </Card>
+  );
+}

@@ -1,5 +1,5 @@
 import { useSettings } from "@/stores/settings";
-import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WordTime } from "./types";
+import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
 
 export class ApiError extends Error {
   code: string;
@@ -95,6 +95,12 @@ export const api = {
   voiceCollections: async () => (await request<{ collections: VoiceCollection[] }>("/api/v1/voices/collections")).collections,
   renderVoicePreview: (id: string) => request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/preview`, { method: "POST" }),
   addVoice: (form: FormData) => request<Voice>("/api/v1/voices", { method: "POST", body: form }),
+  voiceConsent: (id: string) => request<ConsentRecord>(`/api/v1/voices/${encodeURIComponent(id)}/consent`),
+  detectWatermark: (file: Blob, name = "audio") => {
+    const fd = new FormData();
+    fd.append("file", file, file instanceof File ? file.name : name);
+    return request<WatermarkResult>("/api/v1/audio/detect", { method: "POST", body: fd });
+  },
   designVoice: (body: { name: string; description: string; engine?: string; text?: string; gender?: string; language?: string; seed?: number }, wait = true) =>
     request<Voice | Job>("/api/v1/voices/design", { method: "POST", body: json(body) }, { wait: wait ? undefined : "false" }),
   updateVoice: (id: string, patch: Partial<Pick<Voice, "name" | "tagline" | "description" | "gender" | "language" | "accent" | "tags" | "favorite" | "notes">>) =>

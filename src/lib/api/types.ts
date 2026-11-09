@@ -86,6 +86,7 @@ export interface PathsReport {
   package: { path: string; checkout: string | null };
   settings_file: string;
   settings: Partial<Record<PathSettingKey, string>>;
+  watermark?: { policy: "all" | "off"; available: boolean };
 }
 
 export interface EnginePick {
@@ -108,7 +109,31 @@ export interface SetupReport {
   problems: string[];
 }
 
-export type PathSettingKey = "engines_dir" | "weights_dir" | "ffmpeg";
+export type PathSettingKey = "engines_dir" | "weights_dir" | "ffmpeg" | "watermark";
+
+export interface WatermarkResult {
+  watermarked: boolean;
+  probability: number;
+  firevoice: boolean;
+  kind: "render" | "convert" | null;
+  bits: string | null;
+  seconds: number;
+}
+
+export interface ConsentRecord {
+  voice_id: string;
+  /** "consent" when a record was kept; otherwise what the voice's use rests on */
+  basis: string;
+  given: boolean | null;
+  by?: string | null;
+  via?: string;
+  time?: string;
+  statement?: string;
+  clip_unchanged?: boolean | null;
+  clip_note?: string | null;
+  license?: string | null;
+  source?: string | null;
+}
 
 export interface Style {
   name: string;

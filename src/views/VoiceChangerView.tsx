@@ -7,6 +7,7 @@ import type { ClipCheck } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { useStudio } from "@/stores/studio";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { WatermarkCheck } from "@/components/tools/WatermarkCheck";
 import { Badge, Button, Card, Label, NativeSelect } from "@/components/ui";
 
 /** Voice changer: keep the words, timing and delivery of a recording, swap the voice. */
@@ -117,6 +118,9 @@ export function VoiceChangerView() {
             </div>
           )}
         </Card>
+      </div>
+      <div className="mt-4">
+        <WatermarkCheck />
       </div>
     </div>
   );

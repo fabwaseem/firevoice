@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import type { PathSettingKey } from "@/lib/api/types";
 import { usePaths, useSaveSettings } from "@/lib/api/hooks";
-import { Button, Card, CardBody, CardHeader, Input, Label, Skeleton } from "@/components/ui";
+import { Button, Card, CardBody, CardHeader, Input, Label, Skeleton, Switch } from "@/components/ui";
 
-const FIELDS: { key: PathSettingKey; label: string; hint: string }[] = [
+const FIELDS: { key: Exclude<PathSettingKey, "watermark">; label: string; hint: string }[] = [
   { key: "engines_dir", label: "Engine folder", hint: "Python environments, one per engine (about 5 GB each)" },
   { key: "weights_dir", label: "Model weights", hint: "Downloaded models (3 to 8 GB each)" },
   { key: "ffmpeg", label: "ffmpeg", hint: "Full path to ffmpeg.exe" },
@@ -48,6 +48,15 @@ export function PathsSection() {
                 <Input id={`path-${key}`} value={draft[key] ?? ""} placeholder={p[key].path ?? hint} title={hint} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
               </div>
             ))}
+            {p.watermark && (
+              <Switch
+                checked={p.watermark.policy !== "off"}
+                disabled={!p.watermark.available || save.isPending}
+                onChange={(v) => save.mutate({ watermark: v ? "all" : "off" })}
+                label="Mark every output as AI speech"
+                description={p.watermark.available ? "An inaudible watermark (AudioSeal) that detectors can find, even after MP3 and edits." : "Needs the audioseal package in the backend."}
+              />
+            )}
             <div className="flex items-center gap-3">
               <Button size="sm" disabled={!Object.keys(changes).length} loading={save.isPending} onClick={() => save.mutate(changes)}>
                 Save

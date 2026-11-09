@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { AudioLines, ImageOff, ImagePlus, Pause, Play, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +29,7 @@ export function VoiceDetail({ voiceId, onClose }: { voiceId: string | null; onCl
 }
 
 function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
+  const consent = useQuery({ queryKey: ["consent", voice.voice_id], queryFn: () => api.voiceConsent(voice.voice_id), retry: false, staleTime: 60_000 });
   const navigate = useNavigate();
   const update = useUpdateVoice();
   const setDefault = useSetDefaultVoice();
@@ -135,6 +136,16 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
           </div>
           <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12.5px]">
             {voice.source && <Row k="Source" v={voice.source} />}
+            {consent.data && (
+              <Row
+                k="Consent"
+                v={
+                  consent.data.basis === "consent"
+                    ? `${consent.data.by || "given"} · ${consent.data.via} · ${(consent.data.time || "").slice(0, 10)}${consent.data.clip_note ? ` (${consent.data.clip_note})` : ""}`
+                    : consent.data.basis
+                }
+              />
+            )}
             {voice.ref_seconds != null && <Row k="Reference" v={fmtDuration(voice.ref_seconds)} />}
             {voice.created && <Row k="Added" v={relTime(voice.created)} />}
             {voice.design_prompt && <Row k="Prompt" v={voice.design_prompt} />}

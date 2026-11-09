@@ -23,6 +23,7 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [tags, setTags] = useState("");
   const [transcript, setTranscript] = useState("");
   const [consent, setConsent] = useState(false);
+  const [consentBy, setConsentBy] = useState("");
   const [clean, setClean] = useState<"" | "light" | "medium" | "strong">("medium");
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -56,6 +57,7 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     fd.append("file", audio, audio instanceof File ? audio.name : "recording.webm");
     fd.append("name", name.trim());
     fd.append("consent", "true");
+    if (consentBy.trim()) fd.append("consent_by", consentBy.trim());
     if (description) fd.append("description", description);
     if (gender) fd.append("gender", gender);
     if (language) fd.append("language", language);
@@ -192,6 +194,12 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             <NativeSelect id="av-clean" value={clean} onChange={(e) => setClean(e.target.value as typeof clean)}>
               <option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option>
             </NativeSelect>
+          </div>
+          <div>
+            <Label htmlFor="av-consent-by" hint="kept in the voice's consent record">
+              Who gave consent
+            </Label>
+            <Input id="av-consent-by" value={consentBy} onChange={(e) => setConsentBy(e.target.value)} placeholder="The speaker's name" />
           </div>
           <label className="mt-1 flex cursor-pointer items-start gap-2.5 rounded-lg border border-line bg-surface-2 p-3 text-[12.5px] text-ink-2">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 size-4 accent-[var(--fire)]" required />
