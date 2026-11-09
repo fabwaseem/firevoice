@@ -1,0 +1,190 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ------------------------------------------------------------------ tokens */
+:root {
+  color-scheme: light;
+  --bg: #f2f3f7;
+  --bg-elev: #f8f9fc;
+  --surface: #ffffff;
+  --surface-2: #f5f6fa;
+  --surface-3: #eceef4;
+  --ink: #13151b;
+  --ink-2: #3d4250;
+  --muted: #6c7281;
+  --faint: #9aa0ae;
+  --line: rgba(19, 21, 27, 0.08);
+  --line-strong: rgba(19, 21, 27, 0.14);
+  --fire: #ff5a2d;
+  --fire-2: #ff8a4c;
+  --fire-soft: rgba(255, 90, 45, 0.12);
+  --ok: #1f9d6a;
+  --ok-soft: rgba(31, 157, 106, 0.12);
+  --warn: #d7970b;
+  --warn-soft: rgba(215, 151, 11, 0.14);
+  --bad: #e24b4b;
+  --bad-soft: rgba(226, 75, 75, 0.12);
+  --info: #3b7ddd;
+  --info-soft: rgba(59, 125, 221, 0.12);
+  --shadow-sm: 0 1px 2px rgba(19, 21, 27, 0.04), 0 1px 1px rgba(19, 21, 27, 0.03);
+  --shadow-md: 0 8px 24px -12px rgba(19, 21, 27, 0.18), 0 2px 6px rgba(19, 21, 27, 0.04);
+  --shadow-lg: 0 24px 60px -24px rgba(19, 21, 27, 0.28), 0 6px 18px -8px rgba(19, 21, 27, 0.08);
+  --blob-a: rgba(255, 138, 76, 0.22);
+  --blob-b: rgba(96, 196, 170, 0.18);
+  --blob-c: rgba(144, 132, 255, 0.16);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0f14;
+  --bg-elev: #12151c;
+  --surface: #161a22;
+  --surface-2: #1c212b;
+  --surface-3: #232935;
+  --ink: #eef0f5;
+  --ink-2: #c6cbd6;
+  --muted: #8e95a5;
+  --faint: #5f6675;
+  --line: rgba(238, 240, 245, 0.08);
+  --line-strong: rgba(238, 240, 245, 0.14);
+  --fire: #ff6a3d;
+  --fire-2: #ff9a5c;
+  --fire-soft: rgba(255, 106, 61, 0.16);
+  --ok: #3cc58a;
+  --ok-soft: rgba(60, 197, 138, 0.14);
+  --warn: #e7b23a;
+  --warn-soft: rgba(231, 178, 58, 0.16);
+  --bad: #f06a6a;
+  --bad-soft: rgba(240, 106, 106, 0.16);
+  --info: #6aa3ff;
+  --info-soft: rgba(106, 163, 255, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px -12px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.7), 0 6px 18px -8px rgba(0, 0, 0, 0.4);
+  --blob-a: rgba(255, 106, 61, 0.14);
+  --blob-b: rgba(60, 197, 138, 0.1);
+  --blob-c: rgba(120, 110, 255, 0.12);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fire: var(--fire);
+  --color-fire-2: var(--fire-2);
+  --color-fire-soft: var(--fire-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-2xl: 28px;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+/* ------------------------------------------------------------------- base */
+@layer base {
+  * { border-color: var(--line); }
+  html, body, #root { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01", "ss03", "liga", "calt";
+    overflow: hidden;
+    user-select: none;
+  }
+  input, textarea, [contenteditable] { user-select: text; }
+  ::selection { background: var(--fire-soft); }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--fire); outline-offset: 2px; border-radius: 6px; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: padding-box; border: 3px solid transparent; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
+
+/* -------------------------------------------------------------- utilities */
+@utility surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+@utility surface-raised {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+}
+@utility glass {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--line);
+}
+@utility tabular { font-variant-numeric: tabular-nums; }
+@utility hairline { box-shadow: inset 0 0 0 1px var(--line); }
+@utility fire-gradient { background-image: linear-gradient(135deg, var(--fire-2), var(--fire)); }
+@utility fire-text {
+  background-image: linear-gradient(135deg, var(--fire-2), var(--fire));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@utility ambient {
+  background:
+    radial-gradient(60% 50% at 8% 0%, var(--blob-a), transparent 70%),
+    radial-gradient(45% 40% at 92% 10%, var(--blob-c), transparent 70%),
+    radial-gradient(50% 45% at 70% 100%, var(--blob-b), transparent 70%),
+    var(--bg);
+}
+
+/* ----------------------------------------------------------- animations */
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+@keyframes levels { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+.fade-up { animation: fade-up 0.35s var(--ease-out-quart) both; }
+.eq-bar { transform-origin: bottom; animation: levels 0.9s ease-in-out infinite; }
+.eq-bar:nth-child(2) { animation-delay: 0.15s; }
+.eq-bar:nth-child(3) { animation-delay: 0.3s; }
+.eq-bar:nth-child(4) { animation-delay: 0.1s; }
