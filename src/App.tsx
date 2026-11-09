@@ -14,6 +14,7 @@ import { ProjectsView } from "@/views/ProjectsView";
 import { VoiceChangerView } from "@/views/VoiceChangerView";
 import { DialogueView } from "@/views/DialogueView";
 import { DubbingView } from "@/views/DubbingView";
+import { SoundView } from "@/views/SoundView";
 import { ProjectEditorView } from "@/views/ProjectEditorView";
 import { SettingsView } from "@/views/SettingsView";
 
@@ -45,6 +46,7 @@ const router = createHashRouter([
       { path: "changer", element: <VoiceChangerView /> },
       { path: "dialogue", element: <DialogueView /> },
       { path: "dub", element: <DubbingView /> },
+      { path: "sound", element: <SoundView /> },
       { path: "projects/:projectId", element: <ProjectEditorView /> },
       { path: "settings", element: <SettingsView /> },
     ],

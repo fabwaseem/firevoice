@@ -121,8 +121,8 @@ export function useOptions() {
   return useQuery({ queryKey: qk.options, queryFn: api.options, staleTime: 60_000, retry: 1 });
 }
 
-export function useEngines() {
-  return useQuery({ queryKey: qk.engines, queryFn: api.engines, refetchInterval: 10_000, retry: 1 });
+export function useEngines(task: "tts" | "sfx" | "vc" | "all" = "tts") {
+  return useQuery({ queryKey: [...qk.engines, task], queryFn: () => api.engines(task), refetchInterval: 10_000, retry: 1 });
 }
 
 export function useVoices(filters?: { language?: string; gender?: string; kind?: string; tag?: string; q?: string }) {

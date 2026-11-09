@@ -70,7 +70,17 @@ export const api = {
   options: () => request<Options>("/api/v1/options"),
 
   // ---------------------------------------------------------------- engines
-  engines: async () => (await request<{ engines: Engine[] }>("/api/v1/engines")).engines,
+  engines: async (task: "tts" | "sfx" | "vc" | "all" = "tts") => (await request<{ engines: Engine[] }>("/api/v1/engines", {}, { task })).engines,
+  sound: async (body: { prompt: string; kind: "sfx" | "music"; duration: number; seed?: number; format?: string }) => {
+    const res = await fetch(url("/api/v1/sound"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: json({ format: "mp3", ...body }),
+    });
+    if (!res.ok) throw await parseError(res);
+    const h = (k: string) => res.headers.get(k) ?? "";
+    return { blob: await res.blob(), seed: h("X-Seed"), duration: h("X-Duration"), engine: h("X-Engine"), license: h("X-License") };
+  },
   engine: (name: string) => request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}`),
   loadEngine: (name: string, workers?: number) =>
     request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/load`, { method: "POST", body: json(workers ? { workers } : {}) }),

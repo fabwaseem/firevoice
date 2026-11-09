@@ -6,8 +6,14 @@ import { PageHeader, LoadError } from "@/components/shell/PageHeader";
 import { Badge, EmptyState, Skeleton } from "@/components/ui";
 import { EngineCard } from "@/components/engines/EngineCard";
 
+const GROUPS = [
+  { task: "tts", title: "Speech" },
+  { task: "sfx", title: "Sound effects and music" },
+  { task: "vc", title: "Voice changer" },
+] as const;
+
 export function EnginesView() {
-  const engines = useEngines();
+  const engines = useEngines("all");
   const system = useSystem();
   const gpu = system.data?.gpu;
 
@@ -70,10 +76,21 @@ export function EnginesView() {
       ) : sorted.length === 0 ? (
         <EmptyState icon={<Cpu />} title="No engines reported" description="The server returned an empty engine list." />
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
-          {sorted.map((e) => (
-            <EngineCard key={e.name} engine={e} />
-          ))}
+        <div className="space-y-8">
+          {GROUPS.map(({ task, title }) => {
+            const list = sorted.filter((e) => (e.task ?? "tts") === task);
+            if (!list.length) return null;
+            return (
+              <section key={task}>
+                <h2 className="mb-3 text-[12px] font-semibold tracking-[0.08em] text-faint uppercase">{title}</h2>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+                  {list.map((e) => (
+                    <EngineCard key={e.name} engine={e} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
     </div>
