@@ -88,6 +88,26 @@ export interface PathsReport {
   settings: Partial<Record<PathSettingKey, string>>;
 }
 
+export interface EnginePick {
+  engine: string;
+  title: string;
+  reason: string;
+  ready: boolean;
+  installable: boolean;
+  vram_gb?: number | null;
+}
+
+export interface SetupReport {
+  gpu: GPUInfo | null;
+  vram_gb: number | null;
+  recommended: EnginePick;
+  alternatives: EnginePick[];
+  ffmpeg: string | null;
+  voices: number;
+  ready_engines: string[];
+  problems: string[];
+}
+
 export type PathSettingKey = "engines_dir" | "weights_dir" | "ffmpeg";
 
 export interface Style {

@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "node scripts/dev-ui.mjs",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "node scripts/bundle-backend.mjs && pnpm build"
   },
   "app": {
     "windows": [
@@ -26,7 +26,18 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "img-src": "'self' data: blob: http: https:",
+        "media-src": "'self' data: blob: http: https:",
+        "connect-src": "'self' ipc: http://ipc.localhost http: https: ws: wss:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-ancestors": "'none'"
+      }
     }
   },
   "bundle": {
@@ -42,7 +53,12 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper" }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    },
+    "resources": {
+      "resources/backend/": "backend/"
     }
   },
   "plugins": {}

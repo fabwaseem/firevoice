@@ -59,6 +59,10 @@ export function useUninstallEngine() {
   });
 }
 
+export function useSetupReport(enabled = true) {
+  return useQuery({ queryKey: ["setup-report"], queryFn: api.setupReport, enabled, staleTime: 30_000 });
+}
+
 export function usePaths() {
   return useQuery({ queryKey: qk.paths, queryFn: api.paths, staleTime: 30_000 });
 }

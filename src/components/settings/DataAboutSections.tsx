@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Eraser, RotateCcw } from "lucide-react";
+import { BookOpen, Eraser, RotateCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, CardBody, CardHeader, ConfirmDialog, Skeleton } from "@/components/ui";
 import { Logo } from "@/components/shell/Logo";
@@ -63,6 +63,9 @@ export function DataSection() {
         <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
           <Button variant="outline" size="sm" leading={<RotateCcw className="size-3.5" />} onClick={() => setConfirmDraft(true)}>
             Reset Speak draft
+          </Button>
+          <Button variant="outline" size="sm" leading={<Sparkles className="size-3.5" />} onClick={() => useSettings.getState().set({ onboarded: false })}>
+            Show the welcome again
           </Button>
           <Button variant="danger" size="sm" leading={<Eraser className="size-3.5" />} onClick={() => setConfirmClear(true)}>
             Clear local settings

@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui";
 import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { OfflineBanner } from "./OfflineBanner";
+import { BackendManager } from "./BackendManager";
+import { Welcome } from "@/components/onboarding/Welcome";
 import { usePlayer } from "@/stores/player";
 
 export function AppShell() {
@@ -41,6 +43,8 @@ export function AppShell() {
           className="relative min-w-0 flex-1 overflow-y-auto px-6 pt-6 pb-6 transition-[padding] duration-300"
           style={{ paddingBottom: hasTrack ? 112 : 24 }}
         >
+          <BackendManager />
+          <Welcome />
           <OfflineBanner />
           <Outlet />
         </main>

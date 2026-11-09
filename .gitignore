@@ -5,3 +5,7 @@ dist-ssr
 src-tauri/target
 src-tauri/gen/schemas
 *.tsbuildinfo
+
+# staged by scripts/bundle-backend.mjs at build time
+src-tauri/resources/backend/*
+!src-tauri/resources/backend/.gitkeep

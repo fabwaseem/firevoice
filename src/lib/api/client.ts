@@ -1,5 +1,5 @@
 import { useSettings } from "@/stores/settings";
-import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, STTResult, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WordTime } from "./types";
+import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WordTime } from "./types";
 
 export class ApiError extends Error {
   code: string;
@@ -81,6 +81,7 @@ export const api = {
   uninstallEngine: (name: string, weights = false) =>
     request<{ engine: string; removed: string[]; also_affects: string[] }>(`/api/v1/engines/${encodeURIComponent(name)}/install`, { method: "DELETE" }, { weights }),
   paths: () => request<PathsReport>("/api/v1/system/paths"),
+  setupReport: () => request<SetupReport>("/api/v1/system/setup"),
   saveSettings: (body: Partial<Record<PathSettingKey, string>>) =>
     request<{ settings: PathsReport["settings"]; restart_required: boolean; paths: PathsReport }>("/api/v1/system/settings", { method: "PUT", body: json(body) }),
 

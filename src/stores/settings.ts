@@ -16,6 +16,10 @@ export interface Settings {
   /** Show engine parameter panel expanded */
   showAdvanced: boolean;
   sidebarCollapsed: boolean;
+  /** Desktop app: start the bundled/local backend with the app and stop it on exit */
+  manageBackend: boolean;
+  /** The first-run welcome (GPU check, engine, test render) was completed or skipped */
+  onboarded: boolean;
   setServerUrl: (v: string) => void;
   setToken: (v: string) => void;
   setTheme: (v: Theme) => void;
@@ -35,6 +39,8 @@ export const useSettings = create<Settings>()(
       autoPlay: true,
       showAdvanced: false,
       sidebarCollapsed: false,
+      manageBackend: true,
+      onboarded: false,
       setServerUrl: (serverUrl) => set({ serverUrl: serverUrl.replace(/\/+$/, "") || DEFAULT_SERVER }),
       setToken: (token) => set({ token }),
       setTheme: (theme) => set({ theme }),
