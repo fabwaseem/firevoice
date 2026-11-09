@@ -46,7 +46,49 @@ export interface Engine {
   workers?: number;
   active_requests?: number;
   params: EngineParam[];
+  /** The backend can build this engine's venv and fetch its weights itself (POST /engines/{name}/install). */
+  installable?: boolean;
 }
+
+export interface InstallStep {
+  step: "venv" | "torch" | "packages" | "weights" | "check";
+  what: string;
+  done: boolean;
+  gb?: number | null;
+}
+
+export interface InstallPlan {
+  engine: string;
+  auto: boolean;
+  manual: string | null;
+  notes: string;
+  venv: string | null;
+  venv_state: "missing" | "building" | "outdated" | "ok" | null;
+  installed: boolean;
+  steps: InstallStep[];
+  estimated_gb: number | null;
+  uv: string | null;
+  engines_dir: string;
+  weights_dir: string;
+}
+
+export interface PathEntry {
+  path: string | null;
+  source: string;
+  exists: boolean;
+}
+
+export interface PathsReport {
+  home: PathEntry;
+  engines_dir: PathEntry;
+  weights_dir: PathEntry;
+  ffmpeg: PathEntry;
+  package: { path: string; checkout: string | null };
+  settings_file: string;
+  settings: Partial<Record<PathSettingKey, string>>;
+}
+
+export type PathSettingKey = "engines_dir" | "weights_dir" | "ffmpeg";
 
 export interface Style {
   name: string;
@@ -351,7 +393,7 @@ export interface STTResult {
   segments?: { start: number; end: number; text: string; speaker?: string }[];
 }
 
-export type JobKind = "tts" | "batch" | "design" | "previews";
+export type JobKind = "tts" | "batch" | "design" | "previews" | "project" | "style_refs" | "dialogue" | "install";
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 
 export interface Job {
@@ -416,6 +458,10 @@ export interface Options {
 export interface Health {
   ok: boolean;
   version: string;
+  /** HTTP contract version; the app checks it against the range it supports. Missing on servers older than 1.1. */
+  api_version?: number;
+  /** The oldest client contract this server still serves. */
+  min_client_api?: number;
   auth: boolean;
 }
 

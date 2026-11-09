@@ -19,7 +19,61 @@ export const qk = {
   projects: ["projects"] as const,
   project: (id: string) => ["project", id] as const,
   kept: (id: string) => ["kept", id] as const,
+  installPlan: (name: string) => ["install-plan", name] as const,
+  paths: ["paths"] as const,
 };
+
+export function useInstallPlan(name: string, enabled = true) {
+  return useQuery({ queryKey: qk.installPlan(name), queryFn: () => api.installPlan(name), enabled, staleTime: 60_000 });
+}
+
+/** The newest install job for an engine that is still queued or running, if any (so a card shows it after a reload). */
+export function useActiveInstall(name: string) {
+  const jobs = useJobs({ kind: "install", limit: 50 });
+  return (jobs.data?.jobs ?? []).find((j) => j.payload?.engine === name && (j.status === "queued" || j.status === "running")) ?? null;
+}
+
+export function useInstallEngine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, force }: { name: string; force?: boolean }) => api.installEngine(name, force),
+    onSuccess: (job) => {
+      qc.setQueryData(qk.job(job.id), job);
+      qc.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
+
+export function useUninstallEngine() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, weights }: { name: string; weights?: boolean }) => api.uninstallEngine(name, weights),
+    onSuccess: (r) => {
+      toast.success(`${r.engine} removed` + (r.also_affects.length ? ` (its environment also served ${r.also_affects.join(", ")})` : ""));
+      qc.invalidateQueries({ queryKey: qk.engines });
+      qc.invalidateQueries({ queryKey: qk.options });
+      qc.invalidateQueries({ queryKey: ["install-plan"] });
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
+
+export function usePaths() {
+  return useQuery({ queryKey: qk.paths, queryFn: api.paths, staleTime: 30_000 });
+}
+
+export function useSaveSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.saveSettings,
+    onSuccess: (r) => {
+      qc.setQueryData(qk.paths, r.paths);
+      toast.success(r.restart_required ? "Saved. Restart the backend to use the new engine folders." : "Saved");
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
 
 export function useDictionary() {
   return useQuery({ queryKey: qk.dictionary, queryFn: api.dictionary });

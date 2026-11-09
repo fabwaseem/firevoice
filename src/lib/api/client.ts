@@ -1,9 +1,5 @@
 import { useSettings } from "@/stores/settings";
-import type {
-  ApiErrorBody, Engine, Health, Job, JobEvent, JobKind, Options, Style, STTResult, SystemInfo, TTSJson, TTSRequest,
-  Voice, VoiceCollection, StreamEvent, DictRule, DictRuleInput, DictView, KeptRender, WordTime,
-  Project, ProjectSummary, ChapterEdit, AudiobookCheck, ClipCheck, DesignBatch, DialogueParse, DialogueResult,
-} from "./types";
+import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, STTResult, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WordTime } from "./types";
 
 export class ApiError extends Error {
   code: string;
@@ -79,6 +75,14 @@ export const api = {
   loadEngine: (name: string, workers?: number) =>
     request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/load`, { method: "POST", body: json(workers ? { workers } : {}) }),
   unloadEngine: (name: string) => request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/unload`, { method: "POST" }),
+  installPlan: (name: string, sizes = true) => request<InstallPlan>(`/api/v1/engines/${encodeURIComponent(name)}/install`, {}, { sizes }),
+  installEngine: (name: string, force = false) =>
+    request<Job>(`/api/v1/engines/${encodeURIComponent(name)}/install`, { method: "POST" }, { force }),
+  uninstallEngine: (name: string, weights = false) =>
+    request<{ engine: string; removed: string[]; also_affects: string[] }>(`/api/v1/engines/${encodeURIComponent(name)}/install`, { method: "DELETE" }, { weights }),
+  paths: () => request<PathsReport>("/api/v1/system/paths"),
+  saveSettings: (body: Partial<Record<PathSettingKey, string>>) =>
+    request<{ settings: PathsReport["settings"]; restart_required: boolean; paths: PathsReport }>("/api/v1/system/settings", { method: "PUT", body: json(body) }),
 
   // ----------------------------------------------------------------- voices
   voices: async (filters: { language?: string; gender?: string; kind?: string; tag?: string; q?: string } = {}) =>

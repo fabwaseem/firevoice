@@ -7,6 +7,7 @@ import { useLoadEngine, useUnloadEngine } from "@/lib/api/hooks";
 import { cn, fmtGB } from "@/lib/utils";
 import { useStudio } from "@/stores/studio";
 import { Badge, Button, Card, Input, Tooltip } from "@/components/ui";
+import { InstallPanel } from "./InstallPanel";
 import { ParamSchema } from "./ParamSchema";
 
 function Capability({ on, children }: { on: boolean; children: React.ReactNode }) {
@@ -78,16 +79,7 @@ export function EngineCard({ engine }: { engine: Engine }) {
 
       {engine.notes && <p className="mt-3 text-[13px] leading-relaxed text-muted">{engine.notes}</p>}
 
-      {!engine.ready && engine.problems.length > 0 && (
-        <div className="mt-3 rounded-md bg-surface-2 px-3 py-2">
-          {engine.problems.map((p) => (
-            <p key={p} className="font-mono text-[11.5px] text-muted">
-              {p}
-            </p>
-          ))}
-          <p className="mt-1 text-[12px] text-faint">Install steps are in the FireVoice README under “Other engines”.</p>
-        </div>
-      )}
+      <InstallPanel engine={engine} />
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
         {engine.loaded ? (

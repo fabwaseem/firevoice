@@ -60,7 +60,10 @@ export function resultCount(job: Job, key: string): number | undefined {
   return Array.isArray(v) ? v.length : typeof v === "number" ? v : undefined;
 }
 
-export const KIND_LABEL: Record<Job["kind"], string> = { tts: "Speech", batch: "Batch", design: "Voice design", previews: "Voice previews" };
+export const KIND_LABEL: Record<Job["kind"], string> = {
+  tts: "Speech", batch: "Batch", design: "Voice design", previews: "Voice previews", project: "Project", style_refs: "Style clips",
+  dialogue: "Dialogue", install: "Engine install",
+};
 export function kindLabel(kind: Job["kind"]): string {
   return KIND_LABEL[kind] ?? kind;
 }
