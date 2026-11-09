@@ -106,6 +106,9 @@ class FasterWhisperAligner:
             for s in segs:
                 for w in (s.words or []):
                     out.append(Word(w.word.strip(), float(w.start), float(w.end)))
+        if self.language == "en":
+            from .align import refine
+            out = refine(a, 16000, out)
         return out
 
     def transcribe_text(self, audio: np.ndarray, sr: int, beam_size: int = 3) -> tuple[str, list[Word]]:
@@ -140,6 +143,9 @@ class FasterWhisperAligner:
                     words.append(Word(w.word.strip(), float(w.start), float(w.end)))
                 segments.append({"start": round(float(s.start), 3), "end": round(float(s.end), 3), "text": s.text.strip(),
                                  "words": list(range(first, len(words)))})
+        if getattr(info, "language", lang) == "en":
+            from .align import refine_segments
+            words = refine_segments(a, 16000, words, segments)
         return {"text": " ".join(parts), "words": words, "segments": segments, "language": getattr(info, "language", lang),
                 "language_probability": round(float(getattr(info, "language_probability", 0.0) or 0.0), 3)}
 
