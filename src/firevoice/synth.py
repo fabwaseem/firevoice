@@ -93,6 +93,10 @@ class _Chunk:
     parts: Optional[object] = None             # queue.Queue of streamed pieces
 
 
+# Urdu takes pass the skeleton check from this similarity (an exact take scores about 0.95-1.0; another sentence ~0.3)
+URDU_ACCEPT = 0.8
+
+
 @dataclass
 class _Sent:
     text: str
@@ -226,6 +230,20 @@ class Synthesizer:
         if not asr:
             words = NullAligner().transcribe(a, sr, plain)
             said = plain
+        elif asr == "ur" and self.aligner is not None and self.validating:
+            # Roman Urdu script against what Whisper hears in Urdu script, compared as consonant skeletons
+            from . import urdu
+            heard = self.aligner.transcribe(a, sr, language="ur")
+            script = " ".join(w.text for w in heard)
+            words = [Word(urdu.to_roman(w.text), w.start, w.end) for w in heard]
+            said = urdu.to_roman(script)
+            m = urdu.match(plain, script)
+            score *= m
+            if m < min(self.accept, URDU_ACCEPT):
+                reasons.append(f"asr-ur {m:.2f}")
+        elif asr == "ur":
+            words = NullAligner().transcribe(a, sr, plain)
+            said = plain
         elif self.aligner is not None:
             words = self.aligner.transcribe(a, sr) if self.validating else self.aligner.transcribe(a, sr, plain)
             said = " ".join(w.text for w in words)
@@ -352,7 +370,9 @@ class Synthesizer:
             spoken = normalize(it.text, self.lexicon, lang, spell_acronyms=caps.get("spell_acronyms", True), rules=rules)
             if not caps.get("supports_tags", False):
                 spoken = strip_tags(spoken)
-            units += [_Sent(s, st, it.pace, english) for s in make_chunks(spoken)]
+            # how a take is checked: English word match, the Urdu skeleton check, or signal checks only
+            check = english or ("ur" if (lang or "").lower().startswith("ur") else False)
+            units += [_Sent(s, st, it.pace, check) for s in make_chunks(spoken)]
 
         chunks: list[_Chunk] = []
         plan: list = []

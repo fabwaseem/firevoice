@@ -62,6 +62,10 @@ class Manifest:
 
 
 _T211 = "2.11.0"
+# separator modes -> UVR model file (audio-separator downloads them into <weights>/separator)
+SEPARATOR_MODELS = {"vocals": "model_bs_roformer_ep_317_sdr_12.9755.ckpt",
+                    "denoise": "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
+                    "dereverb": "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt"}
 _INDEX_GIT = ("https://github.com/index-tts/index-tts.git", "d9e41aac89fd00b3d71497fddb287b7f24613712", "indextts-repo")
 MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
     Manifest("voxcpm2", "voxcpm", _T211, packages=["voxcpm==2.0.3", "transformers==5.22.2", "soundfile", "numpy"],
@@ -88,6 +92,12 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
              weights=[("cvssp/audioldm2", "audioldm2")], check="diffusers", notes="sound effects; shares the sfx venv with musicgen"),
     Manifest("musicgen", "sfx", _T211, packages=["diffusers==0.35.2", "transformers==4.57.3", "accelerate==1.12.0", "scipy", "soundfile"],
              weights=[("facebook/musicgen-small", "musicgen-small")], check="transformers", notes="music beds; shares the sfx venv with audioldm2"),
+    Manifest("separator", "separator", _T211, packages=["audio-separator[cpu]==0.48.0", "soundfile"], check="audio_separator",
+             warmup=("import logging; from audio_separator.separator import Separator; "
+                     "s = Separator(model_file_dir='{weights}', output_dir='{weights}', log_level=logging.WARNING); "
+                     "[s.load_model(model_filename=m) for m in " + repr(list(SEPARATOR_MODELS.values())) + "]; print('ready')"),
+             notes="voice/music separation and neural denoise (UVR RoFormer models via audio-separator, MIT; model licences vary); "
+                   "about 1.5 GB of models"),
     Manifest("chatterbox-turbo", None, manual="runs inside the backend's own environment: install the backend with the "
              "`gpu` extra (pip install \"firevoice[gpu]\"); the desktop app's bundled backend includes it"),
     Manifest("chatterbox", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),
@@ -421,7 +431,9 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 progress(k, steps, "first load: fetching the engine's helper models")
                 repo_dir = str(paths.engines_dir() / m.git[2]) if m.git else None
                 wenv = {**env, "PYTHONPATH": repo_dir or "", "PYTHONUTF8": "1"}
-                code = m.warmup.replace("{weights}", str(paths.weights(_weights(m)[0][1])).replace("\\", "/"))
+                wdir = paths.weights(_weights(m)[0][1] if m.weights else m.engine)
+                wdir.mkdir(parents=True, exist_ok=True)
+                code = m.warmup.replace("{weights}", str(wdir).replace("\\", "/"))
                 _run([str(py), "-c", code], log, cancel, wenv, cwd=repo_dir)
                 (paths.engines_dir() / m.venv / f".warm-{m.engine}").write_text(m.engine, encoding="utf-8")
                 k += 1

@@ -302,7 +302,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         seed: int = 1234
 
     class CleanBody(BaseModel):
-        strength: Literal["light", "medium", "strong"] = "medium"
+        strength: Literal["light", "medium", "strong", "neural"] = "medium"
 
     class DesignCands(BaseModel):
         description: str = Field(..., min_length=3, max_length=1000)
@@ -1113,7 +1113,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                   engine: str = Form(""), style: str = Form("conversational"),
                   background: float = Form(0.0, description="0-1: how much of the original audio stays underneath"),
                   format: str = Form("mp3"), video: bool = Form(True, description="for a video: also the video with the dubbed soundtrack"),
-                  translator: str = Form("fast", description="fast (M2M100 418M, 2 GB) or better (M2M100 1.2B, 5 GB, more accurate)")):
+                  translator: str = Form("fast", description="fast (M2M100 418M, 2 GB) or better (M2M100 1.2B, 5 GB, more accurate)"),
+                  keep_music: bool = Form(False, description="keep the original's music and effects under the dub (needs the separator engine)")):
         """Dub a recording into another language as a background job (kind `dub`): speech to text, local translation,
         each line rendered and fitted to its original slot. The job's files: dub.<format>, dub.srt, dub.vtt, lines.json and,
         for a video, the video with the new soundtrack."""
@@ -1133,7 +1134,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         payload = {"input": str(dest), "name": file.filename, "target": target_language, "source": None if source_language in ("", "auto") else source_language,
                    "voice": voice or None, "cast": cast_map, "keep_voices": keep_voices, "consent": consent, "speakers": speakers or None,
                    "engine": engine or None, "style": style, "background": background, "format": format, "video": video,
-                   "translator": translator if translator in ("fast", "better") else "fast"}
+                   "translator": translator if translator in ("fast", "better") else "fast", "keep_music": keep_music}
         try:
             return svc.jobs.submit("dub", payload)
         except Exception:
@@ -1152,6 +1153,29 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
+
+    @app.post("/api/v1/audio/separate", dependencies=deps, tags=["audio tools"])
+    async def audio_separate(file: UploadFile = File(...), mode: Literal["vocals", "denoise", "dereverb"] = Form("vocals"),
+                             stem: Literal["voice", "rest", "zip"] = Form("voice"), format: str = Form("wav")):
+        """Split a recording: vocals (voice | music and effects), denoise (voice | noise), dereverb (voice | room echo).
+        `stem` picks the voice, the rest, or a zip with both. Needs the separator engine (Engines)."""
+        import io
+        import zipfile
+        p = await save_upload(file)
+        try:
+            voice, rest, sr = await run_in_threadpool(svc.audio_separate, to_wav(p), mode)
+        finally:
+            for x in (p, p + ".wav"):
+                Path(x).unlink(missing_ok=True)
+        fmt = format if format in A.FORMATS else "wav"
+        if stem != "zip":
+            return Response(svc.encode(voice if stem == "voice" else rest, fmt, sr=sr), media_type=A.media_type(fmt))
+        buf = io.BytesIO()
+        ext = A.FORMATS[fmt][2]
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+            z.writestr(f"voice.{ext}", svc.encode(voice, fmt, sr=sr))
+            z.writestr(f"{'music' if mode == 'vocals' else 'noise' if mode == 'denoise' else 'echo'}.{ext}", svc.encode(rest, fmt, sr=sr))
+        return Response(buf.getvalue(), media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="separated.zip"'})
 
     @app.post("/api/v1/audio/detect", dependencies=deps, tags=["audio tools"])
     async def audio_detect(file: UploadFile = File(...)):

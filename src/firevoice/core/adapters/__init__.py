@@ -30,6 +30,7 @@ ADAPTERS: dict[str, str] = {
     "indextts25": "firevoice.core.adapters.indextts25:IndexTTS25Adapter",
     "ming": "firevoice.core.adapters.ming:MingAdapter",
     "moss": "firevoice.core.adapters.moss:MossAdapter",
+    "separator": "firevoice.core.adapters.separator:SeparatorAdapter",
     "audioldm2": "firevoice.core.adapters.audioldm2:AudioLDM2Adapter",
     "musicgen": "firevoice.core.adapters.musicgen:MusicGenAdapter",
 }

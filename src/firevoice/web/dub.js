@@ -32,7 +32,7 @@ $("#db-go").onclick = async () => {
   const fd = new FormData();
   fd.append("file", DB.file, DB.file.name); fd.append("target_language", $("#db-to").value); fd.append("source_language", $("#db-from").value);
   fd.append("voice", keep ? "" : $("#db-voice").value); fd.append("keep_voices", keep ? "true" : "false"); fd.append("consent", keep ? "true" : "false");
-  fd.append("background", $("#db-bg").value); fd.append("format", "mp3"); fd.append("translator", $("#db-tr").value);
+  fd.append("background", $("#db-bg").value); fd.append("format", "mp3"); fd.append("translator", $("#db-tr").value); fd.append("keep_music", $("#db-music").checked ? "true" : "false");
   const btn = $("#db-go"); busyBtn(btn, true, "Uploading…");
   try {
     const j = await API.req("/api/v1/dub", { method: "POST", form: fd, timeout: 0 });

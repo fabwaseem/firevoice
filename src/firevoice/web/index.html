@@ -260,6 +260,11 @@
       <div class="card" style="margin-top:16px"><div class="card-h"><h3>Is it AI speech?</h3><span class="hint">Every FireVoice output carries an inaudible watermark (AudioSeal). Check any file for it.</span></div>
         <div class="card-b"><div class="row" style="gap:10px"><input type="file" id="wm-file" accept="audio/*,video/*" class="inp" style="flex:1"><button class="btn" id="wm-go"><svg class="i"><use href="#i-search"/></svg>Check</button></div>
         <div id="wm-out" style="margin-top:10px"></div></div></div>
+      <div class="card" style="margin-top:16px"><div class="card-h"><h3>Separate voice and music</h3><span class="hint">Pull a voice out of music and effects, noise or room echo (the voice separator from Engines).</span></div>
+        <div class="card-b"><div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" id="sp-file" accept="audio/*,video/*" class="inp" style="flex:1;min-width:220px">
+          <select class="inp" id="sp-mode" style="width:auto"><option value="vocals">Voice | music and effects</option><option value="denoise">Voice | noise</option><option value="dereverb">Voice | room echo</option></select>
+          <button class="btn" id="sp-go"><svg class="i"><use href="#i-layers"/></svg>Separate</button></div>
+        <div id="sp-out" style="margin-top:12px"></div></div></div>
       <div class="card" style="margin-top:16px"><div class="card-h"><h3>Quality report</h3><span class="hint">Does it sound like the voice (WavLM), how clean is it (DNSMOS), and does the voice wander over a long take?</span></div>
         <div class="card-b"><div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" id="qr-file" accept="audio/*,video/*" class="inp" style="flex:1;min-width:220px">
           <select class="inp" id="qr-voice" style="width:auto"><option value="">compare with no voice</option></select><button class="btn" id="qr-go"><svg class="i"><use href="#i-check"/></svg>Check</button></div>
@@ -296,6 +301,7 @@
           <label class="toggle hidden" id="db-consent-row" style="margin-bottom:8px"><input type="checkbox" id="db-consent"><span class="sw"></span>I have the rights to clone the voices in this recording</label>
           <div class="field"><label class="f">Original audio underneath <span class="hint">(music and room; 0 = only the dub)</span> <span class="hint" id="db-bg-v">0%</span></label>
             <input type="range" id="db-bg" min="0" max="0.5" step="0.05" value="0"></div>
+          <label class="toggle" style="margin-bottom:8px"><input type="checkbox" id="db-music"><span class="sw"></span>Keep the music and effects (separates them from the voices; needs the voice separator)</label>
           <div class="field"><label class="f">Translation</label><select class="inp" id="db-tr"><option value="fast">Fast (2 GB model)</option><option value="better">Better (5 GB model, more accurate)</option></select></div>
           <button class="btn primary" id="db-go"><svg class="i"><use href="#i-zap"/></svg>Dub it</button>
           <div id="db-out" style="margin-top:14px"></div>

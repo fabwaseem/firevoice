@@ -65,6 +65,24 @@ function setSource(blob, name) {
   };
 })();
 
+// ------------------------------------------------------------------------------------------------ separate voice and music
+(function initSeparate() {
+  const go = $("#sp-go"); if (!go) return;
+  go.onclick = async () => {
+    const f = $("#sp-file").files[0]; if (!f) return toast("Choose a file first", "bad");
+    busyBtn(go, true, "Separating…");
+    const mode = $("#sp-mode").value, rest = mode === "vocals" ? "music" : mode === "denoise" ? "noise" : "echo";
+    try {
+      const get = async stem => { const fd = new FormData(); fd.append("file", f, f.name); fd.append("mode", mode); fd.append("stem", stem); fd.append("format", "mp3");
+        return URL.createObjectURL(await (await API.req("/api/v1/audio/separate", { method: "POST", form: fd, timeout: 0, raw: true })).blob()); };
+      const v = await get("voice"), r = await get("rest");
+      $("#sp-out").innerHTML = `<div class="small dim" style="margin-bottom:4px">Voice</div><audio controls src="${v}" style="width:100%"></audio>
+        <div class="small dim" style="margin:8px 0 4px">The ${rest}</div><audio controls src="${r}" style="width:100%"></audio>
+        <div class="row" style="gap:8px;margin-top:8px"><a class="btn sm" download="voice.mp3" href="${v}">${icon("download", "sm")}Voice</a><a class="btn sm" download="${rest}.mp3" href="${r}">${icon("download", "sm")}${rest}</a></div>`;
+    } catch (e) { toast(e.message, "bad"); } finally { busyBtn(go, false); }
+  };
+})();
+
 // ------------------------------------------------------------------------------------------------ quality report
 window.qualityHTML = function qualityHTML(r) {
   const m = r.mos, s = r.similarity, d = r.drift || {};
@@ -101,7 +119,7 @@ window.voiceToolsSection = function voiceToolsSection(v) {
   const q = v.quality_check?.after || v.quality_check?.before;
   body.insertAdjacentHTML("beforeend", `<div class="vt-sec">
     <div class="f" style="margin-bottom:6px">Reference clip ${q ? `<span class="tag ${q.verdict === "good" ? "ok" : q.verdict === "poor" ? "bad" : "warn"}">${esc(q.verdict)} · SNR ${q.snr_db} dB</span>` : ""}</div>
-    <div class="row" style="gap:6px"><select class="inp" id="vt-strength" style="width:auto"><option value="light">Light</option><option value="medium" selected>Medium</option><option value="strong">Strong</option></select>
+    <div class="row" style="gap:6px"><select class="inp" id="vt-strength" style="width:auto"><option value="light">Light</option><option value="medium" selected>Medium</option><option value="strong">Strong</option><option value="neural">Neural (best; needs the voice separator)</option></select>
       <button class="btn sm" id="vt-clean">${icon("sparkle", "sm")}Clean the clip</button><button class="btn sm ghost" id="vt-restore" title="Put the original recording back">${icon("reset", "sm")}Restore original</button></div>
     <div class="f" style="margin:14px 0 6px">Style clips <span class="hint">(the voice's own take for a style: renders in that style keep both the voice and the delivery)</span></div>
     <div class="chips" id="vt-styles">${built.length ? built.map(s => `<span class="chip on">${esc(s)} <button class="x" data-del="${esc(s)}" title="Remove">${icon("x", "sm")}</button></span>`).join("") : '<span class="small dim">none yet</span>'}</div>

@@ -611,11 +611,45 @@ class FireVoice:
         a, sr = self._read(path)
         return watermark.detect(a, sr)
 
+    # -------------------------------------------------------------------- Urdu check
+    URDU_LINES = ["Assalam o alaikum, aap kaise hain?", "Aaj mausam bohat acha hai, chalo bahar chalte hain.",
+                  "Mujhe yeh kitaab bohat pasand aayi.", "Kal subah das baje meeting hai, waqt par aana.",
+                  "Hum ne pichle saal Lahore ka safar kiya tha.", "Shukriya, aap ki madad se kaam jaldi ho gaya."]
+
+    def urdu_check(self, engine: Optional[str] = None, voices: Optional[list] = None, asr_model: Optional[str] = None,
+                   on_item: Optional[Callable[[dict], None]] = None) -> dict:
+        """How well Whisper hears Urdu speech: Roman Urdu lines rendered with Urdu voices, transcribed in Urdu, compared
+        as consonant skeletons. Tells whether the Urdu take check can be trusted, and with which Whisper model."""
+        from . import urdu
+        from .asr import FasterWhisperAligner
+        picks = voices or [v["voice_id"] for v in self.voice_list(language="ur")][:3]
+        if not picks:
+            raise FireVoiceError("not_found", "no Urdu voices in the library (language ur)")
+        asr = self._stt_model() if not asr_model else FasterWhisperAligner(model=asr_model, language="ur")
+        items = []
+        for vid in picks:
+            for line in self.URDU_LINES:
+                r = self.tts(TTSRequest(text=line, voice=vid, engine=engine, language="ur", validate=False, watermark=False))
+                heard = asr.transcribe(r.audio, r.sr, language="ur")
+                script = " ".join(w.text for w in heard)
+                it = {"voice": vid, "text": line, "heard": urdu.to_roman(script), "match": urdu.match(line, script)}
+                items.append(it)
+                if on_item:
+                    on_item(it)
+        scores = [i["match"] for i in items]
+        mean = round(float(np.mean(scores)), 3)
+        ok = sum(1 for x in scores if x >= 0.8) / len(scores)
+        verdict = ("reliable: the Urdu take check can be trusted" if ok >= 0.9 else
+                   "mixed: the Urdu check will flag some good takes; review flagged takes by ear" if ok >= 0.6 else
+                   "unreliable: Whisper does not hear this engine's Urdu well; keep the Urdu check off or try another model")
+        return {"engine": self._resolve_engine(engine), "asr_model": getattr(asr, "model_name", "?"), "mean": mean, "min": round(min(scores), 3),
+                "pass_rate": round(ok, 3), "verdict": verdict, "items": items}
+
     # -------------------------------------------------------------------- dubbing
     def dub(self, path, target: str, *, source: Optional[str] = None, voice: Optional[str] = None, cast: Optional[dict] = None,
             keep_voices: bool = False, consent: bool = False, diarize: bool = False, speakers: Optional[int] = None,
             engine: Optional[str] = None, style: str = "conversational", background: float = 0.0, lufs: Optional[float] = -16.0,
-            translator: Optional[str] = None, progress: Optional[Callable[[str, int, int, str], None]] = None,
+            translator: Optional[str] = None, keep_music: bool = False, progress: Optional[Callable[[str, int, int, str], None]] = None,
             cancel: Optional[threading.Event] = None, priority: int = 1) -> dict:
         """A recording's speech in another language on the original timeline: transcribe (with speakers when there is
         a cast or the original voices are kept), translate locally, render each line, fit it to its slot, mix.
@@ -694,7 +728,14 @@ class FireVoice:
             track, placed = dubbing.assemble(pieces, out_sr, total)
             for row, at in zip(rows, placed):
                 row["at"] = at
-            if background > 0:
+            if keep_music:
+                # the original's music and effects, without its voices, under the dub at their own level
+                say("render", len(lines), len(lines), "keeping the music and effects")
+                _v, rest, rsr = self.audio_separate(path, "vocals", priority=priority, cancel=cancel)
+                bed = A.resample(rest, rsr, out_sr)
+                n = min(len(bed), len(track))
+                track[:n] += bed[:n]
+            elif background > 0:
                 bed = A.resample(np.asarray(a, dtype=np.float32), sr, out_sr) * float(background)
                 n = min(len(bed), len(track))
                 track[:n] += bed[:n]
@@ -1372,7 +1413,15 @@ class FireVoice:
                     words[i]["speaker"] = lab
         for seg in segments:
             seg.pop("words", None)
-        return {"text": r["text"], "language": r["language"], "language_probability": r["language_probability"],
+        roman = {}
+        if r["language"] == "ur":       # Urdu script, also in English letters (Roman Urdu) for reading along
+            from .urdu import to_roman
+            for w in words:
+                w["roman"] = to_roman(w["text"])
+            for seg in segments:
+                seg["roman"] = to_roman(seg["text"])
+            roman = {"text_roman": to_roman(r["text"])}
+        return {**roman, "text": r["text"], "language": r["language"], "language_probability": r["language_probability"],
                 "duration": round(len(audio) / sr, 3), "seconds": round(time.perf_counter() - t0, 3), "model": asr.model_name, "device": asr.device,
                 "words": words, "segments": segments}
 
@@ -1520,14 +1569,63 @@ class FireVoice:
         return analyze(a, sr)
 
     def audio_clean(self, path, strength: str = "medium") -> tuple:
-        """-> (cleaned audio, sample rate, {before, after})"""
+        """-> (cleaned audio, sample rate, {before, after}). strength "neural" uses the separator engine's speech
+        denoiser (a RoFormer network) and then levels and trims like the others."""
         from .cleanup import analyze, clean
         a, sr = self._read(path)
+        if strength == "neural":
+            voice, _rest, vsr = self.audio_separate(path, "denoise")
+            out = clean(voice, vsr, "light")
+            return out, vsr, {"before": analyze(a, sr), "after": analyze(out, vsr)}
         try:
             out = clean(a, sr, strength)
         except ValueError as e:
             raise FireVoiceError("bad_request", str(e))
         return out, sr, {"before": analyze(a, sr), "after": analyze(out, sr)}
+
+    def audio_separate(self, path, mode: str = "vocals", priority: int = 0, cancel: Optional[threading.Event] = None) -> tuple:
+        """Split a recording with the separator engine. mode: vocals (voice | music and effects), denoise (voice | noise),
+        dereverb (voice | room echo). -> (voice, the rest, sample rate)"""
+        import tempfile
+        from concurrent.futures import TimeoutError as FutTimeout
+
+        import soundfile as sf
+        if mode not in ("vocals", "denoise", "dereverb"):
+            raise FireVoiceError("bad_request", "mode must be vocals, denoise or dereverb")
+        if not catalog.info("separator").status()["ready"]:
+            raise FireVoiceError("unavailable", "the voice separator is not installed: install it from Engines (POST /api/v1/engines/separator/install)")
+        fd, other = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        ld = self._pool("separator", hold=True)
+        group = threading.Event()
+        try:
+            fut = ld.pool.submit("", None, {"source": str(Path(path).resolve()), "mode": mode, "other_out": other}, 0, priority=priority, group=group)
+            while True:
+                try:
+                    voice = fut.result(timeout=0.25)
+                    break
+                except FutTimeout:
+                    if cancel is not None and cancel.is_set():
+                        group.set()
+                        raise Cancelled("cancelled")
+            sr = ld.pool.sr or 44100
+            try:
+                rest, rsr = sf.read(other, dtype="float32", always_2d=False)
+                rest = rest.mean(axis=1) if rest.ndim > 1 else rest
+                rest = A.resample(rest, int(rsr), sr) if int(rsr) != sr else rest
+            except Exception:
+                rest = np.zeros(0, np.float32)
+        except (Cancelled, FireVoiceError):
+            raise
+        except Exception as e:
+            raise FireVoiceError("internal", f"separation failed: {str(e)[:300]}")
+        finally:
+            group.set()
+            Path(other).unlink(missing_ok=True)
+            with self._lock:
+                ld.active -= 1
+                ld.last_used = time.time()
+        return np.asarray(voice, dtype=np.float32), np.asarray(rest, dtype=np.float32), int(sr)
 
     def voice_clean(self, voice_id: str, strength: str = "medium") -> dict:
         """Clean a library voice's reference clip in place (the original is kept as ref.original.wav)."""

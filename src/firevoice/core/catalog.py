@@ -185,6 +185,8 @@ CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
     EngineInfo("kokoro", "Kokoro 82M", clone=False, needs_reference=False, presets=KOKORO_PRESETS, languages=["en"], venv="kokoro", speed_rtf=0.01,
                notes="preset voices only (use voice 'design:<preset name>'); fastest",
                params=[Param("speed", "float", 1.0, 0.5, 2.0, 0.05, label="Speed")]),
+    EngineInfo("separator", "Voice separator (UVR RoFormer)", clone=False, needs_reference=False, languages=["*"], venv="separator",
+               sample_rate=44100, task="tool", notes="separates a voice from music and effects, removes noise or room echo; model licences vary"),
     EngineInfo("audioldm2", "AudioLDM 2 (sound effects)", clone=False, needs_reference=False, languages=["*"], venv="sfx", weights="audioldm2",
                sample_rate=16000, task="sfx", notes="sound effects and ambience from a description; non-commercial weights",
                params=[Param("duration", "float", 5.0, 1.0, 30.0, 0.5, label="Length (s)"), Param("steps", "int", 100, 25, 200, 5, label="Steps")]),

@@ -87,6 +87,8 @@ def builtin_engines() -> dict[str, EngineSpec]:
                    description="Kokoro 82M: preset voices, fastest, no cloning"),
         EngineSpec("maya1", "maya1", _venv_python("maya1"), default_workers=1, license="Apache-2.0", commercial=True, vram_gb=9.0,
                    description="Maya1 3B: voice from description, 20 emotion tags"),
+        EngineSpec("separator", "separator", _venv_python("separator"), default_workers=1, license="MIT (models vary)", commercial=False,
+                   vram_gb=3.0, sr=44100, synth_timeout=1800.0, description="voice/music separation, neural denoise and dereverb (UVR RoFormer)"),
         EngineSpec("audioldm2", "audioldm2", _venv_python("sfx"), default_workers=1, license="CC-BY-NC-SA-4.0", commercial=False, vram_gb=4.0,
                    sr=16000, description="AudioLDM 2: sound effects and ambience from a description"),
         EngineSpec("musicgen", "musicgen", _venv_python("sfx"), default_workers=1, license="CC-BY-NC-4.0", commercial=False, vram_gb=2.5,

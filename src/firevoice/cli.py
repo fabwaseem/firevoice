@@ -447,7 +447,7 @@ def cmd_dub(a) -> int:
     try:
         d = svc.dub(wav, a.target, source=a.source, voice=a.voice, cast=cast, keep_voices=a.keep_voices, consent=a.consent,
                     speakers=a.speakers, engine=a.engine, style=a.style, background=a.background,
-                    translator="better" if a.better else None, progress=progress, priority=0)
+                    translator="better" if a.better else None, keep_music=a.keep_music, progress=progress, priority=0)
         print(file=sys.stderr)
         out.write_bytes(svc.encode(d["audio"], _fmt_for(out, None), sr=d["sr"]))
         out.with_suffix(".srt").write_text(dubbing.subtitles(d["lines"], "srt"), encoding="utf-8")
@@ -549,6 +549,24 @@ def cmd_audio(a) -> int:
     try:
         if a.action == "quality":
             _print_quality(svc.quality_report(a.file, a.voice))
+            return 0
+        if a.action != "urdu-check" and not a.file:
+            print(f"audio {a.action} needs a file", file=sys.stderr)
+            return 2
+        if a.action == "urdu-check":
+            r = svc.urdu_check(a.engine, [a.voice] if a.voice else None, a.asr_model,
+                               on_item=lambda i: print(f"  {i['match']:.2f}  {i['voice']:14} {i['text'][:48]:48} | heard: {i['heard'][:48]}"))
+            print(f"{r['engine']} + Whisper {r['asr_model']}: mean {r['mean']}, lowest {r['min']}, {r['pass_rate']:.0%} pass")
+            print(r["verdict"])
+            return 0
+        if a.action == "separate":
+            voice, rest, sr = svc.audio_separate(a.file, a.mode)
+            out = Path(a.out or Path(a.file).with_name(Path(a.file).stem + ".voice.wav"))
+            out.write_bytes(svc.encode(voice, _fmt_for(out, None), sr=sr))
+            print(f"{out}: the voice, {len(voice) / sr:.1f}s")
+            if a.rest:
+                Path(a.rest).write_bytes(svc.encode(rest, _fmt_for(Path(a.rest), None), sr=sr))
+                print(f"{a.rest}: the rest ({'music and effects' if a.mode == 'vocals' else 'noise' if a.mode == 'denoise' else 'echo'})")
             return 0
         if a.action == "detect":
             r = svc.audio_detect(a.file)
@@ -1341,6 +1359,7 @@ def build_parser() -> argparse.ArgumentParser:
     db.add_argument("--style", default="conversational")
     db.add_argument("--background", type=float, default=0.0, help="0-1: keep this much of the original audio underneath")
     db.add_argument("--better", action="store_true", help="the larger, more accurate translation model (5 GB once)")
+    db.add_argument("--keep-music", action="store_true", help="keep the original's music and effects under the dub (separator engine)")
     db.add_argument("-o", "--out", default=None, help="dubbed audio (default: <file>.<lang>.mp3)")
     db.add_argument("--video", default=None, help="also write the video with the dubbed soundtrack here")
     _add_remote(db)
@@ -1368,11 +1387,15 @@ def build_parser() -> argparse.ArgumentParser:
     cv.set_defaults(fn=cmd_convert)
 
     au2 = sub.add_parser("audio", help="check how good a recording is to clone from, clean it, or detect FireVoice's watermark")
-    au2.add_argument("action", choices=["analyze", "clean", "detect", "quality"])
+    au2.add_argument("action", choices=["analyze", "clean", "detect", "quality", "separate", "urdu-check"])
+    au2.add_argument("--asr-model", default=None, help="urdu-check: the Whisper model to test (default: the one in use)")
+    au2.add_argument("--engine", default=None, help="urdu-check: the TTS engine to render the test lines with")
+    au2.add_argument("--mode", choices=["vocals", "denoise", "dereverb"], default="vocals", help="separate: what to split off")
+    au2.add_argument("--rest", default=None, help="separate: also write the rest (music, noise or echo) here")
     au2.add_argument("--voice", default=None, help="quality: compare with this voice's clip")
-    au2.add_argument("file")
+    au2.add_argument("file", nargs="?", help="the recording (not needed for urdu-check)")
     au2.add_argument("-o", "--out", default=None)
-    au2.add_argument("--strength", choices=["light", "medium", "strong"], default="medium")
+    au2.add_argument("--strength", choices=["light", "medium", "strong", "neural"], default="medium")
     _add_remote(au2)
     au2.set_defaults(fn=cmd_audio)
 
@@ -1402,7 +1425,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     v = sub.add_parser("voices", help="list, add, design, update and remove voices")
     v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import", "avatar", "clean", "restore", "build-styles", "candidates", "consent"])
-    v.add_argument("--strength", choices=["light", "medium", "strong"], default="medium", help="clean: how hard to denoise")
+    v.add_argument("--strength", choices=["light", "medium", "strong", "neural"], default="medium", help="clean: how hard to denoise")
     v.add_argument("-n", type=int, default=3, help="candidates: how many takes of the described voice")
     v.add_argument("--image", default=None, help="avatar: an image file to use (any size; centre-cropped); --remove to drop it")
     v.add_argument("--remove", action="store_true", help="avatar: remove the voice's avatar")

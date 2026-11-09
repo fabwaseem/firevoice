@@ -672,7 +672,7 @@ $("#open-add").onclick = () => {
     <div class="field"><label class="f">Transcript <span class="hint">(blank = transcribe automatically)</span></label><textarea class="inp" id="ad-tr" rows="2"></textarea></div>
     <div class="field"><label class="f">Tags <span class="hint">(comma-separated)</span></label><input class="inp" id="ad-tags"></div>
     <div class="field"><label class="f">Clean the clip <span class="hint">(takes out hiss, hum and room noise before cloning)</span></label>
-      <select class="inp" id="ad-clean"><option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium" selected>Medium</option><option value="strong">Strong</option></select></div>
+      <select class="inp" id="ad-clean"><option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium" selected>Medium</option><option value="strong">Strong</option><option value="neural">Neural (best; needs the voice separator)</option></select></div>
     <div class="field"><label class="f">Who gave consent <span class="hint">(the speaker's name, kept in the voice's consent record)</span></label><input class="inp" id="ad-consent-by" placeholder="e.g. Sara Khan"></div>
     <label class="toggle"><input type="checkbox" id="ad-consent"><span class="sw"></span>I own this voice or have permission to use it</label>`,
     `<button class="btn ghost" onclick="Drawer.close()">Cancel</button><button class="btn primary" id="ad-go">${icon("plus")}Add voice</button>`);
@@ -871,7 +871,7 @@ async function refreshEngines() { try { S.engines = (await API.req("/api/v1/engi
 async function loadEngines() {
   try {
     const [es, all, s] = await Promise.all([API.req("/api/v1/engines"), API.req("/api/v1/engines?task=all"), API.req("/api/v1/system")]); S.engines = es.engines; renderEngineSelect();
-    const TASK = { tts: "", sfx: "sound", vc: "voice changer" };
+    const TASK = { tts: "", sfx: "sound", vc: "voice changer", tool: "audio tool" };
     const g = s.gpu || {};
     $("#sys-metrics").innerHTML = [["GPU", g.name ? g.name.replace("NVIDIA GeForce ", "") : "none"], ["VRAM used", g.vram_total_gb ? `${(g.vram_used_gb ?? 0).toFixed(1)}<small> / ${g.vram_total_gb.toFixed(1)} GB</small>` : "-"],
       ["GPU load", g.utilization != null ? `${g.utilization}<small>%</small>` : "-"], ["Temperature", g.temperature_c != null ? `${g.temperature_c}<small>°C</small>` : "-"],

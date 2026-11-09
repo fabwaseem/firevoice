@@ -127,6 +127,15 @@ class RemoteService:
         return self._call("DELETE", f"/api/v1/styles/{name}")
 
     # -------------------------------------------------------------------- audio tools, voice changer, sound
+    def audio_separate(self, path, mode: str = "vocals", priority: int = 0, cancel=None) -> tuple:
+        import zipfile
+        r = self._call("POST", "/api/v1/audio/separate", files=self._upload(path), data={"mode": mode, "stem": "zip", "format": "wav"}, raw=True)
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        names = z.namelist()
+        voice, sr = _wav(z.read(next(n for n in names if n.startswith("voice"))))
+        rest, _ = _wav(z.read(next(n for n in names if not n.startswith("voice"))))
+        return voice, rest, sr
+
     def audio_analyze(self, path) -> dict:
         return self._call("POST", "/api/v1/audio/analyze", files=self._upload(path))
 
@@ -177,11 +186,11 @@ class RemoteService:
     def dub(self, path, target: str, *, source: Optional[str] = None, voice: Optional[str] = None, cast: Optional[dict] = None,
             keep_voices: bool = False, consent: bool = False, diarize: bool = False, speakers: Optional[int] = None,
             engine: Optional[str] = None, style: str = "conversational", background: float = 0.0, lufs: Optional[float] = -16.0,
-            translator: Optional[str] = None, progress=None, cancel=None, priority: int = 1) -> dict:
+            translator: Optional[str] = None, keep_music: bool = False, progress=None, cancel=None, priority: int = 1) -> dict:
         form = {"target_language": target, "source_language": source or "auto", "voice": voice or "", "cast": json.dumps(cast) if cast else "",
                 "keep_voices": str(bool(keep_voices)).lower(), "consent": str(bool(consent)).lower(), "speakers": str(speakers or 0),
                 "engine": engine or "", "style": style, "background": str(background), "format": "wav", "video": "false",
-                "translator": translator or "fast"}
+                "translator": translator or "fast", "keep_music": str(bool(keep_music)).lower()}
         job = self._call("POST", "/api/v1/dub", files=self._upload(path), data=form)
         while True:
             j = self._call("GET", f"/api/v1/jobs/{job['id']}")

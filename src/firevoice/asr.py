@@ -21,7 +21,7 @@ from .types import Word
 class Aligner(Protocol):
     validating: bool
 
-    def transcribe(self, audio: np.ndarray, sr: int, text: str = "") -> list[Word]: ...
+    def transcribe(self, audio: np.ndarray, sr: int, text: str = "", language: Optional[str] = None) -> list[Word]: ...
 
 
 class NullAligner:
@@ -33,7 +33,7 @@ class NullAligner:
     def __init__(self, text_hint: Optional[str] = None):
         pass
 
-    def transcribe(self, audio: np.ndarray, sr: int, text: str = "") -> list[Word]:
+    def transcribe(self, audio: np.ndarray, sr: int, text: str = "", language: Optional[str] = None) -> list[Word]:
         words = text.split()
         if not words:
             return []
@@ -98,15 +98,17 @@ class FasterWhisperAligner:
                 raise
         self._sem = threading.BoundedSemaphore(max(1, concurrency))
 
-    def transcribe(self, audio: np.ndarray, sr: int, text: str = "") -> list[Word]:
+    def transcribe(self, audio: np.ndarray, sr: int, text: str = "", language: Optional[str] = None) -> list[Word]:
         a = _resample16k(audio, sr)
+        lang = language or self.language
         with self._sem:
-            segs, _ = self.m.transcribe(a, word_timestamps=True, language=self.language, beam_size=1, vad_filter=False, condition_on_previous_text=False)
+            segs, _ = self.m.transcribe(a, word_timestamps=True, language=lang, beam_size=5 if lang == "ur" else 1, vad_filter=False,
+                                        condition_on_previous_text=False)
             out: list[Word] = []
             for s in segs:
                 for w in (s.words or []):
                     out.append(Word(w.word.strip(), float(w.start), float(w.end)))
-        if self.language == "en":
+        if lang == "en":
             from .align import refine
             out = refine(a, 16000, out)
         return out

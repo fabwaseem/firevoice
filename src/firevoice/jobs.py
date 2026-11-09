@@ -464,7 +464,7 @@ class JobManager:
             d = self.svc.dub(wav, p["target"], source=p.get("source"), voice=p.get("voice"), cast=p.get("cast"),
                              keep_voices=bool(p.get("keep_voices")), consent=bool(p.get("consent")), speakers=p.get("speakers"),
                              engine=p.get("engine"), style=p.get("style") or "conversational", background=float(p.get("background") or 0.0),
-                             translator=p.get("translator"), progress=progress, cancel=cancel, priority=1)
+                             translator=p.get("translator"), keep_music=bool(p.get("keep_music")), progress=progress, cancel=cancel, priority=1)
             name = f"dub.{_ext(fmt)}"
             (out / name).write_bytes(self.svc.encode(d["audio"], fmt, sr=d["sr"]))
             for sub in ("srt", "vtt"):
