@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Captions, Lock, LockOpen, Plus, Shuffle } from "lucide-react";
+import { Captions, Lock, LockOpen, PencilLine, Plus, Shuffle } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useKeptRender } from "@/lib/api/hooks";
 import type { KeptRender, RenderChunk, RenderTake, WordTime } from "@/lib/api/types";
@@ -104,7 +104,15 @@ export function TakesPanel({ renderId, format, onAudio }: {
           <PassageRow key={c.index} c={c} busy={busy} playing={playing} onPlay={play}
             onChoose={(n) => act(`c${c.index}`, () => api.chooseTake(renderId, c.index, n), `Passage ${c.index + 1} uses take ${n}`)}
             onNew={() => act(`n${c.index}`, () => api.newTake(renderId, c.index), `New take for passage ${c.index + 1}`)}
-            onLock={() => act(`l${c.index}`, () => api.lockPassage(renderId, c.index, !c.locked))} />
+            onLock={() => act(`l${c.index}`, () => api.lockPassage(renderId, c.index, !c.locked))}
+            onEdit={(text, mode) =>
+              act(`e${c.index}`, async () => {
+                const r = await api.editPassage(renderId, c.index, text, mode);
+                const note = r.chunks.find((x) => x.index === c.index)?.takes.slice(-1)[0]?.edit?.note;
+                if (note) toast(note);
+                return r;
+              }, mode === "splice" ? `Passage ${c.index + 1}: edited words spliced in` : `Passage ${c.index + 1} re-recorded`)
+            } />
         ))}
       </div>
       <p className="mt-2 text-[12px] text-muted">Click a take to hear it, double-click to use it. Underlined words were missed or misheard by the speech check.</p>
@@ -112,7 +120,7 @@ export function TakesPanel({ renderId, format, onAudio }: {
   );
 }
 
-function PassageRow({ c, busy, playing, onPlay, onChoose, onNew, onLock }: {
+function PassageRow({ c, busy, playing, onPlay, onChoose, onNew, onLock, onEdit }: {
   c: RenderChunk;
   busy: string | null;
   playing: string | null;
@@ -120,12 +128,47 @@ function PassageRow({ c, busy, playing, onPlay, onChoose, onNew, onLock }: {
   onChoose: (n: number) => void;
   onNew: () => void;
   onLock: () => void;
+  onEdit: (text: string, mode: "splice" | "passage") => void;
 }) {
   const cur = c.takes.find((t) => t.n === c.chosen);
+  const [draft, setDraft] = useState<string | null>(null);
+  const editing = draft !== null;
+  const submit = (mode: "splice" | "passage") => {
+    if (!draft || draft.trim() === c.text) return toast("Change some words first");
+    onEdit(draft.trim(), mode);
+    setDraft(null);
+  };
   return (
     <div className={cn("flex flex-col gap-2 rounded-xl border border-transparent bg-surface-2 px-3 py-2.5 md:flex-row md:items-start",
       c.flagged && "border-warn/40", c.locked && "opacity-85")}>
-      <div className="min-w-0 flex-1 text-[14px] leading-relaxed text-ink-2"><QAText c={c} take={cur} /></div>
+      <div className="min-w-0 flex-1 text-[14px] leading-relaxed text-ink-2">
+        {editing ? (
+          <div className="space-y-2">
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setDraft(null);
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit("splice");
+              }}
+              rows={2}
+              className="w-full resize-y rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[14px] text-ink outline-none focus:border-fire"
+            />
+            <div className="flex flex-wrap gap-2">
+              <Tooltip content="Keep the original recording; only the words you changed are new (Ctrl+Enter)">
+                <Button size="sm" onClick={() => submit("splice")}>Splice in</Button>
+              </Tooltip>
+              <Tooltip content="Use the whole re-recorded passage">
+                <Button size="sm" variant="ghost" onClick={() => submit("passage")}>Re-record passage</Button>
+              </Tooltip>
+              <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <QAText c={c} take={cur} />
+        )}
+      </div>
       <div className="flex shrink-0 items-center gap-1">
         {c.takes.map((t) => (
           <Tooltip key={t.n} content={`Take ${t.n}: score ${t.score}, ${t.duration}s, seed ${t.seed}${t.n === c.chosen ? " (in use)" : " (double-click to use)"}`}>
@@ -137,6 +180,11 @@ function PassageRow({ c, busy, playing, onPlay, onChoose, onNew, onLock }: {
             </button>
           </Tooltip>
         ))}
+        <Tooltip content={c.locked ? "Unlock the passage to edit it" : "Edit words: re-record only what you change"}>
+          <Button size="icon-sm" variant="ghost" aria-label="Edit words" onClick={() => setDraft(c.text)} loading={busy === `e${c.index}`} disabled={!!busy || c.locked || editing}>
+            <PencilLine className="size-4" />
+          </Button>
+        </Tooltip>
         <Tooltip content="New take of this passage">
           <Button size="icon-sm" variant="ghost" aria-label="New take" onClick={onNew} loading={busy === `n${c.index}`} disabled={!!busy}>
             <Plus className="size-4" />

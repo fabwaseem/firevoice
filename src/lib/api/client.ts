@@ -295,6 +295,9 @@ export const api = {
     request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/takes`, { method: "POST", body: json({ seed: seed ?? null }) }),
   chooseTake: (id: string, index: number, take: number) =>
     request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/choose`, { method: "POST", body: json({ take }) }),
+  /** Change a passage's words: "splice" keeps the original audio around the change, "passage" uses the re-recording. */
+  editPassage: (id: string, index: number, text: string, mode: "splice" | "passage" = "splice") =>
+    request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/edit`, { method: "POST", body: json({ text, mode }) }),
   lockPassage: (id: string, index: number, locked: boolean) =>
     request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/lock`, { method: "POST", body: json({ locked }) }),
   regenerateUnlocked: (id: string) => request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/regenerate`, { method: "POST", body: json({}) }),

@@ -319,6 +319,10 @@ export interface QAWord {
   heard?: string;
 }
 export interface RenderTake {
+  /** The text this take says (set once the passage was edited) */
+  text?: string;
+  /** How this take came from a word edit */
+  edit?: { mode: "splice" | "passage"; from_take: number; old_text: string; changed_words?: number[]; cuts_s?: number[]; note?: string };
   n: number;
   seed: number;
   score: number;
