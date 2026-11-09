@@ -54,22 +54,76 @@ from typing import Any, Literal, Optional
 from . import audio as A
 from .service import FireVoice, FireVoiceError, TTSRequest
 
+TAGS = [
+    {"name": "system", "description": "Health, GPU and everything a UI needs in one call (`/api/v1/options`)."},
+    {"name": "engines", "description": "Engine catalog, capabilities, parameter schemas, install status, load and unload."},
+    {"name": "voices", "description": "Voice library: upload (with consent), design from a description, edit, per-style clips, previews."},
+    {"name": "styles", "description": "Delivery styles: built in plus your own."},
+    {"name": "tts", "description": "Text to speech: whole file, streamed chunks (SSE) or raw PCM. One request shape for every engine."},
+    {"name": "stt", "description": "Speech to text with word times and language detection."},
+    {"name": "jobs", "description": "Background renders, batches and voice design with progress events and history."},
+    {"name": "elevenlabs", "description": "ElevenLabs-compatible routes for existing clients."},
+    {"name": "legacy", "description": "Older studio contract."},
+]
+
+TTS_EXAMPLES = {
+    "simple": {"summary": "A library voice and a style", "value": {
+        "text": "Hello! This is FireVoice, running on your own GPU.", "voice": "lib-f-4992", "style": "storyteller", "format": "mp3"}},
+    "designed voice": {"summary": "Invent a voice from a description", "value": {
+        "text": "Welcome back, traveller. The fire is warm tonight.", "voice": "design:a deep, gravelly old storyteller with a slight British accent",
+        "style": "storyteller", "instruct": "slow, warm and mysterious", "format": "mp3"}},
+    "engine settings": {"summary": "Engine parameters, style overrides, 2 takes per sentence, wav at 44.1 kHz", "value": {
+        "text": "Every password you have ever typed went somewhere. Some were stored safely. Others were not.", "engine": "voxcpm2",
+        "voice": "glb-m-sco-s01863", "style": "documentary", "params": {"cfg_value": 2.5, "inference_timesteps": 14},
+        "style_overrides": {"pause": 1.2}, "candidates": 2, "format": "wav", "sample_rate": 44100}},
+    "urdu": {"summary": "Urdu (written in Devanagari reads best)", "value": {
+        "text": "\u0906\u091c \u092e\u094c\u0938\u092e \u092c\u0939\u0941\u0924 \u0905\u091a\u094d\u091b\u093e \u0939\u0948\u0964",
+        "voice": "urd-m-cv03", "format": "mp3"}},
+    "json with word times": {"summary": "JSON response: base64 audio plus word timestamps", "value": {
+        "text": "Word timestamps come back with the audio.", "voice": "hifi-f-92", "response": "json"}},
+    "another engine": {"summary": "The same request on Chatterbox Turbo", "value": {
+        "text": "Same API, different engine. [laugh] Nice.", "engine": "chatterbox-turbo", "voice": "lib-m-1188", "style": "excited",
+        "params": {"temperature": 0.7}, "format": "mp3"}},
+}
+
+JOB_EXAMPLES = {
+    "long render": {"summary": "Render a long script in the background", "value": {"kind": "tts", "title": "chapter one", "payload": {
+        "request": {"text": "This is a background job. It reports progress and lands in the history. " * 4, "voice": "lib-m-1188",
+                    "style": "audiobook"}, "format": "mp3"}}},
+    "batch": {"summary": "Several lines; each line may override any request field", "value": {"kind": "batch", "payload": {
+        "lines": [{"id": "intro", "text": "Welcome to the show."}, {"id": "scare", "text": "Do not turn around.", "style": "horror"}],
+        "defaults": {"voice": "hifi-f-92"}, "format": "wav"}}},
+    "design": {"summary": "Design a voice in the background", "value": {"kind": "design", "payload": {
+        "name": "my-narrator", "description": "a calm, warm middle-aged male narrator"}}},
+}
+
+DESIGN_EXAMPLES = {"radio host": {"summary": "Design and lock a new voice", "value": {
+    "name": "my-radio-host", "description": "a cheerful young woman radio host, bright and quick", "engine": "voxcpm2"}}}
+
 STATUS = {"bad_request": 400, "unauthorized": 401, "not_found": 404, "conflict": 409, "too_large": 413, "unavailable": 503, "internal": 500}
 MAX_UPLOAD = 60 * 1024 * 1024
 
 
 def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Optional[list[str]] = None):
-    from fastapi import Body, Depends, FastAPI, File, Form, Query, Request, UploadFile
+    from fastapi import Body, Depends, FastAPI, File, Form, Query, Request, Security, UploadFile
     from fastapi.concurrency import run_in_threadpool
     from fastapi.exceptions import RequestValidationError
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+    from fastapi.security import APIKeyHeader, HTTPBearer
     from pydantic import BaseModel, ConfigDict, Field
 
     from . import __version__
 
     token = token or os.environ.get("FIREVOICE_API_KEY") or None
-    app = FastAPI(title="FireVoice", version=__version__, description="Local expressive TTS / STT engine: many models, one API.")
+    app = FastAPI(
+        title="FireVoice", version=__version__, openapi_tags=TAGS,
+        description=("Local expressive text-to-speech and speech-to-text engine: many open models, one API. "
+                     "Use **Try it out** on any route and pick a ready-made example from the Examples dropdown; TTS routes return audio you "
+                     "can download from the response panel. For playing and streaming audio, recording speech and watching jobs live, "
+                     "open the [playground](/playground). Full contract: docs/API.md in the repository."),
+        swagger_ui_parameters={"tryItOutEnabled": True, "persistAuthorization": True, "displayRequestDuration": True, "filter": True,
+                               "docExpansion": "list", "defaultModelsExpandDepth": 0, "syntaxHighlight.theme": "obsidian"})
     app.state.svc = svc
     app.add_middleware(CORSMiddleware, allow_origins=cors_origins or [], allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
                        allow_origin_regex=None if cors_origins else r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost|https?://tauri\.localhost|app://.*)$",
@@ -88,7 +142,10 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         msg = "; ".join(f"{'.'.join(str(x) for x in d.get('loc', [])[1:]) or 'body'}: {d.get('msg')}" for d in e.errors())
         return err("bad_request", msg or "invalid request", 400)
 
-    def auth(request: Request):
+    bearer = HTTPBearer(auto_error=False, description="the server token (--token / FIREVOICE_API_KEY); not needed when auth is off")
+    api_key = APIKeyHeader(name="x-api-key", auto_error=False)
+
+    def auth(request: Request, _b=Security(bearer), _k=Security(api_key)):   # the Security params give Swagger its Authorize button
         if not token:
             return
         h = request.headers
@@ -189,6 +246,19 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 yield f"event: {ev.get('type', 'message')}\ndata: {json.dumps(ev, default=str, ensure_ascii=False)}\n\n"
         return StreamingResponse(body(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    # ------------------------------------------------------------------ pages
+    @app.get("/", include_in_schema=False)
+    def root():
+        return RedirectResponse("/playground")
+
+    from fastapi.staticfiles import StaticFiles
+    web = Path(__file__).parent / "web"
+    app.mount("/web", StaticFiles(directory=str(web)), name="web")
+
+    @app.get("/playground", include_in_schema=False)
+    def playground():
+        return HTMLResponse((web / "index.html").read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
+
     # ------------------------------------------------------------------ system
     @app.get("/health", tags=["system"])
     def health():
@@ -241,7 +311,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 Path(x).unlink(missing_ok=True)
 
     @app.post("/api/v1/voices/design", dependencies=deps, tags=["voices"])
-    async def voice_design(body: DesignBody, wait: bool = True):
+    async def voice_design(body: DesignBody = Body(openapi_examples=DESIGN_EXAMPLES), wait: bool = True):
         if not wait:
             return svc.jobs.submit("design", body.model_dump())
         return await run_in_threadpool(lambda: svc.voice_design(body.name, body.description, engine=body.engine, text=body.text, gender=body.gender,
@@ -299,8 +369,10 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return svc.style_remove(name)
 
     # ------------------------------------------------------------------ tts
-    @app.post("/api/v1/tts", dependencies=deps, tags=["tts"])
-    async def tts(body: TTSBody):
+    @app.post("/api/v1/tts", dependencies=deps, tags=["tts"], responses={200: {
+        "description": "audio in the requested format (or JSON when response=json)",
+        "content": {"audio/mpeg": {}, "audio/wav": {}, "application/json": {}}}})
+    async def tts(body: TTSBody = Body(openapi_examples=TTS_EXAMPLES)):
         req = body.request()
         r = await run_in_threadpool(svc.tts, req)
         data = await run_in_threadpool(svc.encode, r, body.format, body.sample_rate)
@@ -309,7 +381,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return Response(data, media_type=A.media_type(body.format), headers=info_headers(r))
 
     @app.post("/api/v1/tts/stream", dependencies=deps, tags=["tts"])
-    def tts_stream(body: TTSBody):
+    def tts_stream(body: TTSBody = Body(openapi_examples=TTS_EXAMPLES)):
         """Server-Sent Events: `chunk` events ({index, total, start, sample_rate, format, audio_base64, words, text}) in order as soon
         as each is ready, then `done` (render info) or `error`. Chunks are loudness-matched; the final studio chain is not applied."""
         req = body.request()
@@ -328,7 +400,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return sse(events())
 
     @app.post("/api/v1/tts/stream.pcm", dependencies=deps, tags=["tts"])
-    async def tts_stream_pcm(body: TTSBody):
+    async def tts_stream_pcm(body: TTSBody = Body(openapi_examples=TTS_EXAMPLES)):
         """Raw little-endian 16-bit mono PCM, streamed chunk by chunk. Headers: X-Sample-Rate."""
         req = body.request()
         eng, *_ = svc.prepare(req)
@@ -361,7 +433,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     # ------------------------------------------------------------------ jobs
     @app.post("/api/v1/jobs", dependencies=deps, tags=["jobs"], status_code=202)
-    async def job_submit(body: JobBody):
+    async def job_submit(body: JobBody = Body(openapi_examples=JOB_EXAMPLES)):
         return await run_in_threadpool(svc.jobs.submit, body.kind, body.payload, body.title)
 
     @app.get("/api/v1/jobs", dependencies=deps, tags=["jobs"])

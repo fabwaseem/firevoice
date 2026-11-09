@@ -7,6 +7,9 @@ firevoice serve                              # http://127.0.0.1:8787, default en
 firevoice serve --preload voxcpm2 --token SECRET --port 8787
 ```
 
+Try it in a browser: **`/docs`** is Swagger with ready-made examples on every route and an Authorize button.
+**`/playground`** is a page for listening: render, stream, record speech to text, manage voices and styles, and watch jobs live.
+
 The CLI and the API share one service (`firevoice.service.FireVoice`), so every option below has the same meaning
 as the matching `firevoice say` flag. The OpenAPI schema is at `/openapi.json`.
 

@@ -214,3 +214,20 @@ def test_elevenlabs_compat(c):
     assert c.post("/v1/text-to-speech/nobody", json={"text": "hi there friend"}).status_code == 404
     assert c.get("/v1/voices").json()["voices"][0]["voice_id"] == "default"
     assert any(m["model_id"] == "voxcpm2" for m in c.get("/v1/models").json())
+
+
+def test_docs_and_playground(c):
+    assert c.get("/docs").status_code == 200 and "swagger" in c.get("/docs").text.lower()
+    spec = c.get("/openapi.json").json()
+    tts = spec["paths"]["/api/v1/tts"]["post"]
+    examples = tts["requestBody"]["content"]["application/json"]["examples"]
+    assert {"simple", "designed voice", "engine settings"} <= set(examples)
+    assert "HTTPBearer" in spec["components"]["securitySchemes"]
+    assert {t["name"] for t in spec["tags"]} >= {"tts", "voices", "jobs"}
+    p = c.get("/playground")
+    assert p.status_code == 200 and "FireVoice" in p.text and "/web/app.js" in p.text
+    js = c.get("/web/app.js")
+    assert js.status_code == 200 and "/api/v1/options" in js.text
+    assert c.get("/web/app.css").status_code == 200
+    assert c.get("/web/fonts/urbanist-latin-normal.woff2").status_code == 200
+    assert c.get("/", follow_redirects=False).headers["location"] == "/playground"

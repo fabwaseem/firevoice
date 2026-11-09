@@ -121,6 +121,17 @@ edit, per-style clips, previews), styles, TTS (whole file, in-order streaming ov
 jobs with progress events and an on-disk history. ElevenLabs-shaped routes stay available for existing clients.
 The full contract, with examples, is in [docs/API.md](docs/API.md).
 
+Two pages ship with the server for testing by hand:
+
+- `http://127.0.0.1:8787/docs` is Swagger. Every route has **Try it out** with ready-made examples in the Examples dropdown, and an **Authorize** button for the token. TTS responses play inline.
+- `http://127.0.0.1:8787/playground` (also `/`) has six tabs:
+  - **Speak:** every option plus auto-generated engine settings; render with word highlighting, stream with live playback, send to a job, or copy as curl.
+  - **Voices:** browse, filter, preview, upload, design and delete.
+  - **Speech to text:** a file or your microphone.
+  - **Jobs:** live progress and playback.
+  - **Styles:** create and edit your own.
+  - **Engines:** load and unload, plus GPU info.
+
 ```bash
 curl -s localhost:8787/api/v1/tts -H "Content-Type: application/json" -o hello.mp3   -d '{"text": "Hello there.", "voice": "lib-f-4992", "style": "storyteller", "params": {"inference_timesteps": 12}}'
 ```

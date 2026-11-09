@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FireVoice Studio</title>
+<link rel="preload" href="/web/fonts/urbanist-latin-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/web/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff9a3d'/%3E%3Cstop offset='1' stop-color='%23ff3d6e'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='24' height='24' rx='6' fill='url(%23g)'/%3E%3Cpath d='M7 12v0M10 9v6M13 6v12M16 9v6M19 12v0' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><path d="M4 12v0M8 9v6M12 5v14M16 9v6M20 12v0"/></svg></div>
+      <div class="txt"><div class="name">Fire<span>Voice</span></div><div class="sub">Studio</div></div>
+    </div>
+    <div class="nav-label">Create</div>
+    <nav class="nav" id="nav">
+      <a href="#speak" data-page="speak"><svg class="i"><use href="#i-wave"/></svg><span class="lbl">Speak</span></a>
+      <a href="#voices" data-page="voices"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Voices</span><span class="count" id="n-voices"></span></a>
+      <a href="#stt" data-page="stt"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Speech to text</span></a>
+      <a href="#jobs" data-page="jobs"><svg class="i"><use href="#i-layers"/></svg><span class="lbl">Jobs</span><span class="count" id="n-jobs"></span></a>
+    </nav>
+    <div class="nav-label">Configure</div>
+    <nav class="nav">
+      <a href="#styles" data-page="styles"><svg class="i"><use href="#i-palette"/></svg><span class="lbl">Styles</span><span class="count" id="n-styles"></span></a>
+      <a href="#engines" data-page="engines"><svg class="i"><use href="#i-cpu"/></svg><span class="lbl">Engines & system</span></a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="gpu-card" id="gpu-card">
+      <div class="t"><span class="dot" id="srv-dot"></span><span id="gpu-name">Connecting…</span></div>
+      <div class="m"><span id="gpu-mem">VRAM</span><span id="gpu-temp"></span></div>
+      <div class="meter"><i id="gpu-bar" style="width:0%"></i></div>
+      <div class="m"><span id="gpu-loaded" class="small">no engine loaded</span></div>
+    </div>
+    <div class="side-links">
+      <a class="btn sm ghost" href="/docs" target="_blank" title="API docs (Swagger)"><svg class="i sm"><use href="#i-book"/></svg><span class="lbl">API docs</span></a>
+      <button class="btn sm ghost" id="open-settings" title="Settings"><svg class="i sm"><use href="#i-gear"/></svg><span class="lbl">Settings</span></button>
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="banner" id="offline"><svg class="i"><use href="#i-alert"/></svg><span id="offline-msg">Cannot reach the FireVoice server. Retrying…</span><span class="grow"></span><button class="btn sm" id="retry">Retry now</button></div>
+
+    <!-- ============================================================== SPEAK -->
+    <section class="page" id="page-speak">
+      <div class="page-head">
+        <div><h1>Speak</h1><p>Write a script, pick a voice and a delivery, and render it on your GPU.</p></div>
+        <div class="grow"></div>
+        <div class="seg" id="mode-seg"><button data-mode="render" class="on">Render</button><button data-mode="stream">Stream</button><button data-mode="job">Background job</button></div>
+      </div>
+      <div class="studio">
+        <div class="stack">
+          <div class="card">
+            <div class="card-h"><h3>Script</h3><div class="grow"></div>
+              <button class="btn sm ghost" id="clear-text" title="Clear"><svg class="i sm"><use href="#i-x"/></svg></button></div>
+            <div class="card-b editor"><textarea id="text" spellcheck="true" placeholder="Type or paste what FireVoice should say…"></textarea></div>
+            <div class="toolbar">
+              <span class="small dim">Insert</span>
+              <button class="chip" data-ins="[pause 500ms]">pause</button>
+              <button class="chip" data-ins="[pause 1200ms]">long pause</button>
+              <span id="tag-chips" class="chips"></span>
+              <div class="grow"></div>
+              <span class="stat"><b id="st-words">0</b> words · <b id="st-chars">0</b> chars · ~<b id="st-dur">0s</b></span>
+            </div>
+            <div class="actions">
+              <button class="btn primary lg" id="go"><svg class="i"><use href="#i-play"/></svg><span id="go-label">Render</span> <span class="kbd">Ctrl ↵</span></button>
+              <button class="btn lg hidden" id="stop"><svg class="i"><use href="#i-stop"/></svg>Stop</button>
+              <div class="grow"></div>
+              <button class="btn sm ghost" id="copy-curl"><svg class="i sm"><use href="#i-code"/></svg>Copy as curl</button>
+              <button class="btn sm ghost" id="copy-json"><svg class="i sm"><use href="#i-copy"/></svg>Copy request JSON</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>Result</h3><div class="grow"></div><span id="res-tags" class="tags"></span></div>
+            <div class="card-b" id="result">
+              <div class="empty"><svg class="i"><use href="#i-wave"/></svg><b>Nothing rendered yet</b><span class="small">Press Render or Ctrl + Enter. Stream starts playing the first sentence while the rest renders.</span></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>This session</h3><div class="grow"></div><button class="btn sm ghost" id="clear-history">Clear</button></div>
+            <div class="card-b"><div class="history" id="history"><span class="small dim">Renders from this session appear here.</span></div></div>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="card">
+            <div class="card-h"><h3>Voice</h3><div class="grow"></div>
+              <div class="seg" id="voice-seg"><button data-v="library" class="on">Library</button><button data-v="design">Design</button></div></div>
+            <div class="card-b">
+              <div id="voice-library">
+                <div class="search"><svg class="i sm"><use href="#i-search"/></svg><input class="inp" id="vsearch" placeholder="Search voices, accents, languages…"></div>
+                <div class="chips" style="margin-top:9px" id="vquick"></div>
+                <div class="voice-list" id="vlist-mini"></div>
+              </div>
+              <div id="voice-design" class="hidden">
+                <label class="f">Describe the voice <span class="hint">(no reference clip needed)</span></label>
+                <textarea class="inp" id="design" rows="3" placeholder="a deep, gravelly old storyteller with a slight British accent"></textarea>
+                <div class="chips" style="margin-top:9px" id="design-ideas"></div>
+                <p class="small dim" style="margin:10px 0 0">Every sentence is invented from the description. To keep exactly one identity, save it as a voice on the Voices page.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>Engine</h3><div class="grow"></div><span id="engine-badges" class="tags"></span></div>
+            <div class="card-b">
+              <select class="inp" id="engine"></select>
+              <div class="small dim" id="engine-note" style="margin-top:8px"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>Style</h3><div class="grow"></div><span class="small dim" id="style-name"></span></div>
+            <div class="card-b"><div class="style-grid" id="style-grid"></div></div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>Delivery</h3></div>
+            <div class="card-b">
+              <div id="knobs-delivery"></div>
+              <div class="field"><label class="f">Instruction <span class="hint">(blank = the style's own)</span></label>
+                <input class="inp" id="instruct" placeholder="slow, warm and a little mysterious"></div>
+              <div id="knobs-engine"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>Output & quality</h3></div>
+            <div class="card-b">
+              <div class="grid2">
+                <div class="field"><label class="f">Format</label><select class="inp" id="format"></select></div>
+                <div class="field"><label class="f">Sample rate</label><select class="inp" id="sample_rate">
+                  <option value="">Native</option><option>48000</option><option>44100</option><option>24000</option><option>22050</option><option>16000</option></select></div>
+                <div class="field"><label class="f">Loudness</label><select class="inp" id="lufs">
+                  <option value="-14">-14 LUFS (streaming)</option><option value="-16" selected>-16 LUFS (podcast)</option><option value="-19">-19 LUFS (broadcast)</option><option value="-23">-23 LUFS (EBU R128)</option><option value="">Raw (no mastering)</option></select></div>
+                <div class="field"><label class="f">Language</label><input class="inp" id="language" placeholder="auto-detect"></div>
+              </div>
+              <details class="adv"><summary><svg class="i sm"><use href="#i-chev"/></svg>Advanced</summary>
+                <div class="grid2" style="margin-top:10px">
+                  <div class="field"><label class="f">Seed</label><div class="row" style="flex-wrap:nowrap"><input class="inp" id="seed" type="number" value="1234">
+                    <button class="btn icon" id="dice" title="Random seed"><svg class="i"><use href="#i-dice"/></svg></button></div></div>
+                  <div class="field"><label class="f">Takes per sentence</label><select class="inp" id="candidates"><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+                </div>
+                <label class="toggle" style="margin-bottom:12px"><input type="checkbox" id="validate" checked><span class="sw"></span>Check every take with speech recognition</label>
+                <div class="field"><label class="f">Style overrides <span class="hint">(JSON, any style field)</span></label>
+                  <input class="inp mono" id="overrides" placeholder='{"pause": 1.2, "temperature": 0.7}'></div>
+              </details>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== VOICES -->
+    <section class="page" id="page-voices">
+      <div class="page-head">
+        <div><h1>Voices</h1><p id="voices-sub">Your voice library: real speakers you have permission to use and voices designed from a description.</p></div>
+        <div class="grow"></div>
+        <button class="btn" id="open-design"><svg class="i"><use href="#i-sparkle"/></svg>Design a voice</button>
+        <button class="btn primary" id="open-add"><svg class="i"><use href="#i-plus"/></svg>Add from recording</button>
+      </div>
+      <div class="filters">
+        <div class="search"><svg class="i sm"><use href="#i-search"/></svg><input class="inp" id="vq" placeholder="Search id, description, accent, source…"></div>
+        <select class="inp" id="vlang" style="width:auto"><option value="">All languages</option></select>
+        <div class="seg" id="vgender"><button data-g="" class="on">All</button><button data-g="female">Female</button><button data-g="male">Male</button></div>
+        <div class="seg" id="vkind"><button data-k="" class="on">All</button><button data-k="cloned">Cloned</button><button data-k="designed">Designed</button></div>
+      </div>
+      <div class="vgrid" id="vgrid"></div>
+    </section>
+
+    <!-- ============================================================== STT -->
+    <section class="page" id="page-stt">
+      <div class="page-head"><div><h1>Speech to text</h1><p>Transcribe a file or your microphone with word timestamps and language detection.</p></div></div>
+      <div class="studio" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+        <div class="stack">
+          <div class="card"><div class="card-h"><h3>Record</h3></div><div class="card-b">
+            <div class="rec"><button class="rec-btn" id="rec"><svg class="i lg"><use href="#i-mic"/></svg></button>
+              <div class="lvl" id="lvl"></div><span class="mono muted" id="rec-time">0:00</span></div>
+            <p class="small dim" style="margin:10px 0 0">Click to start, click again to stop and transcribe.</p></div></div>
+          <div class="card"><div class="card-h"><h3>Or upload</h3></div><div class="card-b">
+            <div class="drop" id="sdrop"><svg class="i"><use href="#i-upload"/></svg><div><b>Drop an audio file</b> or click to choose</div><div class="small dim">wav, mp3, m4a, ogg, flac, webm…</div></div>
+            <input type="file" id="sfile" accept="audio/*,video/webm" class="hidden"></div></div>
+          <div class="card"><div class="card-h"><h3>Options</h3></div><div class="card-b grid2">
+            <div class="field"><label class="f">Language</label><input class="inp" id="slang" value="auto"></div>
+            <div class="field"><label class="f">Beam size <span class="hint">(higher = more careful)</span></label><select class="inp" id="sbeam"><option>1</option><option>3</option><option selected>5</option><option>8</option></select></div>
+          </div></div>
+        </div>
+        <div class="card"><div class="card-h"><h3>Transcript</h3><div class="grow"></div><button class="btn sm ghost hidden" id="stt-copy"><svg class="i sm"><use href="#i-copy"/></svg>Copy</button></div>
+          <div class="card-b" id="stt-out"><div class="empty"><svg class="i"><use href="#i-mic"/></svg><b>No transcript yet</b><span class="small">Record or upload audio.</span></div></div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================== JOBS -->
+    <section class="page" id="page-jobs">
+      <div class="page-head"><div><h1>Jobs</h1><p>Background renders, batches and voice designs. Updates live; history is kept on disk.</p></div>
+        <div class="grow"></div><div class="seg" id="jfilter"><button data-s="" class="on">All</button><button data-s="active">Active</button><button data-s="done">Done</button><button data-s="failed">Failed</button></div></div>
+      <div class="card"><table class="table"><thead><tr><th style="width:34%">Job</th><th>Status</th><th>Progress</th><th style="width:30%">Result</th><th></th></tr></thead><tbody id="jt"></tbody></table></div>
+    </section>
+
+    <!-- ============================================================== STYLES -->
+    <section class="page" id="page-styles">
+      <div class="page-head"><div><h1>Styles</h1><p>How a line is delivered: pacing, pauses, sampling and the instruction sent to instruction-following engines.</p></div>
+        <div class="grow"></div><button class="btn primary" id="new-style"><svg class="i"><use href="#i-plus"/></svg>New style</button></div>
+      <div class="scards" id="scards"></div>
+    </section>
+
+    <!-- ============================================================== ENGINES -->
+    <section class="page" id="page-engines">
+      <div class="page-head"><div><h1>Engines & system</h1><p>Every model FireVoice can run, its licence, abilities and speed. Load one ahead of time to skip the wait on the first render.</p></div></div>
+      <div class="card" style="margin-bottom:16px"><div class="card-b"><div class="metrics" id="sys-metrics" style="margin-top:0"></div></div></div>
+      <div class="ecards" id="ecards"></div>
+    </section>
+  </main>
+</div>
+
+<!-- drawers -->
+<div class="drawer-bg" id="drawer-bg"></div>
+<div class="drawer" id="drawer"><div class="dh"><h2 id="drawer-title"></h2><button class="btn icon ghost" id="drawer-x"><svg class="i"><use href="#i-x"/></svg></button></div>
+  <div class="db" id="drawer-body"></div><div class="df" id="drawer-foot"></div></div>
+<div class="toasts" id="toasts"></div>
+<audio id="preview-audio" preload="none"></audio>
+
+<!-- icons -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 12h1M7 8v8M11 4v16M15 8v8M19 11v2M21 12h0"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.7c2 .7 3.3 2.6 3.6 5.3"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3 2.5 8 12 13l9.5-5L12 3Z"/><path d="m2.5 12.5 9.5 5 9.5-5M2.5 16.5l9.5 5 9.5-5"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.9-.7-1.3-.7-2.2 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3Z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5L7 4.5Z" fill="currentColor"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L19 9.7l-5.2 1.8L12 16.5l-1.8-5L5 9.7l5.2-1.8L12 3Z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7L19 15Z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h0"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+</svg>
+<script src="/web/app.js"></script>
+</body>
+</html>
