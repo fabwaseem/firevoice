@@ -62,10 +62,18 @@ def is_english_text(text: str, lang: Optional[str] = None) -> bool:
     return not letters or len(_LATIN.findall(text)) / len(letters) > 0.7
 
 
-def normalize(text: str, lexicon: Optional[dict[str, str]] = None, lang: Optional[str] = None) -> str:
+# a lexicon entry that only spells a word out letter by letter: "G P U", "A P Is", "L L Ms"
+_SPELLED = re.compile(r"^(?:[A-Z]s?)(?: [A-Z]s?)+$")
+
+
+def normalize(text: str, lexicon: Optional[dict[str, str]] = None, lang: Optional[str] = None, spell_acronyms: bool = True) -> str:
+    """`spell_acronyms=False` keeps acronyms as written ("GPU") for engines that read them as letters themselves; the
+    other lexicon entries (pronunciations such as JSON -> jason, expansions such as e.g. -> for example) still apply."""
     if not is_english_text(text, lang):
         return re.sub(r"\s+", " ", text).strip()
     lex = lexicon if lexicon is not None else DEFAULT_LEXICON
+    if not spell_acronyms:
+        lex = {k: v for k, v in lex.items() if not _SPELLED.match(v)}
     t = text
 
     # symbols that change meaning

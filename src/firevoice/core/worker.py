@@ -141,7 +141,7 @@ def main(argv=None) -> int:
                 adapter.load()
                 P.send({"id": rid, "ok": True, "sr": adapter.sr, "seconds": round(time.perf_counter() - t0, 2),
                         "caps": {"needs_reference": adapter.needs_reference, "needs_ref_text": adapter.needs_ref_text, "supports_tags": adapter.supports_tags,
-                                 "supports_design": adapter.supports_design, "supports_instruct": adapter.supports_instruct, "license": adapter.license,
+                                 "supports_design": adapter.supports_design, "supports_instruct": adapter.supports_instruct, "passage_chars": adapter.passage_chars, "spell_acronyms": adapter.spell_acronyms, "license": adapter.license,
                                  "commercial": adapter.commercial, "vram_gb": adapter.vram_gb}, **adapter.stats()}, out)
             elif op == "voice":
                 adapter.prepare_voice(req["voice_id"], req.get("ref"), req.get("ref_text"), req.get("desc"))

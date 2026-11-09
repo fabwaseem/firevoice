@@ -75,6 +75,9 @@ class Adapter:
     supports_tags = False       # inline [laugh] etc.
     supports_design = False     # voice from a text description instead of a clip
     supports_instruct = False   # free-text delivery instruction per utterance
+    spell_acronyms = True       # the text pass writes "GPU" as "G P U" for models that would read it as a word
+    passage_chars = 0           # >0: whole sentences are packed into one generation up to this many characters (one
+                                # delivery for the passage, no seams); 0: one generation per sentence
     license = "unknown"
     commercial = False
     vram_gb = 4.0

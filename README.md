@@ -102,6 +102,11 @@ sentence continues from the same recording and the voice does not drift between 
 instruction (`--instruct`) needs clip-only cloning, so passing one turns `ultimate` off for that render unless you set
 `--param ultimate=true`. Style presets still shape pace, pauses and per-style reference clips. Voices added without a
 transcript are transcribed automatically.
+
+VoxCPM2 also renders whole passages (up to about 360 characters) in one generation instead of one sentence at a time, so
+there is no seam where the delivery could change. A `[pause]` inside a passage is generated through and the exact silence is
+cut in at the word boundary afterwards (English text, using the speech-recognition word timings). Style or pace changes, long
+pauses and non-English text still start a new generation.
 | `--candidates`, `--accept`, `--no-asr` | takes per sentence, ASR agreement needed, skip validation |
 | `--lufs` (0 = raw), `--lead-ms`, `--tail-ms` | mastering and padding |
 | `--format`, `--sample-rate` | output encoding |

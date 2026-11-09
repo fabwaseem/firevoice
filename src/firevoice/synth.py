@@ -12,6 +12,7 @@ serialising behind it.
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import re
@@ -72,6 +73,16 @@ class _Chunk:
     done: Future = field(default_factory=Future)
     cached: Optional[tuple] = None
     asr: bool = True          # validate takes with ASR (only meaningful for English text)
+    # [pause]s generated through and cut in afterwards: (words of the chunk before the pause, milliseconds)
+    cuts: list = field(default_factory=list)
+
+
+@dataclass
+class _Sent:
+    text: str
+    style: Style
+    pace: float
+    english: bool
 
 
 @dataclass
@@ -285,6 +296,155 @@ class Synthesizer:
         best = max(ch.takes, key=lambda c: c.score) if ch.takes else _Cand(np.zeros(0, np.float32), [], "", 0.0, ch.seed, ["none"])
         ch.done.set_result(best)
 
+    # ------------------------------------------------------------------ planning
+    def _plan(self, items: list, base_style: Style, custom_style: Optional[Style], lang: Optional[str], seed: int, caps: dict) -> tuple[list, list]:
+        """-> (chunks, plan): plan is Pause | [chunk, gap_ms] in order.
+
+        Every separate generation re-imagines the delivery a little, so each seam is a place where the voice can change.
+        Engines that hold a voice well over a passage (caps["passage_chars"] > 0) get consecutive sentences of the same
+        style and pace packed into one generation, and a [pause] between two such passages is generated through and cut in
+        afterwards at the word boundary (`_apply_cuts`). That needs the take's word timings, so it is only done for English
+        text when an aligner is loaded; otherwise a pause still splits the script, as do style and pace changes."""
+        budget = int(caps.get("passage_chars") or 0)
+        bridge = budget > 0 and self.aligner is not None
+        units: list = []
+        for it in items:
+            if isinstance(it, Pause):
+                units.append(it)
+                continue
+            st = base_style if custom_style is not None else get_style(it.style)
+            if it.style == "custom" and custom_style is not None:
+                st = custom_style
+            english = is_english_text(it.text, lang)
+            spoken = normalize(it.text, self.lexicon, lang, spell_acronyms=caps.get("spell_acronyms", True))
+            if not caps.get("supports_tags", False):
+                spoken = strip_tags(spoken)
+            units += [_Sent(s, st, it.pace, english) for s in make_chunks(spoken)]
+
+        chunks: list[_Chunk] = []
+        plan: list = []
+        cur: Optional[dict] = None
+        held: list = []      # pauses that may still be generated through
+
+        def close() -> None:
+            nonlocal cur
+            if cur is None:
+                return
+            ch = _Chunk(index=len(chunks), text=" ".join(cur["sents"]), style=cur["style"], pace=cur["pace"],
+                        seed=seed + len(chunks) * 101, asr=cur["english"], cuts=cur["cuts"])
+            chunks.append(ch)
+            plan.append([ch, 0])
+            cur = None
+
+        for u in units:
+            if isinstance(u, Pause):
+                if cur is not None and bridge and cur["english"] and u.ms <= 3000:
+                    held.append(u)
+                else:
+                    close()
+                    plan.extend(held + [u])
+                    held = []
+                continue
+            fits = (cur is not None and budget > 0 and cur["style"] == u.style and cur["pace"] == u.pace and cur["english"] == u.english
+                    and len(" ".join(cur["sents"])) + 1 + len(u.text) <= budget)
+            if fits and held:
+                prev = cur["sents"][-1]
+                if not re.search(r"""[.!?,;:\u2026]['")\]]*$""", prev):
+                    cur["sents"][-1] = prev + ","          # a pause reads as a phrase end, not a run-on
+                nwords = len(WORD_RE.findall(strip_tags(" ".join(cur["sents"])).lower()))
+                cur["cuts"].append((nwords, sum(p.ms for p in held)))
+                held = []
+            if fits:
+                cur["sents"].append(u.text)
+            else:
+                close()
+                plan.extend(held)
+                held = []
+                cur = {"sents": [u.text], "style": u.style, "pace": u.pace, "english": u.english, "cuts": []}
+        close()
+        plan.extend(held)
+
+        # natural silence between chunks that follow each other directly (a [pause] replaces it)
+        for i, item in enumerate(plan):
+            if isinstance(item, Pause) or i + 1 >= len(plan) or isinstance(plan[i + 1], Pause):
+                continue
+            ch, nxt = item[0], plan[i + 1][0]
+            breath = 1.0 + min(0.25, len(nxt.text.split()) / 80.0)
+            item[1] = int(gap_after_ms(ch.text) * ch.style.pause * breath * _seeded_jitter(seed + ch.index + 1) / max(0.7, ch.pace))
+        return chunks, plan
+
+    def _apply_cuts(self, a: np.ndarray, words: list, ch: _Chunk) -> tuple:
+        """Put the [pause]s of a generated-through passage in place: find each boundary in the take's word timings,
+        replace the natural gap there with exactly the requested silence (short fades either side), shift later words."""
+        if not ch.cuts or not len(a):
+            return a, words
+        sr = self.sr
+        dur = len(a) / sr
+        text_toks = WORD_RE.findall(strip_tags(ch.text).lower())
+        heard, owner = [], []
+        for i, w in enumerate(words):
+            for tok in WORD_RE.findall(str(w.text).lower()):
+                heard.append(tok)
+                owner.append(i)
+        tmap: dict = {}
+        for blk in difflib.SequenceMatcher(None, text_toks, heard, autojunk=False).get_matching_blocks():
+            for k in range(blk.size):
+                tmap.setdefault(blk.a + k, owner[blk.b + k])
+        # The boundary is found in the audio itself: ASR word times are only a guide (Whisper often ends the last word of
+        # a sentence 100-200 ms early, and cutting there clips its tail). Inside a window around the guessed boundary we
+        # take the longest stretch that is really quiet (40 dB under the take's peak) and cut inside it.
+        frame = max(1, int(sr * 0.01))
+        nfr = len(a) // frame
+        level = 20 * np.log10(np.sqrt((a[: nfr * frame].reshape(nfr, frame) ** 2).mean(axis=1)) + 1e-9) if nfr else np.zeros(0)
+        quiet = level < (level.max() - 40.0 if nfr else 0)
+        regions: list = []
+        last_end = 0.0
+        for widx, ms in ch.cuts:
+            k = next((tmap[j] for j in range(widx, len(text_toks)) if j in tmap), None)
+            if k is not None and 0 < k < len(words):
+                lo, hi = float(words[k - 1].start), float(words[k].start) + 0.15
+            else:                                   # boundary not heard: estimate it from the word count
+                est = dur * widx / max(1, len(text_toks))
+                lo, hi = est - 0.5, est + 0.5
+            f0, f1 = max(int(lo * 100), int(last_end * 100)), min(nfr, int(hi * 100))
+            best, run, best_end = 0, 0, f0
+            for i in range(f0, f1):
+                run = run + 1 if quiet[i] else 0
+                if run > best:
+                    best, best_end = run, i + 1
+            if best >= 6:                            # a real gap: keep 30 ms of natural decay and 20 ms before the onset
+                g0, g1 = (best_end - best) * 0.01, best_end * 0.01
+                r0, r1 = g0 + min(0.03, (g1 - g0) / 3), g1 - min(0.02, (g1 - g0) / 3)
+            elif f1 > f0:                            # words run together: cut at the quietest 10 ms in the window
+                c = (f0 + int(np.argmin(level[f0:f1]))) * 0.01 + 0.005
+                r0 = r1 = c
+            else:
+                r0 = r1 = max(0.0, min(dur, (lo + hi) / 2))
+            r0 = max(r0, last_end)
+            r1 = max(r1, r0)
+            if r0 >= dur:
+                continue
+            regions.append((r0, min(r1, dur), ms))
+            last_end = r1
+        if not regions:
+            return a, words
+        ramp = max(1, int(sr * 0.012))
+        parts, pos = [], 0
+        for r0, r1, ms in regions:
+            seg = a[pos: int(r0 * sr)].copy()
+            if len(seg) > ramp:
+                seg[-ramp:] *= np.linspace(1.0, 0.0, ramp, dtype=np.float32)
+            parts += [seg, A.silence(ms, sr)]
+            pos = int(r1 * sr)
+        tail = a[pos:].copy()
+        if len(tail) > ramp:
+            tail[:ramp] *= np.linspace(0.0, 1.0, ramp, dtype=np.float32)
+        parts.append(tail)
+
+        def moved(t: float) -> float:
+            return t + sum(ms / 1000.0 - (r1 - r0) for r0, r1, ms in regions if r1 <= t + 1e-6)
+        return np.concatenate(parts).astype(np.float32), [Word(w.text, moved(w.start), moved(w.end)) for w in words]
+
     # ------------------------------------------------------------------ main
     def speak(
         self,
@@ -330,33 +490,7 @@ class Synthesizer:
         self.pool.prepare_voice(pool_voice)
 
         # 1) plan every chunk
-        chunks: list[_Chunk] = []
-        plan: list = []   # Pause | _Chunk, in order, plus the gap decisions
-        ci = 0
-        for idx, it in enumerate(items):
-            if isinstance(it, Pause):
-                plan.append(it)
-                continue
-            st = base_style if custom_style is not None else get_style(it.style)
-            if it.style == "custom" and custom_style is not None:
-                st = custom_style
-            english = is_english_text(it.text, lang)
-            spoken = normalize(it.text, self.lexicon, lang)
-            if not caps.get("supports_tags", False):
-                spoken = strip_tags(spoken)
-            sentence_chunks = make_chunks(spoken)
-            next_is_pause = idx + 1 < len(items) and isinstance(items[idx + 1], Pause)
-            for j, ch_text in enumerate(sentence_chunks):
-                ch = _Chunk(index=ci, text=ch_text, style=st, pace=it.pace, seed=seed + ci * 101, asr=english)
-                chunks.append(ch)
-                last = j == len(sentence_chunks) - 1
-                gap = 0
-                if not (last and (next_is_pause or idx == len(items) - 1)):
-                    nxt = sentence_chunks[j + 1] if not last else (getattr(items[idx + 1], "text", "") if idx + 1 < len(items) else "")
-                    breath = 1.0 + min(0.25, len(nxt.split()) / 80.0)
-                    gap = int(gap_after_ms(ch_text) * st.pause * breath * _seeded_jitter(seed + ci + 1) / max(0.7, it.pace))
-                plan.append((ch, gap))
-                ci += 1
+        chunks, plan = self._plan(items, base_style, custom_style, lang, seed, caps)
         stats.chunks = len(chunks)
 
         # 2) fan out: cache first, then `candidates` takes per chunk, all at once
@@ -408,6 +542,7 @@ class Synthesizer:
                         self._cache_put(key, a, words, take)
                     except Exception:
                         pass
+            a, words = self._apply_cuts(a, words, ch)
             chunk_t0 = t
             for w in words:
                 res.words.append(Word(w.text, t + w.start, t + w.end))
