@@ -138,6 +138,64 @@ export interface TTSRequest {
   format?: AudioFormat;
   sample_rate?: number | null;
   response?: "audio" | "json";
+  /** extra pronunciation rules for this request only */
+  dictionary?: DictRuleInput[] | Record<string, string> | null;
+  /** keep every take of every passage (see /api/v1/renders) */
+  keep_takes?: boolean;
+}
+
+// ---------------------------------------------------------------- pronunciation dictionary
+export interface DictRuleInput {
+  match: string;
+  say: string;
+  case?: boolean;
+  whole_word?: boolean;
+  note?: string;
+}
+export interface DictRule extends Required<DictRuleInput> {
+  id: string;
+  created: number;
+}
+export interface DictView {
+  rules: DictRule[];
+  builtin: { match: string; say: string }[];
+}
+
+// ---------------------------------------------------------------- kept renders (takes and QA)
+export interface QAWord {
+  text: string;
+  status: "ok" | "missed" | "changed";
+  heard?: string;
+}
+export interface RenderTake {
+  n: number;
+  seed: number;
+  score: number;
+  validated: boolean;
+  reasons: string[];
+  said: string;
+  duration: number;
+  words: WordTime[];
+  qa: { words: QAWord[]; extra: string[]; match: number } | null;
+}
+export interface RenderChunk {
+  index: number;
+  text: string;
+  style: string;
+  pace: number;
+  takes: RenderTake[];
+  chosen: number | null;
+  locked: boolean;
+  flagged: boolean;
+}
+export interface KeptRender {
+  id: string;
+  created: number;
+  title: string;
+  engine: string;
+  sample_rate: number;
+  chunks: RenderChunk[];
+  flagged: number;
 }
 
 export interface WordTime {
@@ -161,6 +219,7 @@ export interface TTSJson {
   retries: number;
   warnings: string[];
   words: WordTime[];
+  render_id?: string | null;
 }
 
 export interface StreamChunk {

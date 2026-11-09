@@ -13,6 +13,7 @@ import { StylePicker } from "@/components/speak/StylePicker";
 import { SettingsPanel } from "@/components/speak/SettingsPanel";
 import { ReadAlong } from "@/components/speak/ReadAlong";
 import { useRender } from "@/components/speak/useRender";
+import { TakesPanel, SubtitleButtons } from "@/components/speak/TakesPanel";
 import { fmtDuration, truncate } from "@/lib/utils";
 
 export function SpeakView() {
@@ -25,7 +26,7 @@ export function SpeakView() {
   const format = useSettings((x) => x.format);
   const setSettings = useSettings((x) => x.set);
   const createJob = useCreateJob();
-  const { state, busy, renderWhole, renderStream, stop } = useRender();
+  const { state, busy, renderWhole, renderStream, stop, replaceResult } = useRender();
 
   const engines = enginesQ.data ?? options.data?.engines ?? [];
   const styles = stylesQ.data ?? options.data?.styles ?? [];
@@ -62,6 +63,7 @@ export function SpeakView() {
     tail_ms: s.tailMs,
     format,
     sample_rate: s.sampleRate,
+    keep_takes: s.keepTakes,
   }), [s, format]);
 
   const canRender = !!s.text.trim() && !offline && !busy;
@@ -162,6 +164,10 @@ export function SpeakView() {
                 </div>
               )}
               <ReadAlong words={state.words} />
+              {state.phase === "done" && <SubtitleButtons renderId={state.stats?.renderId ?? null} words={state.words} />}
+              {state.phase === "done" && state.stats?.renderId && (
+                <TakesPanel renderId={state.stats.renderId} format={format} onAudio={replaceResult} />
+              )}
             </motion.div>
           )}
         </div>

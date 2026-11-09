@@ -1,5 +1,5 @@
 import { NavLink } from "react-router";
-import { AudioLines, Home, Library, ListChecks, Mic, Palette, Cpu, Settings, PanelLeftClose, PanelLeftOpen, Moon, Sun, Monitor } from "lucide-react";
+import { AudioLines, BookA, Home, Library, ListChecks, Mic, Palette, Cpu, Settings, PanelLeftClose, PanelLeftOpen, Moon, Sun, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/stores/settings";
 import { Tooltip } from "@/components/ui";
@@ -14,6 +14,7 @@ const NAV = [
   { to: "/jobs", label: "Jobs", icon: ListChecks },
   { to: "/engines", label: "Engines", icon: Cpu },
   { to: "/styles", label: "Styles", icon: Palette },
+  { to: "/dictionary", label: "Dictionary", icon: BookA },
 ] as const;
 
 export function Sidebar() {

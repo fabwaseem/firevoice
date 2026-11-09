@@ -15,7 +15,17 @@ export const qk = {
   styles: ["styles"] as const,
   jobs: (f?: Record<string, string | number | undefined>) => ["jobs", f ?? {}] as const,
   job: (id: string) => ["job", id] as const,
+  dictionary: ["dictionary"] as const,
+  kept: (id: string) => ["kept", id] as const,
 };
+
+export function useDictionary() {
+  return useQuery({ queryKey: qk.dictionary, queryFn: api.dictionary });
+}
+
+export function useKeptRender(id: string | null | undefined) {
+  return useQuery({ queryKey: qk.kept(id ?? ""), queryFn: () => api.keptRender(id!), enabled: !!id });
+}
 
 export function errMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message;

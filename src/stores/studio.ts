@@ -16,6 +16,7 @@ export interface StudioState {
   candidates: number;
   accept: number;
   validate: boolean;
+  keepTakes: boolean;
   lufs: number | null;
   leadMs: number;
   tailMs: number;
@@ -44,6 +45,7 @@ export const useStudio = create<StudioState>()(
       candidates: 1,
       accept: 0.9,
       validate: true,
+      keepTakes: true,
       lufs: -16,
       leadMs: 120,
       tailMs: 280,

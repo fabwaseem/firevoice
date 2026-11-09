@@ -96,6 +96,7 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
       <Section title="Quality" defaultOpen={showAdvanced}>
         <LabeledSlider label="Takes per sentence" value={s.candidates} min={1} max={8} step={1} onChange={(candidates) => s.set({ candidates })} hint="The best Whisper-validated take is kept" />
         <Switch checked={s.validate} onChange={(validate) => s.set({ validate })} label="Validate with Whisper" description="Re-roll takes that don’t match the script" />
+        <Switch checked={s.keepTakes} onChange={(keepTakes) => s.set({ keepTakes })} label="Keep every take" description="Compare, re-take and lock passages after a render" />
         {s.validate && <LabeledSlider label="Accept threshold" value={s.accept} min={0.5} max={1} step={0.01} onChange={(accept) => s.set({ accept })} />}
         <div>
           <Label>Seed</Label>

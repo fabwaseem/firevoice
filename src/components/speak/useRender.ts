@@ -17,6 +17,8 @@ export interface RenderStats {
   retries?: number;
   warnings: string[];
   engine?: string;
+  /** the kept render (keep_takes), for the takes and QA panel */
+  renderId?: string | null;
 }
 
 export type RenderPhase = "idle" | "starting" | "streaming" | "rendering" | "done" | "error";
@@ -105,7 +107,7 @@ export function useRender() {
         words: r.words,
         chunksGot: r.chunks,
         chunksTotal: r.chunks,
-        stats: { duration: r.duration, seconds: r.seconds, rtf: r.rtf, chunks: r.chunks, takes: r.takes, retries: r.retries, warnings: r.warnings ?? [], engine: r.engine },
+        stats: { duration: r.duration, seconds: r.seconds, rtf: r.rtf, chunks: r.chunks, takes: r.takes, retries: r.retries, warnings: r.warnings ?? [], engine: r.engine, renderId: r.render_id ?? null },
       });
       if (r.warnings?.length) toast.warning(r.warnings[0], { description: r.warnings.length > 1 ? `${r.warnings.length - 1} more warning(s)` : undefined });
     } catch (e) {
@@ -189,6 +191,7 @@ export function useRender() {
             retries: d.retries as number | undefined,
             warnings: (d.warnings as string[]) ?? [],
             engine: d.engine as string | undefined,
+            renderId: (d.render_id as string | null | undefined) ?? null,
           };
           cp.finish();
           setState((s) => ({ ...s, stats: doneStats }));
@@ -219,6 +222,14 @@ export function useRender() {
     }
   }, [stop]);
 
+  /** After a take is swapped in a kept render: load the re-stitched audio and its word times. */
+  const replaceResult = useCallback((blob: Blob, format: string, words: WordTime[], duration: number) => {
+    const p = usePlayer.getState();
+    const cur = p.track;
+    p.load({ id: uid(), title: cur?.title ?? "Render", subtitle: cur?.subtitle ?? "", src: URL.createObjectURL(blob), blob, format, duration, words, href: "/speak" }, false);
+    setState((s) => ({ ...s, words, stats: s.stats ? { ...s.stats, duration } : s.stats }));
+  }, []);
+
   const busy = state.phase === "starting" || state.phase === "streaming" || state.phase === "rendering";
-  return { state, busy, renderWhole, renderStream, stop };
+  return { state, busy, renderWhole, renderStream, stop, replaceResult };
 }

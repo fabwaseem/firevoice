@@ -1,7 +1,7 @@
 import { useSettings } from "@/stores/settings";
 import type {
   ApiErrorBody, Engine, Health, Job, JobEvent, JobKind, Options, Style, STTResult, SystemInfo, TTSJson, TTSRequest,
-  Voice, VoiceCollection, StreamEvent,
+  Voice, VoiceCollection, StreamEvent, DictRule, DictRuleInput, DictView, KeptRender, WordTime,
 } from "./types";
 
 export class ApiError extends Error {
@@ -182,6 +182,34 @@ export const api = {
     request<Job>("/api/v1/jobs", { method: "POST", body: json({ kind, payload, title }) }),
   cancelJob: (id: string) => request<Job>(`/api/v1/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   deleteJob: (id: string) => request<unknown>(`/api/v1/jobs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  // ---- pronunciation dictionary
+  dictionary: () => request<DictView>("/api/v1/dictionary"),
+  addRule: (r: DictRuleInput) => request<DictRule>("/api/v1/dictionary", { method: "POST", body: json(r) }),
+  updateRule: (id: string, r: Partial<DictRuleInput>) => request<DictRule>(`/api/v1/dictionary/${encodeURIComponent(id)}`, { method: "PATCH", body: json(r) }),
+  removeRule: (id: string) => request<unknown>(`/api/v1/dictionary/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  replaceRules: (rules: DictRuleInput[]) => request<{ rules: DictRule[] }>("/api/v1/dictionary", { method: "PUT", body: json({ rules }) }),
+  testDictionary: (text: string, engine?: string | null) =>
+    request<{ text: string; spoken: string; engine: string }>("/api/v1/dictionary/test", { method: "POST", body: json({ text, engine: engine ?? undefined }) }),
+
+  // ---- kept renders: takes and QA
+  keptRender: (id: string) => request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}`),
+  keptRenderWords: (id: string) => request<{ words: WordTime[]; duration: number }>(`/api/v1/renders/${encodeURIComponent(id)}/words`),
+  keptRenderAudio: async (id: string, format: string) => {
+    const res = await fetch(url(`/api/v1/renders/${encodeURIComponent(id)}/audio`, { format }), { headers: authHeaders() });
+    if (!res.ok) throw await parseError(res);
+    return res.blob();
+  },
+  takeAudioUrl: (id: string, index: number, n: number) => withToken(url(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/takes/${n}/audio`, { format: "mp3" })),
+  newTake: (id: string, index: number, seed?: number) =>
+    request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/takes`, { method: "POST", body: json({ seed: seed ?? null }) }),
+  chooseTake: (id: string, index: number, take: number) =>
+    request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/choose`, { method: "POST", body: json({ take }) }),
+  lockPassage: (id: string, index: number, locked: boolean) =>
+    request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/chunks/${index}/lock`, { method: "POST", body: json({ locked }) }),
+  regenerateUnlocked: (id: string) => request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}/regenerate`, { method: "POST", body: json({}) }),
+  keptSubtitles: (id: string, format: "srt" | "vtt") => request<string>(`/api/v1/renders/${encodeURIComponent(id)}/subtitles`, {}, { format }),
+  subtitles: (words: WordTime[], format: "srt" | "vtt") => request<string>("/api/v1/subtitles", { method: "POST", body: json({ words, format }) }),
+
   jobAudioUrl: (id: string, download = false) => withToken(url(`/api/v1/jobs/${encodeURIComponent(id)}/audio`, { download: download ? "true" : undefined })),
   jobFileUrl: (id: string, name: string) => withToken(url(`/api/v1/jobs/${encodeURIComponent(id)}/files/${encodeURIComponent(name)}`)),
   jobFile: <T = unknown>(id: string, name: string) => request<T>(`/api/v1/jobs/${encodeURIComponent(id)}/files/${encodeURIComponent(name)}`),
