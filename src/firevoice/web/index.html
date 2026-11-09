@@ -19,6 +19,7 @@
     <nav class="nav" id="nav">
       <a href="#speak" data-page="speak"><svg class="i"><use href="#i-wave"/></svg><span class="lbl">Speak</span></a>
       <a href="#projects" data-page="projects"><svg class="i"><use href="#i-book"/></svg><span class="lbl">Projects</span><span class="count" id="n-projects"></span></a>
+      <a href="#changer" data-page="changer"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Voice changer</span></a>
       <a href="#voices" data-page="voices"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Voices</span><span class="count" id="n-voices"></span></a>
       <a href="#stt" data-page="stt"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Speech to text</span></a>
       <a href="#jobs" data-page="jobs"><svg class="i"><use href="#i-layers"/></svg><span class="lbl">Jobs</span><span class="count" id="n-jobs"></span></a>
@@ -212,6 +213,25 @@
       <div class="scards" id="scards"></div>
     </section>
 
+    <!-- ============================================================== VOICE CHANGER -->
+    <section class="page" id="page-changer">
+      <div class="page-head"><div><h1>Voice changer</h1><p>Record or upload a performance: FireVoice keeps your words, timing and delivery and swaps the voice for any library voice.</p></div></div>
+      <div class="grid2" style="align-items:start">
+        <div class="card"><div class="card-h"><h3>Your recording</h3></div><div class="card-b">
+          <div class="drop" id="vc-file-drop"><svg class="i"><use href="#i-upload"/></svg><div><b>Drop a recording</b> or click to choose</div><div class="small dim" id="vc-file-name">speech, up to 10 minutes · any format</div></div>
+          <input type="file" id="vc-file" accept="audio/*,video/*" class="hidden">
+          <div class="row" style="margin-top:12px;gap:8px"><button class="btn" id="vc-rec"><svg class="i"><use href="#i-mic"/></svg>Record</button><span class="small dim" id="vc-rec-state"></span></div>
+          <audio id="vc-src" controls class="hidden" style="width:100%;margin-top:12px"></audio>
+          <div id="vc-check" class="small dim" style="margin-top:8px"></div>
+        </div></div>
+        <div class="card"><div class="card-h"><h3>New voice</h3></div><div class="card-b">
+          <div class="field"><label class="f">Voice</label><select class="inp" id="vc-voice"></select></div>
+          <button class="btn primary" id="vc-go"><svg class="i"><use href="#i-zap"/></svg>Change voice</button>
+          <div id="vc-out" style="margin-top:14px"></div>
+        </div></div>
+      </div>
+    </section>
+
     <!-- ============================================================== PROJECTS -->
     <section class="page" id="page-projects">
       <div id="pj-list-view">
@@ -301,5 +321,6 @@
 </svg>
 <script src="/web/app.js"></script>
 <script src="/web/projects.js"></script>
+<script src="/web/tools.js"></script>
 </body>
 </html>

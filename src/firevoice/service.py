@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import json
 import re
 import threading
 import time
@@ -174,7 +175,9 @@ class FireVoice:
 
     # -------------------------------------------------------------------- engines
     def engine_names(self) -> list[str]:
-        return [n for n in all_engines() if n != "null"] if os.environ.get("FIREVOICE_HIDE_NULL", "1") == "1" else list(all_engines())
+        """Text-to-speech engines (the voice changer is reached through voice_convert)."""
+        names = [n for n in all_engines() if _task(n) == "tts"]
+        return [n for n in names if n != "null"] if os.environ.get("FIREVOICE_HIDE_NULL", "1") == "1" else names
 
     def engines(self) -> list[dict]:
         return [self.engine(n) for n in self.engine_names()]
@@ -923,18 +926,147 @@ class FireVoice:
         return Path(p)
 
     def voice_add(self, name: str, audio_path: str | Path, *, consent: bool, description: str = "", gender: str = "", language: str = "",
-                  accent: str = "", tags: Optional[list] = None, transcript: Optional[str] = None, source: str = "", license: str = "") -> dict:
+                  accent: str = "", tags: Optional[list] = None, transcript: Optional[str] = None, source: str = "", license: str = "",
+                  clean: Optional[str] = None) -> dict:
+        """Add a cloned voice. `clean` ("light", "medium", "strong") cleans the clip first. The result carries the clip's
+        quality check (`quality_check`) so a client can warn about noise, clipping or length."""
         if not consent:
             raise FireVoiceError("bad_request", "consent is required: only add voices you own or have permission to use")
         if self.voices.exists(name):
             raise FireVoiceError("conflict", f"voice {name!r} already exists")
+        import soundfile as sf
+        from .cleanup import analyze
+        from .cleanup import clean as clean_audio
+        try:
+            a, sr = sf.read(str(audio_path), dtype="float32", always_2d=False)
+        except Exception as e:
+            raise FireVoiceError("bad_request", f"cannot read the clip: {e}")
+        a = a.mean(axis=1) if a.ndim > 1 else a
+        before = analyze(a, sr)
+        if clean:
+            try:
+                a = clean_audio(a, sr, clean)
+            except ValueError as e:
+                raise FireVoiceError("bad_request", str(e))
+            import tempfile
+            fd, tmp = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
+            sf.write(tmp, a, sr, subtype="PCM_16")
+            audio_path = tmp
         try:
             meta = self.voices.add(name, audio_path, consent=True, description=description, gender=gender, tags=tags, source=source or "uploaded",
                                    license=license, transcript=transcript or None, transcribe=not transcript,
                                    extra={"language": language or None, "accent": accent or None})
         except (ValueError, PermissionError) as e:
             raise FireVoiceError("bad_request", str(e))
-        return self.voice(meta["voice_id"])
+        check = {"before": before, "after": analyze(a, sr) if clean else None, "cleaned": clean or None}
+        self.voices.update(meta["voice_id"], quality_check=check)
+        return {**self.voice(meta["voice_id"]), "quality_check": check}
+
+    # -------------------------------------------------------------------- audio tools: check, clean, voice changer
+    @staticmethod
+    def _read(path) -> tuple:
+        import soundfile as sf
+        try:
+            a, sr = sf.read(str(path), dtype="float32", always_2d=False)
+        except Exception as e:
+            raise FireVoiceError("bad_request", f"cannot read the audio: {e}")
+        return (a.mean(axis=1) if a.ndim > 1 else a), int(sr)
+
+    def audio_analyze(self, path) -> dict:
+        from .cleanup import analyze
+        a, sr = self._read(path)
+        return analyze(a, sr)
+
+    def audio_clean(self, path, strength: str = "medium") -> tuple:
+        """-> (cleaned audio, sample rate, {before, after})"""
+        from .cleanup import analyze, clean
+        a, sr = self._read(path)
+        try:
+            out = clean(a, sr, strength)
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+        return out, sr, {"before": analyze(a, sr), "after": analyze(out, sr)}
+
+    def voice_clean(self, voice_id: str, strength: str = "medium") -> dict:
+        """Clean a library voice's reference clip in place (the original is kept as ref.original.wav)."""
+        import shutil
+        import soundfile as sf
+        v = self.voice(voice_id)
+        d = self.voices.root / v["voice_id"]
+        ref = d / "ref.wav"
+        if not ref.exists():
+            raise FireVoiceError("bad_request", "this voice has no reference clip")
+        orig = d / "ref.original.wav"
+        if not orig.exists():
+            shutil.copy2(ref, orig)
+        out, sr, check = self.audio_clean(orig, strength)
+        tmp = d / "ref.wav.tmp"
+        sf.write(str(tmp), out, sr, subtype="PCM_16", format="WAV")
+        os.replace(tmp, ref)
+        self.voices.update(v["voice_id"], quality_check={**check, "cleaned": strength})
+        self._forget_voice(v["voice_id"])
+        return {**self.voice(v["voice_id"]), "quality_check": {**check, "cleaned": strength}}
+
+    def voice_restore_original(self, voice_id: str) -> dict:
+        import os as _os
+        v = self.voice(voice_id)
+        d = self.voices.root / v["voice_id"]
+        orig = d / "ref.original.wav"
+        if not orig.exists():
+            raise FireVoiceError("not_found", "this voice has no original clip saved (it was never cleaned)")
+        _os.replace(orig, d / "ref.wav")
+        self._forget_voice(v["voice_id"])
+        return self.voice(v["voice_id"])
+
+    def voice_convert(self, source_path, voice: str, *, lufs: Optional[float] = -16.0, priority: int = 0,
+                      cancel: Optional[threading.Event] = None) -> tuple:
+        """Voice changer: the words, timing and delivery of `source_path`, in `voice`. -> (audio, sample rate)"""
+        import hashlib
+        from concurrent.futures import TimeoutError as FutTimeout
+        from .core.pool import Voice
+        a, sr = self._read(source_path)
+        if len(a) / sr > 600:
+            raise FireVoiceError("bad_request", "the recording is longer than 10 minutes; split it first")
+        if len(a) / sr < 0.5:
+            raise FireVoiceError("bad_request", "the recording is too short")
+        try:
+            v = self.voices.resolve(voice or "default", needs_reference=True, engine="chatterbox-vc")
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+        fp = hashlib.sha1(f"{v.get('ref')}|{Path(v['ref']).stat().st_mtime if v.get('ref') else ''}".encode()).hexdigest()[:8]
+        pv = Voice(f"{v['voice_id']}#{fp}", ref=v.get("ref"), ref_text=v.get("ref_text"), desc=v.get("desc"))
+        ld = self._pool("chatterbox-vc", hold=True)
+        group = threading.Event()
+        try:
+            ld.pool.prepare_voice(pv)
+            fut = ld.pool.submit("", pv, {"source": str(Path(source_path).resolve())}, 0, priority=priority, group=group)
+            while True:
+                try:
+                    out = fut.result(timeout=0.25)
+                    break
+                except FutTimeout:
+                    if cancel is not None and cancel.is_set():
+                        group.set()
+                        raise Cancelled("cancelled")
+        except Cancelled:
+            raise
+        except FireVoiceError:
+            raise
+        except Exception as e:
+            raise FireVoiceError("internal", f"voice changer failed: {str(e)[:300]}")
+        finally:
+            group.set()
+            with self._lock:
+                ld.active -= 1
+                ld.last_used = time.time()
+        out_sr = ld.pool.sr or 24000
+        out = np.asarray(out, dtype=np.float32)
+        if lufs is not None and len(out) > out_sr // 10:
+            out = A.studio_chain(out, out_sr, lufs)
+        return out, out_sr
 
     def voice_update(self, voice_id: str, **fields) -> dict:
         allowed = {"name", "description", "gender", "tags", "language", "accent", "license", "source", "favorite", "notes", "tagline", "traits", "use_cases"}
@@ -1008,6 +1140,129 @@ class FireVoice:
         finally:
             tmp.unlink(missing_ok=True)
         return self.voice(name)
+
+    # -------------------------------------------------------------------- design: several candidates, keep the best
+    def design_candidates(self, description: str, *, n: int = 3, engine: Optional[str] = None, text: Optional[str] = None,
+                          seed: Optional[int] = None, language: Optional[str] = None, priority: int = 0) -> dict:
+        """Render `n` takes of a described voice with different seeds, to compare before keeping one.
+        -> {batch, description, text, engine, candidates: [{n, seed, duration}]}. Candidates are kept for a day."""
+        import random
+        import shutil
+        import uuid as _uuid
+        if not (description or "").strip():
+            raise FireVoiceError("bad_request", "a description is required")
+        n = max(1, min(6, int(n)))
+        eng = self._resolve_engine(engine or ("voxcpm2" if catalog.info("voxcpm2").status()["ready"] else None))
+        if not catalog.info(eng).design:
+            raise FireVoiceError("bad_request", f"engine {eng} cannot design voices")
+        root = home() / "design"
+        root.mkdir(parents=True, exist_ok=True)
+        for old in root.glob("*"):                 # candidates older than a day go
+            try:
+                if old.is_dir() and time.time() - old.stat().st_mtime > 86400:
+                    shutil.rmtree(old, ignore_errors=True)
+            except OSError:
+                pass
+        batch = _uuid.uuid4().hex[:12]
+        d = root / batch
+        d.mkdir()
+        line = text or DESIGN_TEXT
+        base = int(seed if seed is not None else random.randint(1, 2**31 - 1))
+        cands = []
+        for k in range(n):
+            s = base + k * 7919
+            r = self.tts(TTSRequest(text=line, engine=eng, voice="design:" + description, style="neutral", instruct="", seed=s, lufs=-20.0,
+                                    lead_ms=0, tail_ms=0, validate=False, language=language), priority=priority)
+            A.write_audio(d / f"{k + 1}.wav", r.audio, r.sr)
+            cands.append({"n": k + 1, "seed": s, "duration": round(r.duration, 2)})
+        info = {"batch": batch, "description": description, "text": line, "engine": eng, "language": language, "candidates": cands}
+        (d / "batch.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
+        return info
+
+    def design_candidate_path(self, batch: str, n: int) -> Path:
+        if not re.fullmatch(r"[0-9a-f]{12}", batch or ""):
+            raise FireVoiceError("not_found", "unknown design batch")
+        p = home() / "design" / batch / f"{int(n)}.wav"
+        if not p.exists():
+            raise FireVoiceError("not_found", f"design batch {batch} has no candidate {n}")
+        return p
+
+    def design_keep(self, batch: str, n: int, name: str, *, gender: str = "", language: str = "", description: Optional[str] = None) -> dict:
+        """Keep one candidate as a library voice (locked: the take becomes its reference clip)."""
+        p = self.design_candidate_path(batch, n)
+        info = json.loads((p.parent / "batch.json").read_text(encoding="utf-8"))
+        if not (name or "").strip():
+            raise FireVoiceError("bad_request", "a name is required")
+        if self.voices.exists(name):
+            raise FireVoiceError("conflict", f"voice {name!r} already exists")
+        desc = description or info["description"]
+        self.voices.add(name, p, consent=True, description=desc, gender=gender, tags=["designed", f"designed:{info['engine']}"],
+                        source=f"designed with {info['engine']}", license="synthetic", transcript=info["text"], transcribe=False,
+                        extra={"language": language or info.get("language") or None, "design_prompt": desc})
+        return self.voice(name)
+
+    # -------------------------------------------------------------------- per-style reference clips
+    def voice_build_style_ref(self, voice_id: str, style: str, *, engine: Optional[str] = None, text: Optional[str] = None,
+                              seed: int = 1234, priority: int = 0, cancel: Optional[threading.Event] = None) -> dict:
+        """Give a voice its own clip for a style: render the voice reading in that style (clip-only cloning, which
+        follows the style's instruction), then store it with its transcript as the voice's reference for the style.
+        Later renders in that style continue from this clip, so they keep both the voice and the delivery."""
+        v = self.voice(voice_id)
+        try:
+            st = get_style(style)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        if not st.instruct:
+            raise FireVoiceError("bad_request", f"style {style!r} has no delivery instruction to perform")
+        eng = self._resolve_engine(engine or "voxcpm2")
+        if not catalog.info(eng).instruct:
+            raise FireVoiceError("bad_request", f"engine {eng} cannot follow delivery instructions")
+        line = (text or st.sample or DESIGN_TEXT).strip()
+        line = re.sub(r"\[[^\]]*\]", "", line).strip()       # tags are not spoken in a reference clip
+        # A style clip becomes the prompt for every later render in that style, so a bad one (whispered, shouted
+        # into noise, or drifting to another speaker) would spoil them all. Up to three seeds; keep the best that is
+        # mostly voiced and still clearly this speaker.
+        best, report = None, []
+        main = self.voices.ref_path(v["voice_id"])
+        for k in range(3):
+            r = self.tts(TTSRequest(text=line, engine=eng, voice=v["voice_id"], style=style, instruct=st.instruct, seed=seed + k * 7919, lufs=-20.0,
+                                    lead_ms=0, tail_ms=0, validate=True, candidates=2, params={"ultimate": False}), priority=priority, cancel=cancel)
+            voiced, sim = _clip_checks(r.audio, r.sr, main)
+            report.append({"seed": seed + k * 7919, "voiced": round(voiced, 2), "similarity": None if sim is None else round(sim, 3)})
+            ok = voiced >= 0.3 and (sim is None or sim >= 0.72)
+            score = (sim or 0.8) + min(voiced, 0.6)
+            if ok and (best is None or score > best[0]):
+                best = (score, r)
+            if ok and voiced >= 0.45 and (sim is None or sim >= 0.8):
+                break
+        if best is None:
+            raise FireVoiceError("unavailable", f"could not get a clean {style!r} take of this voice (checked {report}); "
+                                                "try another engine or upload your own clip for the style")
+        r = best[1]
+        tmp = home() / f"_styleref_{os.getpid()}_{threading.get_ident()}.wav"
+        A.write_audio(tmp, r.audio, r.sr)
+        try:
+            self.voices.add_style_ref(v["voice_id"], style, tmp, transcript=line, transcribe=False)
+        finally:
+            tmp.unlink(missing_ok=True)
+        self._forget_voice(v["voice_id"])
+        return self.voice(v["voice_id"])
+
+    def voice_remove_style_ref(self, voice_id: str, style: str) -> dict:
+        v = self.voice(voice_id)
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", style or ""):
+            raise FireVoiceError("bad_request", f"invalid style name {style!r}")
+        d = self.voices.root / v["voice_id"] / "refs"
+        found = False
+        for ext in (".wav", ".txt"):
+            f = d / f"{style}{ext}"
+            if f.exists():
+                f.unlink()
+                found = True
+        if not found:
+            raise FireVoiceError("not_found", f"voice {v['voice_id']} has no clip for style {style!r}")
+        self._forget_voice(v["voice_id"])
+        return self.voice(v["voice_id"])
 
     def voice_collections(self) -> list[dict]:
         from .branding import collections
@@ -1157,7 +1412,7 @@ DESIGN_TEXT = ("Hello there, and welcome; today I want to walk you through somet
 def _voice_view(v: dict, default: Optional[str]) -> dict:
     keep = ("voice_id", "name", "tagline", "traits", "use_cases", "quality", "featured", "category", "description", "gender",
             "language", "accent", "age", "tags", "source", "license", "ref_seconds", "created", "has_ref", "has_preview", "styles", "design_prompt",
-            "favorite", "notes", "avatar")
+            "favorite", "notes", "avatar", "quality_check")
     d = {k: v.get(k) for k in keep if k in v}
     d.setdefault("language", "en")
     d["kind"] = "designed" if ("designed" in (v.get("tags") or []) or v.get("category") == "designed") else "cloned"
@@ -1227,3 +1482,36 @@ def _avatar_version(voice_dir: Path) -> Optional[int]:
         return int((Path(voice_dir) / "avatar.png").stat().st_mtime)
     except OSError:
         return None
+
+
+def _task(engine: str) -> str:
+    try:
+        return catalog.info(engine).task
+    except Exception:
+        return "tts"
+
+
+def _clip_checks(a: np.ndarray, sr: int, ref_path: Optional[str]) -> tuple:
+    """-> (share of 20 ms frames that are voiced speech, speaker similarity to the reference clip or None)."""
+    import librosa
+    y = librosa.resample(np.asarray(a, dtype=np.float32), orig_sr=sr, target_sr=16000) if sr != 16000 else np.asarray(a, dtype=np.float32)
+    try:
+        _f0, vf, _p = librosa.pyin(y, fmin=60, fmax=600, sr=16000, frame_length=1024)
+        rms = librosa.feature.rms(y=y, frame_length=1024, hop_length=256)[0]
+        speech = rms > rms.max() * 0.05
+        n = min(len(vf), len(speech))
+        voiced = float(vf[:n][speech[:n]].mean()) if speech[:n].any() else 0.0
+    except Exception:
+        voiced = 1.0
+    sim = None
+    if ref_path:
+        try:
+            from resemblyzer import VoiceEncoder, preprocess_wav
+            import soundfile as sf
+            enc = _clip_checks.__dict__.setdefault("enc", VoiceEncoder(device="cpu"))
+            r, rsr = sf.read(ref_path, dtype="float32", always_2d=False)
+            r = r.mean(axis=1) if r.ndim > 1 else r
+            sim = float(enc.embed_utterance(preprocess_wav(y, 16000)) @ enc.embed_utterance(preprocess_wav(r, rsr)))
+        except Exception:
+            sim = None
+    return voiced, sim

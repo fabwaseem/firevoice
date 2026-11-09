@@ -74,7 +74,7 @@ function busyBtn(btn, on, label) {
 }
 
 // ------------------------------------------------------------------------------------------------ router
-const PAGES = ["speak", "projects", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
+const PAGES = ["speak", "projects", "changer", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
 function route() {
   const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "speak";
   $$(".page").forEach(s => s.classList.toggle("on", s.id === "page-" + p));
@@ -86,6 +86,7 @@ function route() {
   if (p === "engines") loadEngines();
   if (p === "dictionary") loadDict();
   if (p === "projects") window.loadProjects?.();
+  if (p === "changer") window.loadChanger?.();
 }
 window.addEventListener("hashchange", route);
 
@@ -640,6 +641,8 @@ $("#open-add").onclick = () => {
     <div class="field"><label class="f">Description</label><input class="inp" id="ad-desc" placeholder="warm, mid-forties, slight gravel"></div>
     <div class="field"><label class="f">Transcript <span class="hint">(blank = transcribe automatically)</span></label><textarea class="inp" id="ad-tr" rows="2"></textarea></div>
     <div class="field"><label class="f">Tags <span class="hint">(comma-separated)</span></label><input class="inp" id="ad-tags"></div>
+    <div class="field"><label class="f">Clean the clip <span class="hint">(takes out hiss, hum and room noise before cloning)</span></label>
+      <select class="inp" id="ad-clean"><option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium" selected>Medium</option><option value="strong">Strong</option></select></div>
     <label class="toggle"><input type="checkbox" id="ad-consent"><span class="sw"></span>I own this voice or have permission to use it</label>`,
     `<button class="btn ghost" onclick="Drawer.close()">Cancel</button><button class="btn primary" id="ad-go">${icon("plus")}Add voice</button>`);
   bindDrop("ad-file");
@@ -647,9 +650,15 @@ $("#open-add").onclick = () => {
     const f = $("#ad-file").files[0]; if (!f) return toast("Choose a clip first", "bad"); if (!$("#ad-name").value.trim()) return toast("Give the voice a name", "bad");
     if (!$("#ad-consent").checked) return toast("Confirm you have permission to use this voice", "bad");
     const fd = new FormData(); fd.append("file", f); fd.append("name", $("#ad-name").value.trim()); fd.append("consent", "true");
-    [["gender", "ad-gender"], ["language", "ad-lang"], ["accent", "ad-accent"], ["description", "ad-desc"], ["transcript", "ad-tr"], ["tags", "ad-tags"]].forEach(([k, id]) => fd.append(k, $("#" + id).value));
+    [["gender", "ad-gender"], ["language", "ad-lang"], ["accent", "ad-accent"], ["description", "ad-desc"], ["transcript", "ad-tr"], ["tags", "ad-tags"], ["clean", "ad-clean"]].forEach(([k, id]) => fd.append(k, $("#" + id).value));
     busyBtn($("#ad-go"), true, "Adding…");
-    try { const v = await API.req("/api/v1/voices", { method: "POST", form: fd, timeout: 180000 }); toast(`Added ${v.voice_id}`, "ok"); Drawer.close(); reloadVoices(); }
+    try {
+      const v = await API.req("/api/v1/voices", { method: "POST", form: fd, timeout: 180000 });
+      const q = v.quality_check?.after || v.quality_check?.before;
+      toast(`Added ${v.voice_id}${q ? ` · clip ${q.verdict}, SNR ${q.snr_db} dB` : ""}`, q && q.verdict === "poor" ? "bad" : "ok");
+      if (q?.notes?.length) toast(q.notes.join("; "), q.verdict === "poor" ? "bad" : "");
+      Drawer.close(); reloadVoices();
+    }
     catch (e) { toast(e.message, "bad"); busyBtn($("#ad-go"), false); }
   };
 };
@@ -662,7 +671,8 @@ $("#open-design").onclick = () => {
     <div class="grid2"><div class="field"><label class="f">Engine</label><select class="inp" id="dz-engine">${eng.map(e => `<option value="${e.name}">${esc(e.title)}</option>`).join("")}</select></div>
     <div class="field"><label class="f">Gender</label><select class="inp" id="dz-gender">${GENDER_OPTS("")}</select></div></div>
     <div class="field"><label class="f">Reference line <span class="hint">(optional, what the designed voice says)</span></label><textarea class="inp" id="dz-text" rows="2"></textarea></div>`,
-    `<button class="btn ghost" onclick="Drawer.close()">Cancel</button><button class="btn primary" id="dz-go">${icon("sparkle")}Design voice</button>`);
+    `<button class="btn ghost" onclick="Drawer.close()">Cancel</button><button class="btn" id="dz-try">${icon("dice")}Try 3 versions</button><button class="btn primary" id="dz-go">${icon("sparkle")}Design voice</button>`);
+  window.bindDesignCandidates?.();
   $$("#drawer-body [data-d]").forEach(c => c.onclick = () => { $("#dz-desc").value = c.dataset.d; });
   $("#dz-go").onclick = async () => {
     const body = { name: $("#dz-name").value.trim(), description: $("#dz-desc").value.trim(), engine: $("#dz-engine").value, gender: $("#dz-gender").value };
@@ -676,6 +686,7 @@ $("#open-design").onclick = () => {
 async function editVoice(id) {
   let v; try { v = await API.req(`/api/v1/voices/${encodeURIComponent(id)}`); } catch (e) { return toast(e.message, "bad"); }
   setTimeout(() => {
+    window.voiceToolsSection?.(v);
     const btn = $("#ed-avatar"), file = $("#ed-avatar-file"); if (!btn || !file) return;
     btn.onclick = () => file.click();
     file.onchange = async () => {

@@ -66,6 +66,7 @@ TAGS = [
     {"name": "jobs", "description": "Background renders, batches and voice design with progress events and history."},
     {"name": "takes", "description": "Kept renders (keep_takes): every take of every passage with its speech check. Compare, swap, re-take, lock, export."},
     {"name": "dictionary", "description": "Pronunciation dictionary: your rules for how words are said, plus the built-in list."},
+    {"name": "audio tools", "description": "Check and clean recordings, and the voice changer (speech to speech in any library voice)."},
     {"name": "projects", "description": "Long-form projects: chapters of paragraphs, each rendered with every take kept; render what changed, export WAV/MP3/M4B with chapters, audiobook check, bundles."},
     {"name": "elevenlabs", "description": "ElevenLabs-compatible routes for existing clients."},
     {"name": "legacy", "description": "Older studio contract."},
@@ -131,7 +132,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     app.state.svc = svc
     app.add_middleware(CORSMiddleware, allow_origins=cors_origins or [], allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
                        allow_origin_regex=None if cors_origins else r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost|https?://tauri\.localhost|app://.*)$",
-                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "X-Render-Id", "Content-Disposition"])
+                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "X-Render-Id", "X-Quality-Before", "X-Quality-After", "Content-Disposition"])
 
     # ------------------------------------------------------------------ errors + auth
     def err(code: str, message: str, status: Optional[int] = None):
@@ -273,6 +274,28 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     class RegenBody(BaseModel):
         chunks: Optional[list[int]] = Field(None, description="passage indexes; null = every unlocked passage")
 
+    class StyleBuild(BaseModel):
+        engine: Optional[str] = None
+        text: Optional[str] = Field(None, max_length=2000, description="what the clip says (default: the style's sample)")
+        seed: int = 1234
+
+    class CleanBody(BaseModel):
+        strength: Literal["light", "medium", "strong"] = "medium"
+
+    class DesignCands(BaseModel):
+        description: str = Field(..., min_length=3, max_length=1000)
+        n: int = Field(3, ge=1, le=6)
+        engine: Optional[str] = None
+        text: Optional[str] = Field(None, max_length=1000)
+        seed: Optional[int] = None
+        language: Optional[str] = None
+
+    class DesignKeep(BaseModel):
+        name: str = Field(..., min_length=1, max_length=60)
+        gender: str = ""
+        language: str = ""
+        description: Optional[str] = None
+
     class ProjectNew(BaseModel):
         model_config = ConfigDict(extra="forbid")
         title: str = Field("Untitled project", max_length=200)
@@ -385,15 +408,32 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     @app.post("/api/v1/voices", dependencies=deps, tags=["voices"], status_code=201)
     async def voice_add(file: UploadFile = File(...), name: str = Form(...), consent: bool = Form(False), description: str = Form(""),
-                        gender: str = Form(""), language: str = Form(""), accent: str = Form(""), tags: str = Form(""), transcript: str = Form("")):
+                        gender: str = Form(""), language: str = Form(""), accent: str = Form(""), tags: str = Form(""), transcript: str = Form(""),
+                        clean: str = Form("", description="clean the clip first: light, medium or strong (empty = as recorded)")):
+        """Add a cloned voice (with consent). The response includes `quality_check` of the clip (noise, clipping, length)."""
         p = await save_upload(file)
         try:
             wav = to_wav(p)
             return await run_in_threadpool(lambda: svc.voice_add(name, wav, consent=consent, description=description, gender=gender, language=language,
-                                                                 accent=accent, tags=[t for t in tags.split(",") if t.strip()], transcript=transcript or None))
+                                                                 accent=accent, tags=[t for t in tags.split(",") if t.strip()], transcript=transcript or None,
+                                                                 clean=clean or None))
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
+
+    @app.post("/api/v1/voices/design/candidates", dependencies=deps, tags=["voices"])
+    async def design_candidates(body: DesignCands):
+        """Several takes of a described voice (different seeds) to compare; keep one with .../keep."""
+        return await run_in_threadpool(lambda: svc.design_candidates(body.description, n=body.n, engine=body.engine, text=body.text,
+                                                                     seed=body.seed, language=body.language))
+
+    @app.get("/api/v1/voices/design/candidates/{batch}/{n}/audio", dependencies=deps, tags=["voices"])
+    def design_candidate_audio(batch: str, n: int):
+        return FileResponse(svc.design_candidate_path(batch, n), media_type="audio/wav")
+
+    @app.post("/api/v1/voices/design/candidates/{batch}/{n}/keep", dependencies=deps, tags=["voices"], status_code=201)
+    def design_keep(batch: str, n: int, body: DesignKeep):
+        return svc.design_keep(batch, n, body.name, gender=body.gender, language=body.language, description=body.description)
 
     @app.post("/api/v1/voices/design", dependencies=deps, tags=["voices"])
     async def voice_design(body: DesignBody = Body(openapi_examples=DESIGN_EXAMPLES), wait: bool = True):
@@ -476,6 +516,25 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     @app.get("/api/v1/voices/{voice_id}/audio", dependencies=deps, tags=["voices"])
     def voice_audio(voice_id: str, style: Optional[str] = None):
         return FileResponse(svc.voice_preview_path(voice_id, style), media_type="audio/wav")
+
+    @app.post("/api/v1/voices/{voice_id}/styles/{style}/build", dependencies=deps, tags=["voices"])
+    async def voice_style_build(voice_id: str, style: str, body: StyleBuild = Body(default_factory=lambda: StyleBuild())):
+        """Give the voice its own clip for a style, rendered in that style. Renders in the style then keep both the
+        voice and the delivery. Use a job (kind style_refs) for many styles."""
+        return await run_in_threadpool(lambda: svc.voice_build_style_ref(voice_id, style, engine=body.engine, text=body.text, seed=body.seed))
+
+    @app.delete("/api/v1/voices/{voice_id}/styles/{style}", dependencies=deps, tags=["voices"])
+    def voice_style_remove(voice_id: str, style: str):
+        return svc.voice_remove_style_ref(voice_id, style)
+
+    @app.post("/api/v1/voices/{voice_id}/clean", dependencies=deps, tags=["voices"])
+    async def voice_clean(voice_id: str, body: CleanBody = Body(default_factory=lambda: CleanBody())):
+        """Clean the voice's reference clip in place (the original is kept; restore it with /restore-original)."""
+        return await run_in_threadpool(svc.voice_clean, voice_id, body.strength)
+
+    @app.post("/api/v1/voices/{voice_id}/restore-original", dependencies=deps, tags=["voices"])
+    def voice_restore(voice_id: str):
+        return svc.voice_restore_original(voice_id)
 
     @app.post("/api/v1/voices/{voice_id}/styles/{style}", dependencies=deps, tags=["voices"])
     async def voice_style_ref(voice_id: str, style: str, file: UploadFile = File(...), transcript: str = Form("")):
@@ -678,6 +737,50 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     @app.delete("/api/v1/renders/{rid}", dependencies=deps, tags=["takes"])
     def render_delete(rid: str):
         return svc.render_delete(rid)
+
+    # ------------------------------------------------------------------ audio tools
+    @app.post("/api/v1/audio/analyze", dependencies=deps, tags=["audio tools"])
+    async def audio_analyze(file: UploadFile = File(...)):
+        """How good a recording is to clone from: SNR estimate, clipping, length, silence, a verdict and notes."""
+        p = await save_upload(file)
+        try:
+            return await run_in_threadpool(svc.audio_analyze, to_wav(p))
+        finally:
+            for x in (p, p + ".wav"):
+                Path(x).unlink(missing_ok=True)
+
+    @app.post("/api/v1/audio/clean", dependencies=deps, tags=["audio tools"])
+    async def audio_clean(file: UploadFile = File(...), strength: str = Form("medium"), format: str = Form("wav")):
+        """Take out steady noise, hum and rumble, trim the silent ends and set the level. Headers X-Quality-Before and
+        X-Quality-After carry the check before and after (JSON)."""
+        p = await save_upload(file)
+        try:
+            out, sr, check = await run_in_threadpool(svc.audio_clean, to_wav(p), strength)
+        finally:
+            for x in (p, p + ".wav"):
+                Path(x).unlink(missing_ok=True)
+        return Response(svc.encode(out, format, sr=sr), media_type=A.media_type(format),
+                        headers={"X-Quality-Before": json.dumps(check["before"]), "X-Quality-After": json.dumps(check["after"])})
+
+    @app.post("/api/v1/voice-changer", dependencies=deps, tags=["audio tools"])
+    async def voice_changer(request: Request, file: UploadFile = File(...), voice: str = Form("default"), format: str = Form("mp3"),
+                            lufs: Optional[float] = Form(-16.0)):
+        """Speech to speech: keeps the words, timing and delivery of your recording and swaps the voice for a library voice."""
+        import asyncio
+        p = await save_upload(file)
+        wav = to_wav(p)
+        cancel = threading.Event()
+        try:
+            task = asyncio.ensure_future(run_in_threadpool(lambda: svc.voice_convert(wav, voice, lufs=lufs, cancel=cancel)))
+            while not task.done():
+                done, _ = await asyncio.wait({task}, timeout=0.5)
+                if not done and await request.is_disconnected():
+                    cancel.set()
+            out, sr = task.result()
+        finally:
+            for x in (p, p + ".wav"):
+                Path(x).unlink(missing_ok=True)
+        return Response(svc.encode(out, format, sr=sr), media_type=A.media_type(format), headers={"X-Duration": str(round(len(out) / sr, 3)), "X-Sample-Rate": str(sr)})
 
     # ------------------------------------------------------------------ projects
     @app.get("/api/v1/projects", dependencies=deps, tags=["projects"])

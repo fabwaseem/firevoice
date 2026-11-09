@@ -333,6 +333,43 @@ def cmd_project(a) -> int:
         svc.close()
 
 
+def cmd_convert(a) -> int:
+    """Voice changer: say what the source recording says, the way it says it, in a library voice."""
+    from .service import FireVoiceError
+    svc = _service(a)
+    try:
+        out = Path(a.out)
+        audio, sr = svc.voice_convert(a.source, a.voice, lufs=a.lufs or None)
+        out.write_bytes(svc.encode(audio, _fmt_for(out, None), sr=sr))
+        print(f"{out}: {len(audio) / sr:.1f}s in {a.voice}")
+        return 0
+    except FireVoiceError as e:
+        return _fail(e)
+    finally:
+        svc.close()
+
+
+def cmd_audio(a) -> int:
+    from .service import FireVoiceError
+    svc = _service(a)
+    try:
+        if a.action == "analyze":
+            r = svc.audio_analyze(a.file)
+            print(f"{r['verdict'].upper()}  {r['duration']}s, SNR {r.get('snr_db')} dB, peak {r.get('peak_db')} dBFS, clipped {r.get('clipped_pct')}%")
+            for n in r.get("notes", []):
+                print("  -", n)
+        else:
+            out = Path(a.out or Path(a.file).with_name(Path(a.file).stem + ".clean.wav"))
+            audio, sr, check = svc.audio_clean(a.file, a.strength)
+            out.write_bytes(svc.encode(audio, _fmt_for(out, None), sr=sr))
+            print(f"{out}: SNR {check['before']['snr_db']} -> {check['after']['snr_db']} dB ({check['after']['verdict']})")
+        return 0
+    except FireVoiceError as e:
+        return _fail(e)
+    finally:
+        svc.close()
+
+
 def cmd_batch(a) -> int:
     """Lines from a JSON file ([{"id", "text", <any request field>}...] or {"lines": [...]}) rendered in parallel."""
     from concurrent.futures import ThreadPoolExecutor
@@ -391,6 +428,33 @@ def cmd_voices(a) -> int:
     try:
         if a.action == "list":
             return _print_voices(svc.voice_list(language=a.language, gender=a.gender, tag=a.tag, q=a.q, kind=a.kind), a)
+        if a.action == "clean":
+            r = svc.voice_clean(a.name, a.strength)
+            q = r["quality_check"]
+            print(f"cleaned {r['voice_id']}: SNR {q['before']['snr_db']} -> {q['after']['snr_db']} dB ({q['after']['verdict']}); undo with: firevoice voices restore {r['voice_id']}")
+            return 0
+        if a.action == "restore":
+            print("restored the original clip of", svc.voice_restore_original(a.name)["voice_id"])
+            return 0
+        if a.action == "build-styles":
+            styles = [x.strip() for x in (a.styles or "").split(",") if x.strip()]
+            if not styles:
+                print("usage: firevoice voices build-styles --name VOICE --styles calm,excited [--engine voxcpm2]", file=sys.stderr)
+                return 2
+            for st in styles:
+                svc.voice_build_style_ref(a.name, st, engine=a.engine)
+                print(f"  {st}: done")
+            return 0
+        if a.action == "candidates":
+            b = svc.design_candidates(a.description or "", n=a.n, engine=a.engine)
+            out = Path(a.pack or f"design-{b['batch']}")
+            out.mkdir(parents=True, exist_ok=True)
+            for c in b["candidates"]:
+                dst = out / f"candidate-{c['n']}.wav"
+                dst.write_bytes(svc.design_candidate_path(b["batch"], c["n"]).read_bytes())
+                print(f"  {dst}  (seed {c['seed']})")
+            print(f"keep one with the API: POST /api/v1/voices/design/candidates/{b['batch']}/N/keep  (or: firevoice voices design --seed SEED)")
+            return 0
         if a.action == "avatar":
             if a.remove:
                 svc.voice_remove_avatar(a.name)
@@ -949,6 +1013,20 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--limit", type=int, default=30)
     rd.set_defaults(fn=cmd_renders)
 
+    cv = sub.add_parser("convert", help="voice changer: a recording's words, timing and delivery in a library voice")
+    cv.add_argument("source", help="the recording (any format ffmpeg reads is fine once converted to wav)")
+    cv.add_argument("--voice", default="default")
+    cv.add_argument("-o", "--out", default="converted.wav")
+    cv.add_argument("--lufs", type=float, default=-16.0)
+    cv.set_defaults(fn=cmd_convert)
+
+    au2 = sub.add_parser("audio", help="check how good a recording is to clone from, or clean it")
+    au2.add_argument("action", choices=["analyze", "clean"])
+    au2.add_argument("file")
+    au2.add_argument("-o", "--out", default=None)
+    au2.add_argument("--strength", choices=["light", "medium", "strong"], default="medium")
+    au2.set_defaults(fn=cmd_audio)
+
     pj = sub.add_parser("project", help="long-form projects: chapters of paragraphs, render what changed, export audiobooks")
     pj.add_argument("action", nargs="?", default="list", choices=["list", "new", "show", "render", "lock", "unlock", "export", "check", "bundle", "import", "delete"])
     pj.add_argument("id", nargs="?", help="project id (list shows them); new: the title; import: the bundle file")
@@ -972,7 +1050,9 @@ def build_parser() -> argparse.ArgumentParser:
     b.set_defaults(fn=cmd_batch)
 
     v = sub.add_parser("voices", help="list, add, design, update and remove voices")
-    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import", "avatar"])
+    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import", "avatar", "clean", "restore", "build-styles", "candidates"])
+    v.add_argument("--strength", choices=["light", "medium", "strong"], default="medium", help="clean: how hard to denoise")
+    v.add_argument("-n", type=int, default=3, help="candidates: how many takes of the described voice")
     v.add_argument("--image", default=None, help="avatar: an image file to use (any size; centre-cropped); --remove to drop it")
     v.add_argument("--remove", action="store_true", help="avatar: remove the voice's avatar")
     v.add_argument("--pack", default=None, help="pack: output .zip (default <voice>.fvvoice.zip) | import: the voice pack to add")

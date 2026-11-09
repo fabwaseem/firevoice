@@ -178,6 +178,16 @@ firevoice voices pack Ember --pack ember.zip ; firevoice voices import --pack em
 The Projects page in the playground and the desktop app edits chapters and paragraphs (each with its own voice and
 style if you like), saves as you type, renders only what changed in the background, and opens each paragraph's takes.
 
+## Voice tools
+
+```bash
+firevoice convert performance.wav --voice Ember -o ember.wav     # voice changer: your timing and delivery, another voice
+firevoice audio analyze clip.wav ; firevoice audio clean clip.wav -o clip.clean.wav --strength medium
+firevoice voices clean --name Isla ; firevoice voices restore --name Isla
+firevoice voices build-styles --name Ember --styles calm,serious   # the voice's own clip per style
+firevoice voices avatar --name Ember --image face.png
+```
+
 ## Markup, styles and voices
 
 ### Markup

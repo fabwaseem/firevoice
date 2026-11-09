@@ -77,6 +77,8 @@ def builtin_engines() -> dict[str, EngineSpec]:
                    description="Kokoro 82M: preset voices, fastest, no cloning"),
         EngineSpec("maya1", "maya1", _venv_python("maya1"), default_workers=1, license="Apache-2.0", commercial=True, vram_gb=9.0,
                    description="Maya1 3B: voice from description, 20 emotion tags"),
+        EngineSpec("chatterbox-vc", "chatterbox-vc", main_py, default_workers=1, license="MIT", commercial=True, vram_gb=3.0,
+                   description="Chatterbox voice changer: speech to speech, keeps timing and delivery, swaps the voice"),
     ]
     return {s.name: s for s in specs}
 

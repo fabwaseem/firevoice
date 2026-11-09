@@ -82,6 +82,7 @@ class EngineInfo:
     notes: str = ""
     params: list = field(default_factory=list)
     requires: Optional[str] = None  # python package that must import (engines that run in the main venv)
+    task: str = "tts"               # "tts" (text to speech) or "vc" (voice changer: speech to speech)
 
     def param(self, name: str) -> Optional[Param]:
         return next((p for p in self.params if p.name == name), None)
@@ -123,7 +124,7 @@ T_TOPP = Param("top_p", "float", 0.95, 0.1, 1.0, 0.01, label="Top-p")
 
 
 CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
-    EngineInfo("null", "Null (test)", clone=True, needs_reference=False, design=True, tags=True, languages=["*"], notes="silence, for tests"),
+    EngineInfo("null", "Null (test)", clone=True, needs_reference=False, design=True, instruct=True, tags=True, languages=["*"], notes="silence, for tests"),
     EngineInfo("chatterbox-turbo", "Chatterbox Turbo 350M", tags=True, languages=["en"], speed_rtf=0.22, requires="chatterbox",
                notes="fastest cloner; [laugh] [sigh] tags; PerTh watermark",
                params=[T_TEMP, T_TOPP, Param("top_k", "int", 1000, 1, 4000, 1, label="Top-k"),
@@ -165,6 +166,8 @@ CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
     EngineInfo("kokoro", "Kokoro 82M", clone=False, needs_reference=False, presets=KOKORO_PRESETS, languages=["en"], venv="kokoro", speed_rtf=0.01,
                notes="preset voices only (use voice 'design:<preset name>'); fastest",
                params=[Param("speed", "float", 1.0, 0.5, 2.0, 0.05, label="Speed")]),
+    EngineInfo("chatterbox-vc", "Chatterbox voice changer", languages=["*"], requires="chatterbox", task="vc",
+               notes="speech to speech: keeps the words, timing and delivery of a recording, swaps the voice"),
     EngineInfo("maya1", "Maya1 3B", clone=False, needs_reference=False, design=True, tags=True, languages=["en"], venv="maya1", weights="maya1", speed_rtf=2.03,
                notes="voice from a description; 20 emotion tags",
                params=[Param("temperature", "float", 0.4, 0.05, 1.5, 0.05, label="Temperature"), T_TOPP,

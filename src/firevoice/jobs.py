@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design", "previews", "project")
+KINDS = ("tts", "batch", "design", "previews", "project", "style_refs")
 
 
 @dataclass
@@ -106,6 +106,12 @@ class JobManager:
             title = title or f"design voice {payload['name']}"
         elif kind == "previews":
             title = title or f"voice previews ({len(payload.get('voices') or []) or 'all'})"
+        elif kind == "style_refs":
+            v = self.svc.voice(str(payload.get("voice") or ""))
+            styles = payload.get("styles") or []
+            if not isinstance(styles, list) or not styles:
+                raise FireVoiceError("bad_request", "style_refs needs a voice and a list of styles")
+            title = title or f"{v.get('name') or v['voice_id']}: {len(styles)} style clip(s)"
         elif kind == "project":
             p = self.svc.project_get(str(payload.get("project") or ""))
             if payload.get("scope", "stale") not in ("stale", "all"):
@@ -368,6 +374,26 @@ class JobManager:
                 failed.append({"paragraph": para, "chapter": ch, "error": e.message[:200]})
         self._progress(j, len(todo), max(1, len(todo)))
         j.result = {"project": p["project"], "rendered": len(done), "failed": failed}
+
+    def _run_style_refs(self, j: Job, cancel: threading.Event) -> None:
+        """Build a voice's own clip for each listed style, one by one."""
+        from .service import FireVoiceError
+        from .types import Cancelled
+        p = j.payload
+        done, failed = [], []
+        for k, st in enumerate(p["styles"]):
+            if cancel.is_set():
+                raise Cancelled("cancelled")
+            self._progress(j, k, len(p["styles"]), message=f"{st} ({k + 1} of {len(p['styles'])})")
+            try:
+                self.svc.voice_build_style_ref(p["voice"], st, engine=p.get("engine"), priority=1, cancel=cancel)
+                done.append(st)
+            except Cancelled:
+                raise
+            except FireVoiceError as e:
+                failed.append({"style": st, "error": e.message[:200]})
+        self._progress(j, len(p["styles"]), max(1, len(p["styles"])))
+        j.result = {"voice": p["voice"], "built": done, "failed": failed}
 
     def _run_design(self, j: Job, cancel: threading.Event) -> None:
         p = j.payload

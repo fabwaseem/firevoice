@@ -195,6 +195,20 @@ is re-rendered.
 | `POST /api/v1/renders/{id}/regenerate` | New takes for `{chunks: [i, ...]}`, or every unlocked passage. |
 | `DELETE /api/v1/renders/{id}` | Delete a kept render. The newest 200 are kept (and any with a locked passage). |
 
+### Voice tools
+
+| | |
+|---|---|
+| `POST /api/v1/voice-changer` | Speech to speech (Chatterbox VC): multipart `file`, `voice`, `format`, `lufs`. Keeps the words, timing and delivery; swaps the voice. |
+| `POST /api/v1/audio/analyze` | How good a recording is to clone from: `snr_db`, `clipped_pct`, `duration`, `silence_pct`, `verdict` (good, fair, poor), `notes`. |
+| `POST /api/v1/audio/clean` | `file`, `strength` (light, medium, strong): RNNoise denoise (FFT fallback), rumble cut, trimmed ends, -20 dBFS level. Headers `X-Quality-Before/After`. |
+| `POST /api/v1/voices` with `clean` | Clean the clip before adding; the response carries `quality_check`. |
+| `POST /api/v1/voices/{id}/clean` / `restore-original` | Clean a voice's clip in place (the original is kept), or put the original back. |
+| `POST /api/v1/voices/{id}/styles/{style}/build` | The voice's own clip for a style, rendered in that style. Three tries, kept only if mostly voiced and still clearly the speaker; renders in that style then keep voice and delivery. Job kind `style_refs` builds several. |
+| `DELETE /api/v1/voices/{id}/styles/{style}` | Remove a style clip. |
+| `POST /api/v1/voices/design/candidates` | `{description, n}`: several takes to compare; `GET .../candidates/{batch}/{n}/audio`; keep one with `POST .../candidates/{batch}/{n}/keep {name}`. |
+| `GET/POST/DELETE /api/v1/voices/{id}/avatar` | The voice's mascot avatar (512x512 PNG); voices list `avatar` as a version for `?v=`. |
+
 ### Projects (long form)
 
 Audiobooks, courses and series: chapters of paragraphs in `FIREVOICE_HOME/projects/<id>/project.json` (plain JSON).
