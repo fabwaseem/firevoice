@@ -1,0 +1,22 @@
+{
+ "name": "asmr",
+ "title": "ASMR Whisper",
+ "description": "Breathy, very close, whispered intimacy; slow and soft.",
+ "pace": 0.9,
+ "pause": 1.6,
+ "temperature": 0.6,
+ "cfg": 2.4,
+ "instruct": "Whisper softly and intimately, very close to the microphone, slow, breathy and gentle.",
+ "desc": "soft, breathy, intimate whispering voice",
+ "emo_vector": [
+  0.1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.9
+ ],
+ "sample": "Hey. [pause 400ms] It's just you and me now. Let's take this slowly. Every click of the keyboard... [pause 300ms] every soft tap... is one more thing finished. You're doing fine."
+}

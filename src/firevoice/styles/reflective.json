@@ -1,0 +1,25 @@
+{
+ "name": "reflective",
+ "title": "Reflective",
+ "description": "Thoughtful, slower, slightly melancholic; endings, lessons learned, retrospectives.",
+ "pace": 0.94,
+ "pause": 1.35,
+ "temperature": 0.7,
+ "cfg": 2.2,
+ "instruct": "Speak thoughtfully and reflectively, slower, slightly wistful, as if looking back.",
+ "desc": "thoughtful, reflective, slightly wistful tone",
+ "emo_vector": [
+  0.1,
+  0,
+  0.2,
+  0,
+  0,
+  0.4,
+  0,
+  0.4
+ ],
+ "tags": [
+  "sigh"
+ ],
+ "sample": "Looking back, the bug was never the problem. [sigh] The problem was that none of us wanted to be the one to say we didn't understand the code. We all nodded. We all shipped. And we all learned the same lesson, the hard way."
+}

@@ -1,0 +1,25 @@
+{
+ "name": "storyteller",
+ "title": "Storyteller",
+ "description": "Warm audiobook narration with gentle drama, longer pauses, slower tempo.",
+ "pace": 0.98,
+ "pause": 1.25,
+ "temperature": 0.85,
+ "cfg": 2.2,
+ "instruct": "Narrate warmly like an audiobook storyteller, with gentle drama, unhurried, expressive pauses.",
+ "desc": "warm, intimate storytelling narration",
+ "emo_vector": [
+  0.2,
+  0,
+  0.1,
+  0,
+  0,
+  0.2,
+  0.1,
+  0.5
+ ],
+ "tags": [
+  "sigh"
+ ],
+ "sample": "The old lighthouse keeper hadn't spoken to anyone in eleven years. So when the knock came, three slow taps on the iron door, he did the only thing that made sense. [pause 400ms] He put the kettle on. Whoever it was, they'd come a long way. And the sea, that night, was not giving anything back."
+}

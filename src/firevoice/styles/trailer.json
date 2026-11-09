@@ -1,0 +1,22 @@
+{
+ "name": "trailer",
+ "title": "Trailer",
+ "description": "Epic movie-trailer gravel: slow, huge, every line a punch.",
+ "pace": 0.9,
+ "pause": 1.7,
+ "temperature": 0.85,
+ "cfg": 2.4,
+ "instruct": "Speak like an epic movie trailer voice, deep, slow, gravelly, every sentence landing with weight.",
+ "desc": "deep, gravelly, epic movie-trailer voice",
+ "emo_vector": [
+  0,
+  0.2,
+  0.1,
+  0.1,
+  0,
+  0.2,
+  0.3,
+  0.1
+ ],
+ "sample": "In a world... [pause 600ms] where every password is the same password. [pause 500ms] One developer. One commit. [pause 400ms] And a single semicolon that changes everything. [pause 500ms] This summer... hashing gets personal."
+}

@@ -1,0 +1,26 @@
+{
+ "name": "conversational",
+ "title": "Conversational",
+ "description": "Relaxed, natural, like talking to a friend across the table.",
+ "pace": 1.0,
+ "pause": 1.0,
+ "temperature": 0.8,
+ "cfg": 2.0,
+ "instruct": "Speak casually and naturally, like chatting with a friend, warm and relaxed.",
+ "desc": "relaxed, friendly, conversational delivery",
+ "emo_vector": [
+  0.3,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.1,
+  0.5
+ ],
+ "tags": [
+  "chuckle",
+  "hmm"
+ ],
+ "sample": "So here's the thing nobody tells you about passwords. [chuckle] Most of them are terrible. Not yours, obviously. Yours is great. But the average one? It's basically the word password with a one at the end. And that's the whole reason this stuff matters."
+}

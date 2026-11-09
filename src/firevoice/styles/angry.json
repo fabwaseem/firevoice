@@ -1,0 +1,26 @@
+{
+ "name": "angry",
+ "title": "Angry",
+ "description": "Controlled anger and frustration; sharp, clipped, intense.",
+ "pace": 1.03,
+ "pause": 0.9,
+ "temperature": 0.9,
+ "cfg": 2.0,
+ "instruct": "Speak with sharp, controlled anger and frustration, clipped and intense.",
+ "desc": "sharp, frustrated, intense angry tone",
+ "emo_vector": [
+  0,
+  0.8,
+  0,
+  0,
+  0.2,
+  0,
+  0,
+  0
+ ],
+ "tags": [
+  "groan",
+  "sigh"
+ ],
+ "sample": "Who approved this? [groan] Seriously. Who looked at a function that stores passwords in plain text and thought, yes, ship it, Friday at five, no review? I want names. I want a timeline. And I want the coffee machine fixed, because clearly nobody here is awake."
+}

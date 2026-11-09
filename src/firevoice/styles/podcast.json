@@ -1,0 +1,26 @@
+{
+ "name": "podcast",
+ "title": "Podcast Host",
+ "description": "Intimate, candid, warm host voice with natural hesitations.",
+ "pace": 1.0,
+ "pause": 1.05,
+ "temperature": 0.85,
+ "cfg": 2.0,
+ "instruct": "Talk like a warm, candid podcast host, intimate and conversational, natural rhythm.",
+ "desc": "warm, candid podcast-host voice",
+ "emo_vector": [
+  0.3,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.1,
+  0.5
+ ],
+ "tags": [
+  "chuckle",
+  "hmm"
+ ],
+ "sample": "Welcome back. So today I want to talk about the one mistake I see every single week. [chuckle] And yes, I've made it too. More than once. It's about how we store passwords, and honestly, it's going to change how you look at every login screen."
+}

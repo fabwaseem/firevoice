@@ -1,0 +1,22 @@
+{
+ "name": "explainer",
+ "title": "Explainer",
+ "description": "Clear, confident teacher voice for tutorials and tech explainers; crisp consonants, steady rhythm.",
+ "pace": 1.0,
+ "pause": 1.1,
+ "temperature": 0.7,
+ "cfg": 2.0,
+ "instruct": "Speak clearly and confidently like a friendly expert explaining something to a beginner, measured pace, articulate.",
+ "desc": "clear, articulate, confident educational tone",
+ "emo_vector": [
+  0.3,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.1,
+  0.6
+ ],
+ "sample": "Okay, quick question. Did the website keep your password? If they did it right, no. They kept a hash. Think of a hash like a fingerprint for text. You can get the fingerprint from the text, but you can't rebuild the text from the fingerprint. And in the next four minutes, you'll see exactly why that protects you."
+}

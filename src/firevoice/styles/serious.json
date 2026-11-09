@@ -1,0 +1,22 @@
+{
+ "name": "serious",
+ "title": "Serious",
+ "description": "Grounded, measured authority; warnings, facts, bad news handled with respect.",
+ "pace": 0.97,
+ "pause": 1.15,
+ "temperature": 0.65,
+ "cfg": 2.0,
+ "instruct": "Speak in a serious, measured, authoritative tone, calm and grounded.",
+ "desc": "serious, measured, authoritative tone",
+ "emo_vector": [
+  0,
+  0,
+  0.1,
+  0,
+  0,
+  0.1,
+  0,
+  0.8
+ ],
+ "sample": "Here is what actually happened. The database was exposed for nine days. Not nine minutes. Nine days. Every record, every email, every hashed password. And the first anyone knew about it was a message from a stranger."
+}
