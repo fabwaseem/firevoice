@@ -3,6 +3,8 @@ import io
 import time
 import zipfile
 
+import pytest
+
 import numpy as np
 import soundfile as sf
 
@@ -73,3 +75,31 @@ def test_dialogue_route_mix_stems_zip(svc, tmp_path):
 def test_tags_catalog(svc):
     t = _client(svc).get("/api/v1/tags").json()
     assert any(x["tag"] == "[laugh]" for x in t["sound"]) and any(x["tag"] == "[whisper]" and x["style"] == "asmr" for x in t["delivery"])
+
+
+def test_sound_cues_in_dialogue(svc, monkeypatch):
+    import numpy as np
+
+    from firevoice.core import catalog
+    from firevoice.service import FireVoiceError
+    script = "[music: calm piano]\nAna: Hello there, welcome.\n[sfx: a door creaks, 1.5s]\nBen: Sorry I am late."
+    with pytest.raises(FireVoiceError) as e:
+        svc.dialogue(script)                      # sound engines not installed
+    assert e.value.code == "unavailable"
+    real = catalog.EngineInfo.status
+    monkeypatch.setattr(catalog.EngineInfo, "status", lambda self: {"ready": True} if self.task == "sfx" else real(self))
+    made = []
+
+    def fake_sound(prompt, kind, duration, seed=None, **kw):
+        made.append((kind, prompt, duration))
+        return (0.3 * np.sin(np.linspace(0, 400, int(16000 * duration)))).astype(np.float32), 16000, {}
+    monkeypatch.setattr(svc, "sound", fake_sound)
+    d = svc.dialogue(script, lufs=None)
+    assert ("sfx", "a door creaks", 1.5) in made and any(k == "music" for k, *_ in made)
+    assert set(d["stems"]) == {"Ana", "Ben", "SFX", "Music"} and set(d["cast"]) == {"Ana", "Ben"}
+    kinds = [t.get("kind") for t in d["turns"]]
+    assert kinds[0] == "music" and "sfx" in kinds
+    sfx = next(t for t in d["turns"] if t.get("kind") == "sfx")
+    assert abs((sfx["end"] - sfx["start"]) - 1.5) < 0.05
+    assert len(d["stems"]["Music"]) == len(d["audio"])
+    assert "door" not in svc.dialogue_subtitles(d["turns"], "srt")

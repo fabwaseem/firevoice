@@ -263,6 +263,9 @@ A dialogue script has one turn per line: `Name: text` or `[Name] text`. A line w
 | `POST /api/v1/dialogue` | `{script, cast?, defaults?, gap_ms, format, response: audio\|json\|zip, stems}`. `json` returns the mix, `turns` with times, `words` with speakers (and stems with `stems: true`); `zip` holds the mix, one track per speaker, SRT/VTT labelled with speakers, and `turns.json`. Long scripts: job kind `dialogue`. |
 | `GET /api/v1/tags` | Sound tags (`[laugh]`, `[sigh]`...: performed by engines with tag support, dropped by the rest), delivery tags (`[whisper]`, `[excited]`, `[calm]`... switch the style until `[normal]`), and the markup directives. |
 
+
+Dialogue scripts take sound cues on their own line. `[sfx: description, 2s]` places an effect between turns (stem `SFX`), and one `[music: description]` bed is looped under the whole mix (stem `Music`). Cue turns come back with `kind: "sfx" | "music"` and are left out of the subtitles. They need `audioldm2` / `musicgen` installed; the request fails with `503` before any speech is rendered otherwise.
+
 ### Voice tools
 
 | | |

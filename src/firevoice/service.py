@@ -1129,8 +1129,10 @@ class FireVoice:
         """The turns, the speakers, and a cast with a voice for every speaker (yours where given)."""
         from .dialogue import auto_cast, parse, speakers
         turns = parse(script)
-        if not turns:
+        if not any(not t.get("kind") for t in turns):
             raise FireVoiceError("bad_request", "the script has no lines")
+        if sum(1 for t in turns if t.get("kind") == "music") > 1:
+            raise FireVoiceError("bad_request", "one [music: ...] bed per script")
         names = speakers(turns)
         return {"turns": turns, "speakers": names, "cast": auto_cast(names, self.voice_list(), cast)}
 
@@ -1144,8 +1146,15 @@ class FireVoice:
         info = self.dialogue_parse(script, cast)
         turns, cast = info["turns"], info["cast"]
         base = {k: v for k, v in (defaults or {}).items() if k not in ("text", "voice", "keep_takes")}
+        speech = [i for i, t in enumerate(turns) if not t.get("kind")]
+        cues = [i for i, t in enumerate(turns) if t.get("kind")]
+        for i in cues:   # sound cues need their engine; say so before rendering any speech
+            eng = "musicgen" if turns[i]["kind"] == "music" else "audioldm2"
+            if not catalog.info(eng).status()["ready"]:
+                raise FireVoiceError("unavailable", f"the script has a [{turns[i]['kind']}: ...] cue but {eng} is not installed (Engines)")
         reqs = []
-        for i, t in enumerate(turns):
+        for i in speech:
+            t = turns[i]
             c = cast[t["speaker"]]
             d = {**base, "text": t["text"], "voice": c.get("voice") or "default", "seed": seed + i * 101, "lufs": None, "lead_ms": 0, "tail_ms": 0}
             for k in ("style", "pace", "engine", "instruct", "language"):
@@ -1156,18 +1165,29 @@ class FireVoice:
             reqs.append(req)
         done = {"n": 0}
 
-        def one(i):
+        total_steps = len(reqs) + len(cues)
+
+        def one(k):
             if cancel is not None and cancel.is_set():
                 raise Cancelled("cancelled")
-            r = self.tts(reqs[i], cancel=cancel, priority=priority)
+            r = self.tts(reqs[k], cancel=cancel, priority=priority)
             done["n"] += 1
             if on_turn:
-                on_turn(done["n"], len(reqs))
+                on_turn(done["n"], total_steps)
             return r
         with ThreadPoolExecutor(max_workers=3, thread_name_prefix="fv-dialogue") as ex:
-            renders = list(ex.map(one, range(len(reqs))))
-        sr = max(r.sr for r in renders)
-        names = info["speakers"]
+            renders_by = dict(zip(speech, ex.map(one, range(len(reqs)))))
+        sr = max(r.sr for r in renders_by.values())
+        sounds = {}
+        for i in cues:
+            t = turns[i]
+            secs = t.get("seconds") or (30.0 if t["kind"] == "music" else 3.0)
+            a_, s_, _info = self.sound(t["text"], t["kind"], secs, seed + i * 101, priority=priority, cancel=cancel)
+            sounds[i] = A.resample(a_, s_, sr)
+            done["n"] += 1
+            if on_turn:
+                on_turn(done["n"], total_steps)
+        names = info["speakers"] + (["SFX"] if any(turns[i]["kind"] == "sfx" for i in cues) else [])
         mix, stems = [], {n: [] for n in names}
         out_turns, words = [], []
         t = 0.15
@@ -1175,9 +1195,13 @@ class FireVoice:
         mix.append(lead)
         for n in names:
             stems[n].append(lead)
-        for i, (turn, r) in enumerate(zip(turns, renders)):
-            a = A.resample(r.audio, r.sr, sr)
-            if i:
+        placed = 0
+        for i, turn in enumerate(turns):
+            if turn.get("kind") == "music":
+                continue
+            r = renders_by.get(i)
+            a = A.resample(r.audio, r.sr, sr) if r is not None else sounds[i] * 0.7
+            if placed:
                 g = A.silence(int(gap_ms), sr)
                 mix.append(g)
                 for n in names:
@@ -1187,27 +1211,42 @@ class FireVoice:
             mix.append(a)
             for n in names:
                 stems[n].append(a if n == turn["speaker"] else np.zeros(len(a), np.float32))
-            factor = len(a) / max(1, len(r.audio))
-            words += [{"text": w.text, "start": round(t + w.start * factor, 3), "end": round(t + w.end * factor, 3), "speaker": turn["speaker"]}
-                      for w in r.result.words]
+            if r is not None:
+                factor = len(a) / max(1, len(r.audio))
+                words += [{"text": w.text, "start": round(t + w.start * factor, 3), "end": round(t + w.end * factor, 3), "speaker": turn["speaker"]}
+                          for w in r.result.words]
             t += len(a) / sr
-            out_turns.append({"speaker": turn["speaker"], "voice": cast[turn["speaker"]].get("voice"), "text": turn["text"],
-                              "start": round(start, 3), "end": round(t, 3)})
+            placed += 1
+            out_turns.append({"speaker": turn["speaker"], "voice": cast[turn["speaker"]].get("voice") if r is not None else None,
+                              "text": turn["text"] if r is not None else f"[sfx: {turn['text']}]", "start": round(start, 3), "end": round(t, 3),
+                              **({"kind": "sfx"} if r is None else {})})
         tail = A.silence(400, sr)
         mix.append(tail)
         for n in names:
             stems[n].append(tail)
         audio = np.concatenate(mix).astype(np.float32)
+        out_stems = {n: np.concatenate(v).astype(np.float32) for n, v in stems.items()}
+        music = next((i for i in cues if turns[i]["kind"] == "music"), None)
+        if music is not None:
+            bed = _loop_to(sounds[music], len(audio), sr) * 0.16          # about -16 dB under the voices
+            fade_in, fade_out = min(len(bed), int(1.0 * sr)), min(len(bed), int(2.5 * sr))
+            bed[:fade_in] *= np.linspace(0, 1, fade_in, dtype=np.float32)
+            bed[len(bed) - fade_out:] *= np.linspace(1, 0, fade_out, dtype=np.float32)
+            audio = audio + bed
+            out_stems["Music"] = bed
+            out_turns.insert(0, {"speaker": "Music", "voice": None, "text": f"[music: {turns[music]['text']}]", "start": 0.0,
+                                 "end": round(len(audio) / sr, 3), "kind": "music"})
         if lufs is not None and len(audio) > sr // 10:
             audio = A.studio_chain(audio, sr, lufs)
-        return {"audio": audio, "sr": sr, "stems": {n: np.concatenate(v).astype(np.float32) for n, v in stems.items()},
-                "turns": out_turns, "words": words, "cast": cast}
+        return {"audio": audio, "sr": sr, "stems": out_stems, "turns": out_turns, "words": words, "cast": cast}
 
     def dialogue_subtitles(self, turns: list[dict], fmt: str = "srt") -> str:
         """One cue per turn (split when long), labelled with the speaker."""
         from . import subtitles as S
         cues = []
         for t in turns:
+            if t.get("kind"):          # sound cues are heard, not spoken
+                continue
             cues.append({"start": t["start"], "end": t["end"], "text": f"{t['speaker']}: {t['text']}"})
         if fmt == "vtt":
             return "WEBVTT\n\n" + "\n".join(f"{S._ts(c['start'], '.')} --> {S._ts(c['end'], '.')}\n{S._wrap(c['text'])}\n" for c in cues)
@@ -2023,6 +2062,20 @@ def _avatar_version(voice_dir: Path) -> Optional[int]:
         return int((Path(voice_dir) / "avatar.png").stat().st_mtime)
     except OSError:
         return None
+
+
+def _loop_to(a: np.ndarray, n: int, sr: int, xfade_s: float = 1.5) -> np.ndarray:
+    """Repeat `a` (a music bed) to `n` samples with crossfaded joins."""
+    a = np.asarray(a, dtype=np.float32)
+    if len(a) >= n or not len(a):
+        return a[:n].copy() if len(a) else np.zeros(n, np.float32)
+    x = min(int(xfade_s * sr), len(a) // 3)
+    out = a.copy()
+    ramp = np.linspace(0, 1, x, dtype=np.float32)
+    while len(out) < n:
+        out[-x:] = out[-x:] * (1 - ramp) + a[:x] * ramp
+        out = np.concatenate([out, a[x:]])
+    return out[:n]
 
 
 def _task(engine: str) -> str:

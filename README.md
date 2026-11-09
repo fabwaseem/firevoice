@@ -226,6 +226,9 @@ firevoice dialogue script.txt -o show.mp3 --stems stems/ --srt show.srt   # "Nam
 firevoice dialogue script.txt --cast "Ayesha=urd-f-cv01,Bilal=Bilal" --dry-run   # see the turns and who speaks
 ```
 
+Sound cues sit on their own line: `[sfx: a door creaks open, 2s]` puts an effect between turns, and one
+`[music: calm lo-fi piano]` lays a bed under the whole dialogue (a stem each). They need the sound engines installed.
+
 Delivery tags work in any script: `[whisper]`, `[excited]`, `[calm]`, `[sad]`, `[angry]`, `[serious]`, `[dramatic]`
 switch the style until `[normal]`.
 
