@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { Button, Card, CardBody, CardHeader, EmptyState, Input, Label, LabeledSlider, Select, Switch } from "@/components/ui";
 import { AudioSource, type SourceFile } from "@/components/transcribe/AudioSource";
 import { TranscriptResult } from "@/components/transcribe/TranscriptResult";
+import { TrySample } from "@/components/tools/TrySample";
 
 const LANG_OPTIONS = [
   { value: "auto", label: "Auto detect" },
@@ -59,6 +60,11 @@ export function TranscribeView() {
             <CardHeader title="Audio" description="A file from disk or a fresh recording." />
             <CardBody>
               <AudioSource value={source} onChange={(f) => { setSource(f); setError(null); }} disabled={busy} />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <TrySample name="conversation.mp3" label="Try a sample conversation" disabled={busy}
+                  onFile={(f) => { setSource({ blob: f, name: f.name, duration: null }); setError(null); }} />
+                <span className="text-[12px] text-faint">three speakers: turn on Label who speaks</span>
+              </div>
             </CardBody>
           </Card>
           <Card>

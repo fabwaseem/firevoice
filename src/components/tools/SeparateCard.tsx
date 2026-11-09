@@ -5,6 +5,7 @@ import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
 import { saveBlob } from "@/lib/audio";
 import { Button, Card, NativeSelect } from "@/components/ui";
+import { TrySample } from "@/components/tools/TrySample";
 
 type Mode = "vocals" | "denoise" | "dereverb";
 const REST: Record<Mode, string> = { vocals: "music and effects", denoise: "noise", dereverb: "room echo" };
@@ -43,6 +44,8 @@ export function SeparateCard() {
           }}
           className="min-w-0 flex-1 text-[12.5px] text-ink-2 file:mr-3 file:rounded-md file:border-0 file:bg-surface-3 file:px-3 file:py-1.5 file:text-ink"
         />
+        <TrySample name="speech-with-music.mp3" onFile={(f) => { setFile(f); setOut(null); }} />
+        {file && <span className="max-w-[180px] truncate text-[12px] text-faint" title={file.name}>{file.name}</span>}
         <NativeSelect value={mode} onChange={(e) => setMode(e.target.value as Mode)} className="w-auto" aria-label="What to separate">
           <option value="vocals">Voice | music and effects</option>
           <option value="denoise">Voice | noise</option>

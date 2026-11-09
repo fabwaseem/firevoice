@@ -11,6 +11,7 @@ import { WatermarkCheck } from "@/components/tools/WatermarkCheck";
 import { QualityCheck } from "@/components/tools/QualityReport";
 import { SeparateCard } from "@/components/tools/SeparateCard";
 import { Badge, Button, Card, Label, NativeSelect } from "@/components/ui";
+import { TrySample } from "@/components/tools/TrySample";
 
 /** Voice changer: keep the words, timing and delivery of a recording, swap the voice. */
 export function VoiceChangerView() {
@@ -84,6 +85,7 @@ export function VoiceChangerView() {
           <input ref={fileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) use(f, f.name); e.target.value = ""; }} />
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" leading={<Upload className="size-4" />} onClick={() => fileRef.current?.click()}>Choose a file</Button>
+            <TrySample name="speech.mp3" onFile={(f) => use(f, f.name)} />
             <Button variant={recording ? "danger" : "outline"} leading={recording ? <Square className="size-4" /> : <Mic className="size-4" />} onClick={record}>
               {recording ? "Stop" : "Record"}
             </Button>

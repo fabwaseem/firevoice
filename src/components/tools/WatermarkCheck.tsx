@@ -5,6 +5,7 @@ import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
 import type { WatermarkResult } from "@/lib/api/types";
 import { Badge, Button, Card } from "@/components/ui";
+import { TrySample } from "@/components/tools/TrySample";
 
 /** Is a file AI speech? Every FireVoice output carries an inaudible AudioSeal watermark; this finds it again. */
 export function WatermarkCheck() {
@@ -38,6 +39,8 @@ export function WatermarkCheck() {
           }}
           className="min-w-0 flex-1 text-[12.5px] text-ink-2 file:mr-3 file:rounded-md file:border-0 file:bg-surface-3 file:px-3 file:py-1.5 file:text-ink"
         />
+        <TrySample name="speech.mp3" onFile={(f) => { setFile(f); setR(null); }} />
+        {file && <span className="max-w-[180px] truncate text-[12px] text-faint" title={file.name}>{file.name}</span>}
         <Button size="sm" variant="soft" leading={<ScanSearch className="size-4" />} disabled={!file} loading={busy} onClick={check}>
           Check
         </Button>

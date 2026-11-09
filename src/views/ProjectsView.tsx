@@ -11,6 +11,16 @@ import { PageHeader, LoadError } from "@/components/shell/PageHeader";
 import { Badge, Button, Card, Dialog, EmptyState, Input, Label, NativeSelect, Skeleton, Textarea } from "@/components/ui";
 import { fmtTime, relTime } from "@/lib/utils";
 
+const SAMPLE_BOOK = `# Chapter One
+The keeper climbed the stairs every evening at dusk, one hundred and twelve of them, counting each step out loud.
+
+At the top, he trimmed the wick, wiped the great lens, and waited for the first ship of the night.
+
+# Chapter Two
+The fog came in early that October. By midnight the lamp was the only thing left in the world.
+
+Far out on the water, a bell answered.`;
+
 /** Long-form projects: audiobooks, courses and series. */
 export function ProjectsView() {
   const q = useProjects();
@@ -92,8 +102,8 @@ function NewProjectDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   const styles = useStyles();
   const options = useOptions();
   const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [text, setText] = useState("");
+  const [title, setTitle] = useState("The Lighthouse Keeper");
+  const [text, setText] = useState(SAMPLE_BOOK);
   const [voice, setVoice] = useState(studio.voice);
   const [style, setStyle] = useState("audiobook");
   const [busy, setBusy] = useState(false);

@@ -23,7 +23,7 @@ export function DialogueView() {
   const voices = useVoices();
   const styles = useStyles();
   const studio = useStudio();
-  const [script, setScript] = useState(() => localStorage.getItem("firevoice.dialogue") ?? "");
+  const [script, setScript] = useState(() => localStorage.getItem("firevoice.dialogue") || EXAMPLE);   // a ready example on first visit
   const [speakers, setSpeakers] = useState<string[]>([]);
   const [cast, setCast] = useState<Cast>({});
   const [turnsCount, setTurnsCount] = useState(0);
@@ -53,6 +53,16 @@ export function DialogueView() {
       toast.error(errMessage(e));
     }
   };
+
+  // the cast is ready as soon as the page opens with a script (the example on a first visit)
+  const detected = useRef(false);
+  useEffect(() => {
+    if (!detected.current && script.trim()) {
+      detected.current = true;
+      void detect(script);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const body = () => ({ script, cast, gap_ms: gap, defaults: { engine: studio.engine ?? undefined } });
 

@@ -8,6 +8,7 @@ import type { DubLine } from "@/lib/api/types";
 import { openExternal } from "@/lib/external";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Badge, Button, Card, Label, NativeSelect, ProgressBar, Switch } from "@/components/ui";
+import { TrySample } from "@/components/tools/TrySample";
 
 const NAMES: Record<string, string> = {
   en: "English", de: "German", es: "Spanish", fr: "French", it: "Italian", pt: "Portuguese", nl: "Dutch", pl: "Polish", ru: "Russian",
@@ -87,6 +88,10 @@ export function DubbingView() {
             <span className="text-[12px] text-faint">{file ? `${(file.size / 1e6).toFixed(1)} MB` : "audio or video, any format"}</span>
             <input type="file" accept="audio/*,video/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
+          <div className="mt-2 flex flex-wrap gap-1">
+            <TrySample name="speech.mp3" onFile={setFile} />
+            <TrySample name="conversation.mp3" onFile={setFile} label="Try a conversation" />
+          </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="db-from">From</Label>

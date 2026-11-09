@@ -29,7 +29,7 @@ const IDEAS: Record<Kind, string[]> = {
 export function SoundView() {
   const engines = useEngines("sfx");
   const [kind, setKind] = useState<Kind>("sfx");
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(IDEAS.sfx[0]);
   const [seconds, setSeconds] = useState(5);
   const [seed, setSeed] = useState("");
   const [busy, setBusy] = useState(false);
