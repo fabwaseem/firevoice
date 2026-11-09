@@ -114,6 +114,11 @@ export function InstallPanel({ engine }: { engine: Engine }) {
               </p>
             )}
             {plan.data.notes && <p className="text-faint">{plan.data.notes}</p>}
+            {plan.data.repo_code && (
+              <p className="rounded-md bg-warn-soft px-3 py-2 text-warn">
+                This engine runs code from its own repository, pinned to a fixed version. Install only engines you trust.
+              </p>
+            )}
             {!plan.data.uv && <p className="text-bad">The backend has no uv, which installs need. Update the backend or install uv.</p>}
             <p className="font-mono text-[11.5px] text-faint">{plan.data.engines_dir}</p>
           </div>

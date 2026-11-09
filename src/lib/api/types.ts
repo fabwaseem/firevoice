@@ -66,6 +66,8 @@ export interface InstallPlan {
   notes: string;
   venv: string | null;
   venv_state: "missing" | "building" | "outdated" | "ok" | null;
+  /** Runs code from the model's own repository (a pinned git checkout or trust_remote_code). */
+  repo_code?: boolean;
   installed: boolean;
   steps: InstallStep[];
   estimated_gb: number | null;
