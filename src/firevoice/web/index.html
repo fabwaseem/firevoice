@@ -21,6 +21,7 @@
       <a href="#projects" data-page="projects"><svg class="i"><use href="#i-book"/></svg><span class="lbl">Projects</span><span class="count" id="n-projects"></span></a>
       <a href="#dialogue" data-page="dialogue"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Dialogue</span></a>
       <a href="#changer" data-page="changer"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Voice changer</span></a>
+      <a href="#dub" data-page="dub"><svg class="i"><use href="#i-sparkle"/></svg><span class="lbl">Dubbing</span></a>
       <a href="#voices" data-page="voices"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Voices</span><span class="count" id="n-voices"></span></a>
       <a href="#stt" data-page="stt"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Speech to text</span></a>
       <a href="#jobs" data-page="jobs"><svg class="i"><use href="#i-layers"/></svg><span class="lbl">Jobs</span><span class="count" id="n-jobs"></span></a>
@@ -263,6 +264,29 @@
         <div id="qr-out" style="margin-top:12px"></div></div></div>
     </section>
 
+    <!-- ============================================================== DUBBING -->
+    <section class="page" id="page-dub">
+      <div class="page-head"><div><h1>Dubbing</h1><p>A recording or video in another language, on the original timeline. Speech to text, translation and voices all run on this machine.</p></div></div>
+      <div class="grid2" style="align-items:start">
+        <div class="card"><div class="card-h"><h3>Original</h3></div><div class="card-b">
+          <div class="drop" id="db-file-drop"><svg class="i"><use href="#i-upload"/></svg><div><b>Drop a recording or video</b> or click to choose</div><div class="small dim" id="db-file-name">audio or video, any format</div></div>
+          <input type="file" id="db-file" accept="audio/*,video/*" class="hidden">
+          <div class="grid2" style="margin-top:12px"><div class="field"><label class="f">From</label><select class="inp" id="db-from"></select></div>
+            <div class="field"><label class="f">Into</label><select class="inp" id="db-to"></select></div></div>
+        </div></div>
+        <div class="card"><div class="card-h"><h3>Voices</h3></div><div class="card-b">
+          <div class="field"><label class="f">Voice</label><select class="inp" id="db-voice"></select></div>
+          <label class="toggle" style="margin-bottom:8px"><input type="checkbox" id="db-keep"><span class="sw"></span>Keep the original voices (clones each speaker for the dub)</label>
+          <label class="toggle hidden" id="db-consent-row" style="margin-bottom:8px"><input type="checkbox" id="db-consent"><span class="sw"></span>I have the rights to clone the voices in this recording</label>
+          <div class="field"><label class="f">Original audio underneath <span class="hint">(music and room; 0 = only the dub)</span> <span class="hint" id="db-bg-v">0%</span></label>
+            <input type="range" id="db-bg" min="0" max="0.5" step="0.05" value="0"></div>
+          <div class="field"><label class="f">Translation</label><select class="inp" id="db-tr"><option value="fast">Fast (2 GB model)</option><option value="better">Better (5 GB model, more accurate)</option></select></div>
+          <button class="btn primary" id="db-go"><svg class="i"><use href="#i-zap"/></svg>Dub it</button>
+          <div id="db-out" style="margin-top:14px"></div>
+        </div></div>
+      </div>
+    </section>
+
     <!-- ============================================================== PROJECTS -->
     <section class="page" id="page-projects">
       <div id="pj-list-view">
@@ -356,5 +380,6 @@
 <script src="/web/projects.js"></script>
 <script src="/web/tools.js"></script>
 <script src="/web/dialogue.js"></script>
+<script src="/web/dub.js"></script>
 </body>
 </html>

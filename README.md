@@ -239,6 +239,17 @@ firevoice voices build-styles --name Ember --styles calm,serious   # the voice's
 firevoice voices avatar --name Ember --image face.png
 ```
 
+## Dubbing
+
+```bash
+pip install "firevoice[dub]"                                # sentencepiece for the local translator
+firevoice dub interview.mp4 --to es --voice Ember --video interview.es.mp4
+firevoice dub talk.mp3 --to de --keep-voices --consent --better   # the speakers' own voices, the larger translator
+```
+
+Speech to text, translation (M2M100, 100 languages) and the voices all run locally. Each line keeps its original slot:
+it is sped up by at most 1.3x, and anything longer flows into the next pause. Subtitles of the dub come with it.
+
 ## Watermark and consent
 
 Everything FireVoice makes carries an inaudible AudioSeal watermark that says so, the machine-readable marking EU AI

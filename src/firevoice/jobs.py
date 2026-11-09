@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install")
+KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install", "dub")
 OWN_THREAD = ("install",)   # long, GPU-free work that must not hold up renders queued behind it
 
 
@@ -125,6 +125,19 @@ class JobManager:
             if not todo:
                 raise FireVoiceError("conflict", "nothing to render: every paragraph is rendered and up to date (or locked)")
             title = title or f"{p['title']}: {len(todo)} paragraph(s)"
+        elif kind == "dub":
+            from . import translate
+            from .paths import home
+            src = Path(str(payload.get("input") or "")).resolve()
+            uploads = (home() / "uploads").resolve()
+            if uploads not in src.parents or not src.is_file():
+                raise FireVoiceError("bad_request", "dub jobs take an uploaded file (POST /api/v1/dub)")
+            if not translate.supported(str(payload.get("target") or "")):
+                raise FireVoiceError("bad_request", f"cannot dub into {payload.get('target')!r}")
+            if payload.get("keep_voices") and not payload.get("consent"):
+                raise FireVoiceError("bad_request", "keeping the original voices needs consent")
+            _check_format(payload.get("format", "mp3"))
+            title = title or f"dub into {payload['target']}: {payload.get('name') or src.name}"
         elif kind == "install":
             from . import installer
             try:
@@ -422,6 +435,60 @@ class JobManager:
         (out / "dialogue.srt").write_text(self.svc.dialogue_subtitles(d["turns"], "srt"), encoding="utf-8")
         j.result = {"audio": name, "stems": stems, "words": "words.json", "turns": "turns.json", "subtitles": "dialogue.srt", "format": fmt,
                     "duration": round(len(d["audio"]) / d["sr"], 2), "speakers": list(d["stems"])}
+
+    def _run_dub(self, j: Job, cancel: threading.Event) -> None:
+        """Dub the uploaded recording: the dubbed audio, subtitles, the lines (with timings) and, for a video, the video
+        with the new soundtrack. The upload is deleted afterwards."""
+        import shutil
+        import subprocess
+
+        from . import audio as A
+        from . import dubbing
+        p = j.payload
+        fmt = p.get("format", "mp3")
+        out = self.root / j.id
+        out.mkdir(parents=True, exist_ok=True)
+        stages = {"transcribe": (0.0, 0.15), "translate": (0.15, 0.3), "render": (0.3, 0.97)}
+
+        def progress(stage, k, n, msg):
+            lo, hi = stages.get(stage, (0.0, 1.0))
+            self._progress(j, int(1000 * (lo + (hi - lo) * (k / n if n else 0))), 1000, msg)
+        src = Path(p["input"])
+        try:
+            wav = src
+            if src.suffix.lower() not in (".wav", ".flac"):
+                wav = out / "source.wav"
+                r = subprocess.run([A._ffmpeg(), "-y", "-v", "error", "-i", str(src), "-ac", "1", str(wav)], capture_output=True)
+                if r.returncode != 0:
+                    raise RuntimeError(f"cannot read the upload: {r.stderr.decode(errors='replace')[-300:]}")
+            d = self.svc.dub(wav, p["target"], source=p.get("source"), voice=p.get("voice"), cast=p.get("cast"),
+                             keep_voices=bool(p.get("keep_voices")), consent=bool(p.get("consent")), speakers=p.get("speakers"),
+                             engine=p.get("engine"), style=p.get("style") or "conversational", background=float(p.get("background") or 0.0),
+                             translator=p.get("translator"), progress=progress, cancel=cancel, priority=1)
+            name = f"dub.{_ext(fmt)}"
+            (out / name).write_bytes(self.svc.encode(d["audio"], fmt, sr=d["sr"]))
+            for sub in ("srt", "vtt"):
+                (out / f"dub.{sub}").write_text(dubbing.subtitles(d["lines"], sub), encoding="utf-8")
+            (out / "lines.json").write_text(json.dumps({k: v for k, v in d.items() if k not in ("audio", "sr")}, indent=1, ensure_ascii=False),
+                                            encoding="utf-8")
+            files = [name, "dub.srt", "dub.vtt", "lines.json"]
+            probe = subprocess.run([A._ffmpeg(), "-hide_banner", "-i", str(src)], capture_output=True)
+            if p.get("video", True) and b"Video:" in probe.stderr and b"attached pic" not in probe.stderr:
+                dub_wav = out / "dub_track.wav"
+                import soundfile as sf
+                sf.write(str(dub_wav), d["audio"], d["sr"], subtype="PCM_16")
+                vid = out / f"dub{src.suffix if src.suffix.lower() in ('.mp4', '.mov', '.mkv') else '.mp4'}"
+                r = subprocess.run([A._ffmpeg(), "-y", "-v", "error", "-i", str(src), "-i", str(dub_wav), "-map", "0:v:0", "-map", "1:a:0",
+                                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", str(vid)], capture_output=True)
+                dub_wav.unlink(missing_ok=True)
+                if r.returncode == 0:
+                    files.append(vid.name)
+            (out / "source.wav").unlink(missing_ok=True)
+            j.result = {"audio": name, "files": files, "format": fmt, "duration": round(len(d["audio"]) / d["sr"], 2),
+                        "source_language": d["source_language"], "target_language": d["target_language"], "lines": len(d["lines"]),
+                        "voices_kept": d["voices_kept"], "subtitles": "dub.srt", "translator": d["translator"]}
+        finally:
+            shutil.rmtree(src.parent, ignore_errors=True)
 
     def _run_install(self, j: Job, cancel: threading.Event) -> None:
         """Build an engine's venv and fetch its weights (installer.install); the full log is install.log."""

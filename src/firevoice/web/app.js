@@ -74,7 +74,7 @@ function busyBtn(btn, on, label) {
 }
 
 // ------------------------------------------------------------------------------------------------ router
-const PAGES = ["speak", "projects", "dialogue", "changer", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
+const PAGES = ["speak", "projects", "dialogue", "changer", "dub", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
 function route() {
   const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "speak";
   $$(".page").forEach(s => s.classList.toggle("on", s.id === "page-" + p));
@@ -88,6 +88,7 @@ function route() {
   if (p === "projects") window.loadProjects?.();
   if (p === "changer") window.loadChanger?.();
   if (p === "dialogue") window.loadDialogue?.();
+  if (p === "dub") window.loadDub?.();
 }
 window.addEventListener("hashchange", route);
 

@@ -145,6 +145,21 @@ The style fields:
 | `sample` | showcase paragraph |
 | `extra` | raw engine settings |
 
+### Dubbing
+
+A recording or video in another language, on the original timeline. Every step runs locally: Whisper turns the speech
+into text (with speakers when they matter), M2M100 translates each line (MIT; `fast` is the 418M model, `better` the
+1.2B one), a voice says it, and each line is fitted to the time the original took. Speed-ups are capped at 1.3x, and a
+line that still runs long pushes the next one until the next pause.
+
+| | |
+|---|---|
+| `GET /api/v1/dub/languages` | `{languages: [ISO codes], model, sizes}` |
+| `POST /api/v1/dub` | Multipart `file` (audio or video), `target_language`, `source_language` (`auto`), `voice`, `cast` (JSON `{"Speaker 1": "Ember"}`), `keep_voices` (clone each original speaker for the dub, needs `consent`; the clones are deleted afterwards), `speakers`, `engine`, `style`, `background` (0-1, original audio underneath), `translator` (`fast` or `better`), `format`, `video` (also the video with the new soundtrack). Returns a `dub` job (`202`). Its files are `dub.<format>`, `dub.srt`, `dub.vtt`, `lines.json` (`{lines: [{start, end, text, translation, speaker, voice, speed, at, duration}]}`) and, for a video, `dub.mp4`. |
+
+Dub jobs read only their own upload. The jobs API cannot point one at another file. The output is watermarked once,
+after mixing, because time-stretching a line would erase a per-line mark.
+
 ### Watermark and consent
 
 Every output is marked as AI speech with an inaudible AudioSeal watermark (16 bits: "FireVoice", then `render` or

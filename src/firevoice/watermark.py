@@ -115,7 +115,10 @@ def detect(audio: np.ndarray, sr: int) -> dict:
     prob = float(np.average(probs, weights=w))
     bits = [int(b >= 0.5) for b in np.average(np.stack(msgs), axis=0, weights=w)]
     ours = prob >= 0.5 and sum(int(a != b) for a, b in zip(bits[:8], TAG)) <= 1
-    k = int("".join(map(str, bits[8:])), 2)
-    kind = next((name for name, v in KINDS.items() if v == k), None) if ours else None
+    kind = None
+    if ours:   # the kind byte, allowing one flipped bit (lossy codecs flip the odd one)
+        dist = {name: sum(int(x != y) for x, y in zip(bits[8:], _bits(name)[8:])) for name in KINDS}
+        best = min(dist, key=dist.get)
+        kind = best if dist[best] <= 1 else None
     return {"watermarked": prob >= 0.5, "probability": round(prob, 3), "firevoice": ours, "kind": kind, "bits": "".join(map(str, bits)),
             "seconds": round(len(x) / SR, 2)}

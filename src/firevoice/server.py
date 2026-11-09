@@ -1070,6 +1070,49 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return svc.tag_catalog()
 
     # ------------------------------------------------------------------ audio tools
+    @app.get("/api/v1/dub/languages", dependencies=deps, tags=["dubbing"])
+    def dub_languages():
+        """Languages dubbing can translate between (M2M100, local)."""
+        from . import translate
+        return {"languages": list(translate.LANGS), "model": translate.MODEL, "sizes": translate.SIZES}
+
+    @app.post("/api/v1/dub", dependencies=deps, tags=["dubbing"], status_code=202)
+    async def dub(file: UploadFile = File(..., description="audio or video"), target_language: str = Form(...),
+                  source_language: str = Form("auto"), voice: str = Form("", description="voice for every line (default: the default voice)"),
+                  cast: str = Form("", description='JSON {"Speaker 1": "Ember", ...}: a voice per original speaker'),
+                  keep_voices: bool = Form(False, description="clone each original speaker for the dub (needs consent)"),
+                  consent: bool = Form(False), speakers: int = Form(0, description="number of speakers, 0 = detect"),
+                  engine: str = Form(""), style: str = Form("conversational"),
+                  background: float = Form(0.0, description="0-1: how much of the original audio stays underneath"),
+                  format: str = Form("mp3"), video: bool = Form(True, description="for a video: also the video with the dubbed soundtrack"),
+                  translator: str = Form("fast", description="fast (M2M100 418M, 2 GB) or better (M2M100 1.2B, 5 GB, more accurate)")):
+        """Dub a recording into another language as a background job (kind `dub`): speech to text, local translation,
+        each line rendered and fitted to its original slot. The job's files: dub.<format>, dub.srt, dub.vtt, lines.json and,
+        for a video, the video with the new soundtrack."""
+        import uuid
+
+        from .paths import home
+        try:
+            cast_map = json.loads(cast) if cast.strip() else None
+        except json.JSONDecodeError:
+            raise FireVoiceError("bad_request", "cast must be JSON like {\"Speaker 1\": \"Ember\"}")
+        d = home() / "uploads" / uuid.uuid4().hex
+        d.mkdir(parents=True, exist_ok=True)
+        dest = d / ("source" + (Path(file.filename or "a.wav").suffix or ".wav"))
+        dest.write_bytes(await file.read())
+        if dest.stat().st_size == 0:
+            raise FireVoiceError("bad_request", "the uploaded file is empty")
+        payload = {"input": str(dest), "name": file.filename, "target": target_language, "source": None if source_language in ("", "auto") else source_language,
+                   "voice": voice or None, "cast": cast_map, "keep_voices": keep_voices, "consent": consent, "speakers": speakers or None,
+                   "engine": engine or None, "style": style, "background": background, "format": format, "video": video,
+                   "translator": translator if translator in ("fast", "better") else "fast"}
+        try:
+            return svc.jobs.submit("dub", payload)
+        except Exception:
+            import shutil
+            shutil.rmtree(d, ignore_errors=True)
+            raise
+
     @app.post("/api/v1/audio/quality", dependencies=deps, tags=["audio tools"])
     async def audio_quality(file: UploadFile = File(...), voice: str = Form("", description="compare with this voice's clip")):
         """A quality report: speaker similarity to `voice` (WavLM; same speaker from about 0.86), DNSMOS listener-score

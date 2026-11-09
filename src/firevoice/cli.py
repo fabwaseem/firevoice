@@ -394,6 +394,58 @@ def cmd_jobs(a) -> int:
         return 1
 
 
+def cmd_dub(a) -> int:
+    import subprocess
+    import tempfile
+
+    from . import audio as A
+    from . import dubbing
+    from .service import FireVoiceError
+    src = Path(a.file)
+    out = Path(a.out or src.with_name(f"{src.stem}.{a.target}.mp3"))
+    cast = dict(kv.split("=", 1) for kv in a.cast.split(",") if "=" in kv) if a.cast else None
+    wav = src
+    tmp = None
+    if src.suffix.lower() not in (".wav", ".flac"):
+        fd, tmp = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        subprocess.run([A._ffmpeg(), "-y", "-v", "error", "-i", str(src), "-ac", "1", tmp], check=True)
+        wav = Path(tmp)
+    svc = _service(a)
+
+    def progress(stage, k, n, msg):
+        print(f"\r  {stage:10} {msg}"[:120].ljust(120), end="", file=sys.stderr, flush=True)
+    try:
+        d = svc.dub(wav, a.target, source=a.source, voice=a.voice, cast=cast, keep_voices=a.keep_voices, consent=a.consent,
+                    speakers=a.speakers, engine=a.engine, style=a.style, background=a.background,
+                    translator="better" if a.better else None, progress=progress, priority=0)
+        print(file=sys.stderr)
+        out.write_bytes(svc.encode(d["audio"], _fmt_for(out, None), sr=d["sr"]))
+        out.with_suffix(".srt").write_text(dubbing.subtitles(d["lines"], "srt"), encoding="utf-8")
+        print(f"{out}: {len(d['lines'])} lines, {d['source_language']} -> {d['target_language']}, {len(d['audio']) / d['sr']:.1f}s"
+              f" (subtitles {out.with_suffix('.srt').name})")
+        fast = [ln for ln in d["lines"] if ln["speed"] > 1.0]
+        if fast:
+            print(f"  {len(fast)} line(s) sped up to fit, at most {max(ln['speed'] for ln in fast):.2f}x")
+        if a.video:
+            import soundfile as sf
+            fd, dw = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
+            sf.write(dw, d["audio"], d["sr"], subtype="PCM_16")
+            r = subprocess.run([A._ffmpeg(), "-y", "-v", "error", "-i", str(src), "-i", dw, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                                "-c:a", "aac", "-b:a", "192k", a.video], capture_output=True)
+            Path(dw).unlink(missing_ok=True)
+            print(f"{a.video}: video with the dubbed soundtrack" if r.returncode == 0 else f"video: {r.stderr.decode(errors='replace')[-300:]}")
+        return 0
+    except FireVoiceError as e:
+        print(file=sys.stderr)
+        return _fail(e)
+    finally:
+        svc.close()
+        if tmp:
+            Path(tmp).unlink(missing_ok=True)
+
+
 def cmd_dialogue(a) -> int:
     from .service import FireVoiceError
     svc = _service(a)
@@ -1235,6 +1287,23 @@ def build_parser() -> argparse.ArgumentParser:
     jb.add_argument("--remote", default=None, help="server URL (default $FIREVOICE_URL or http://127.0.0.1:8787)")
     jb.add_argument("--token", default=None)
     jb.set_defaults(fn=cmd_jobs)
+
+    db = sub.add_parser("dub", help="dub a recording or video into another language (local translation, original timing)")
+    db.add_argument("file", help="audio or video")
+    db.add_argument("--to", required=True, dest="target", help="target language (ISO code: de, es, fr, hi, ...)")
+    db.add_argument("--from", default=None, dest="source", help="source language (default: detect)")
+    db.add_argument("--voice", default=None, help="voice for every line")
+    db.add_argument("--cast", default=None, help='a voice per original speaker: "Speaker 1=Ember,Speaker 2=Isla"')
+    db.add_argument("--keep-voices", action="store_true", help="clone each original speaker for the dub (needs --consent)")
+    db.add_argument("--consent", action="store_true", help="confirm you have the rights to clone the voices in this recording")
+    db.add_argument("--speakers", type=int, default=None, help="number of speakers (default: detect)")
+    db.add_argument("--engine", default=None)
+    db.add_argument("--style", default="conversational")
+    db.add_argument("--background", type=float, default=0.0, help="0-1: keep this much of the original audio underneath")
+    db.add_argument("--better", action="store_true", help="the larger, more accurate translation model (5 GB once)")
+    db.add_argument("-o", "--out", default=None, help="dubbed audio (default: <file>.<lang>.mp3)")
+    db.add_argument("--video", default=None, help="also write the video with the dubbed soundtrack here")
+    db.set_defaults(fn=cmd_dub)
 
     dg = sub.add_parser("dialogue", help="multi-speaker script ('Name: line' per turn) -> one mix, stems and subtitles")
     dg.add_argument("script", help="the script file (or @file / - for stdin)")

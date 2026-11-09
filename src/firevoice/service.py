@@ -558,6 +558,107 @@ class FireVoice:
         a, sr = self._read(path)
         return watermark.detect(a, sr)
 
+    # -------------------------------------------------------------------- dubbing
+    def dub(self, path, target: str, *, source: Optional[str] = None, voice: Optional[str] = None, cast: Optional[dict] = None,
+            keep_voices: bool = False, consent: bool = False, diarize: bool = False, speakers: Optional[int] = None,
+            engine: Optional[str] = None, style: str = "conversational", background: float = 0.0, lufs: Optional[float] = -16.0,
+            translator: Optional[str] = None, progress: Optional[Callable[[str, int, int, str], None]] = None,
+            cancel: Optional[threading.Event] = None, priority: int = 1) -> dict:
+        """A recording's speech in another language on the original timeline: transcribe (with speakers when there is
+        a cast or the original voices are kept), translate locally, render each line, fit it to its slot, mix.
+        `keep_voices` clones each original speaker for the dub (temporary voices, removed afterwards) and needs
+        `consent`. `background` (0-1) keeps that much of the original audio underneath.
+        -> {audio, sr, lines: [{start, end, text, translation, speaker, voice, speed, at, duration}], source_language, target_language}"""
+        import uuid
+
+        import soundfile as sf
+
+        from . import dubbing
+        from . import translate as T
+        say = progress or (lambda *_a: None)
+        tgt = (target or "").lower().split("-")[0]
+        if not T.supported(tgt):
+            raise FireVoiceError("bad_request", f"cannot dub into {target!r}; languages: {', '.join(T.LANGS)}")
+        if keep_voices and not consent:
+            raise FireVoiceError("bad_request", "keeping the original voices clones the speakers: confirm consent (only for recordings you have the rights to)")
+        if not 0.0 <= float(background) <= 1.0:
+            raise FireVoiceError("bad_request", "background must be between 0 and 1")
+        a, sr = self._read(path)
+        total = len(a) / sr
+        say("transcribe", 0, 1, "listening to the original")
+        tr = self.transcribe(a, sr, language=source or "auto", diarize=bool(diarize or keep_voices or cast), speakers=speakers)
+        src = tr["language"]
+        if not T.supported(src):
+            raise FireVoiceError("bad_request", f"cannot translate from {src!r}")
+        lines = dubbing.units(tr["segments"])
+        if not lines:
+            raise FireVoiceError("bad_request", "no speech found in the recording")
+        say("translate", 0, len(lines), f"translating {len(lines)} lines from {src} to {tgt}")
+        try:
+            texts = T.translate([ln["text"] for ln in lines], src, tgt, progress=lambda k, n: say("translate", k, n, f"translated {k} of {n}"),
+                                model=translator)
+        except ImportError as e:
+            raise FireVoiceError("unavailable", f"translation needs {e.name or 'transformers'} and sentencepiece")
+        cast = dict(cast or {})
+        temp: list[str] = []
+        try:
+            if keep_voices:
+                for spk in sorted({ln.get("speaker") or "Speaker 1" for ln in lines}):
+                    parts, have = [], 0.0
+                    for ln in lines:
+                        if (ln.get("speaker") or "Speaker 1") == spk and have < 15.0:
+                            seg = a[int(ln["start"] * sr):int(ln["end"] * sr)]
+                            parts.append(seg)
+                            have += len(seg) / sr
+                    if have < 3.0:
+                        continue
+                    import tempfile
+                    fd, wav = tempfile.mkstemp(suffix=".wav")
+                    os.close(fd)
+                    sf.write(wav, np.concatenate(parts), sr, subtype="PCM_16")
+                    vid = f"dub-{uuid.uuid4().hex[:8]}-{re.sub(r'[^a-z0-9]+', '-', spk.lower()).strip('-')}"
+                    try:
+                        self.voices.add(vid, wav, consent=True, transcribe=False, source="dubbing (temporary clone of the original speaker)",
+                                        description=f"{spk} from a dubbed recording")
+                    finally:
+                        Path(wav).unlink(missing_ok=True)
+                    temp.append(vid)
+                    cast.setdefault(spk, vid)
+            pieces, out_sr, rows = [], None, []
+            for i, ln in enumerate(lines):
+                if cancel is not None and cancel.is_set():
+                    raise Cancelled("cancelled")
+                say("render", i, len(lines), f"line {i + 1} of {len(lines)}")
+                v = dubbing.voice_for(ln.get("speaker"), cast, voice or "default")
+                # lines are marked once as a whole below: fitting a line to its slot stretches time, which erases a mark
+                r = self.tts(TTSRequest(text=texts[i] or "...", voice=v, engine=engine, style=style, language=tgt, lead_ms=0, tail_ms=0,
+                                        lufs=None, watermark=False), cancel=cancel, priority=priority)
+                out_sr = out_sr or r.sr
+                aud = r.audio if r.sr == out_sr else A.resample(r.audio, r.sr, out_sr)
+                aud, speed = dubbing.fit(aud, out_sr, dubbing.slot(lines, i, total))
+                pieces.append((ln["start"], aud))
+                rows.append({**ln, "translation": texts[i], "voice": v, "speed": speed, "duration": round(len(aud) / out_sr, 3)})
+            track, placed = dubbing.assemble(pieces, out_sr, total)
+            for row, at in zip(rows, placed):
+                row["at"] = at
+            if background > 0:
+                bed = A.resample(np.asarray(a, dtype=np.float32), sr, out_sr) * float(background)
+                n = min(len(bed), len(track))
+                track[:n] += bed[:n]
+            if lufs is not None and len(track) > out_sr // 10:
+                track = A.studio_chain(track, out_sr, lufs)
+            if self._mark_wanted(None, None):
+                track = self._mark(track, out_sr)
+            say("render", len(lines), len(lines), "mixed")
+            return {"audio": track.astype(np.float32), "sr": out_sr, "lines": rows, "source_language": src, "target_language": tgt,
+                    "voices_kept": bool(temp), "translator": T.resolve(translator)}
+        finally:
+            for vid in temp:
+                try:
+                    self.voices.remove(vid)
+                except Exception:
+                    pass
+
     # -------------------------------------------------------------------- quality reports
     def _voice_clip(self, voice: Optional[str], strict: bool = True) -> tuple:
         """(audio, sample rate) of a voice's reference clip, or (None, None) for voices without one. `strict` raises for
