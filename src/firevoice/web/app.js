@@ -132,6 +132,19 @@ async function checkServerVersion() {
   } catch { /* offline banner handles it */ }
 }
 
+// Sample recordings that ship with the server (web/samples): every audio tool can be tried without recording anything.
+window.trySample = async function trySample(inputId, name) {
+  try {
+    const r = await fetch(`/web/samples/${name}`); if (!r.ok) throw new Error(`sample ${name}: ${r.status}`);
+    const f = new File([await r.blob()], name, { type: "audio/mpeg" });
+    const dt = new DataTransfer(); dt.items.add(f);
+    const inp = $("#" + inputId); inp.files = dt.files;
+    const label = $(`#${inputId}-name`); if (label) label.textContent = `${name} · sample`;
+    inp.dispatchEvent(new Event("change", { bubbles: true }));
+    toast(`Sample loaded: ${name}`, "ok");
+  } catch (e) { toast(e.message, "bad"); }
+};
+
 async function init() {
   checkServerVersion();
   const [opt, vs] = await Promise.all([API.req("/api/v1/options"), API.req("/api/v1/voices")]);

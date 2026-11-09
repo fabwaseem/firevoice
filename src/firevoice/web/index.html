@@ -195,7 +195,8 @@
             <p class="small dim" style="margin:10px 0 0">Click to start, click again to stop and transcribe.</p></div></div>
           <div class="card"><div class="card-h"><h3>Or upload</h3></div><div class="card-b">
             <div class="drop" id="sdrop"><svg class="i"><use href="#i-upload"/></svg><div><b>Drop an audio file</b> or click to choose</div><div class="small dim">wav, mp3, m4a, ogg, flac, webm…</div></div>
-            <input type="file" id="sfile" accept="audio/*,video/webm" class="hidden"></div></div>
+            <input type="file" id="sfile" accept="audio/*,video/webm" class="hidden">
+            <div class="row" style="gap:8px;margin-top:10px"><button class="btn sm ghost" type="button" onclick="trySample('sfile', 'conversation.mp3')">Try a sample conversation</button><span class="small dim">three speakers: turn on "Label who speaks"</span></div></div></div>
           <div class="card"><div class="card-h"><h3>Options</h3></div><div class="card-b grid2">
             <div class="field"><label class="f">Language</label><input class="inp" id="slang" value="auto"></div>
             <div class="field"><label class="f">Beam size <span class="hint">(higher = more careful)</span></label><select class="inp" id="sbeam"><option>1</option><option>3</option><option selected>5</option><option>8</option></select></div>
@@ -247,6 +248,7 @@
         <div class="card"><div class="card-h"><h3>Your recording</h3></div><div class="card-b">
           <div class="drop" id="vc-file-drop"><svg class="i"><use href="#i-upload"/></svg><div><b>Drop a recording</b> or click to choose</div><div class="small dim" id="vc-file-name">speech, up to 10 minutes · any format</div></div>
           <input type="file" id="vc-file" accept="audio/*,video/*" class="hidden">
+          <div style="margin-top:8px"><button class="btn sm ghost" type="button" onclick="trySample('vc-file', 'speech.mp3')">Try a sample</button></div>
           <div class="row" style="margin-top:12px;gap:8px"><button class="btn" id="vc-rec"><svg class="i"><use href="#i-mic"/></svg>Record</button><span class="small dim" id="vc-rec-state"></span></div>
           <audio id="vc-src" controls class="hidden" style="width:100%;margin-top:12px"></audio>
           <div id="vc-check" class="small dim" style="margin-top:8px"></div>
@@ -258,16 +260,16 @@
         </div></div>
       </div>
       <div class="card" style="margin-top:16px"><div class="card-h"><h3>Is it AI speech?</h3><span class="hint">Every FireVoice output carries an inaudible watermark (AudioSeal). Check any file for it.</span></div>
-        <div class="card-b"><div class="row" style="gap:10px"><input type="file" id="wm-file" accept="audio/*,video/*" class="inp" style="flex:1"><button class="btn" id="wm-go"><svg class="i"><use href="#i-search"/></svg>Check</button></div>
+        <div class="card-b"><div class="row" style="gap:10px"><input type="file" id="wm-file" accept="audio/*,video/*" class="inp" style="flex:1"><button class="btn sm ghost" type="button" onclick="trySample('wm-file', 'speech.mp3')">Try a sample</button><button class="btn" id="wm-go"><svg class="i"><use href="#i-search"/></svg>Check</button></div>
         <div id="wm-out" style="margin-top:10px"></div></div></div>
       <div class="card" style="margin-top:16px"><div class="card-h"><h3>Separate voice and music</h3><span class="hint">Pull a voice out of music and effects, noise or room echo (the voice separator from Engines).</span></div>
         <div class="card-b"><div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" id="sp-file" accept="audio/*,video/*" class="inp" style="flex:1;min-width:220px">
           <select class="inp" id="sp-mode" style="width:auto"><option value="vocals">Voice | music and effects</option><option value="denoise">Voice | noise</option><option value="dereverb">Voice | room echo</option></select>
-          <button class="btn" id="sp-go"><svg class="i"><use href="#i-layers"/></svg>Separate</button></div>
+          <button class="btn sm ghost" type="button" onclick="trySample('sp-file', 'speech-with-music.mp3')">Try a sample</button><button class="btn" id="sp-go"><svg class="i"><use href="#i-layers"/></svg>Separate</button></div>
         <div id="sp-out" style="margin-top:12px"></div></div></div>
       <div class="card" style="margin-top:16px"><div class="card-h"><h3>Quality report</h3><span class="hint">Does it sound like the voice (WavLM), how clean is it (DNSMOS), and does the voice wander over a long take?</span></div>
         <div class="card-b"><div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" id="qr-file" accept="audio/*,video/*" class="inp" style="flex:1;min-width:220px">
-          <select class="inp" id="qr-voice" style="width:auto"><option value="">compare with no voice</option></select><button class="btn" id="qr-go"><svg class="i"><use href="#i-check"/></svg>Check</button></div>
+          <select class="inp" id="qr-voice" style="width:auto"><option value="">compare with no voice</option></select><button class="btn sm ghost" type="button" onclick="trySample('qr-file', 'speech.mp3')">Try a sample</button><button class="btn" id="qr-go"><svg class="i"><use href="#i-check"/></svg>Check</button></div>
         <div id="qr-out" style="margin-top:12px"></div></div></div>
     </section>
 
@@ -292,6 +294,7 @@
         <div class="card"><div class="card-h"><h3>Original</h3></div><div class="card-b">
           <div class="drop" id="db-file-drop"><svg class="i"><use href="#i-upload"/></svg><div><b>Drop a recording or video</b> or click to choose</div><div class="small dim" id="db-file-name">audio or video, any format</div></div>
           <input type="file" id="db-file" accept="audio/*,video/*" class="hidden">
+          <div style="margin-top:8px"><button class="btn sm ghost" type="button" onclick="trySample('db-file', 'speech.mp3')">Try a sample</button> <button class="btn sm ghost" type="button" onclick="trySample('db-file', 'conversation.mp3')">Try a conversation</button></div>
           <div class="grid2" style="margin-top:12px"><div class="field"><label class="f">From</label><select class="inp" id="db-from"></select></div>
             <div class="field"><label class="f">Into</label><select class="inp" id="db-to"></select></div></div>
         </div></div>

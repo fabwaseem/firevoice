@@ -10,6 +10,7 @@ const SN_IDEAS = {
 window.loadSound = async function loadSound() {
   try { SN.engines = (await API.req("/api/v1/engines?task=sfx")).engines; } catch (e) { toast(e.message, "bad"); }
   drawKind();
+  if (!$("#sn-prompt").value.trim()) $("#sn-prompt").value = SN_IDEAS[SN.kind][0];
 };
 
 function drawKind() {

@@ -9,7 +9,8 @@ Bilal: Fair. But this time I mean it.
 Narrator: He did not keep it short.`;
 
 window.loadDialogue = function loadDialogue() {
-  if (!$("#dg-script").value.trim()) $("#dg-script").value = store.get("dialogue", "");
+  if (!$("#dg-script").value.trim()) $("#dg-script").value = store.get("dialogue", "") || DG_EXAMPLE;   // a ready example on first visit
+  if (!DG.speakers.length && $("#dg-script").value.trim()) detect();
 };
 $("#dg-script")?.addEventListener("input", debounce(() => store.set("dialogue", $("#dg-script").value), 400));
 $("#dg-example").onclick = () => { $("#dg-script").value = DG_EXAMPLE; store.set("dialogue", DG_EXAMPLE); detect(); };

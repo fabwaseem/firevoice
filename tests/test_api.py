@@ -231,3 +231,15 @@ def test_docs_and_playground(c):
     assert c.get("/web/app.css").status_code == 200
     assert c.get("/web/fonts/urbanist-latin-normal.woff2").status_code == 200
     assert c.get("/", follow_redirects=False).headers["location"] == "/playground"
+
+
+def test_playground_files_revalidate_and_samples_ship(svc):
+    from fastapi.testclient import TestClient
+
+    from firevoice.server import create_app
+    c = TestClient(create_app(svc))
+    r = c.get("/web/app.js")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
+    for name in ("speech.mp3", "conversation.mp3", "speech-with-music.mp3"):
+        s = c.get(f"/web/samples/{name}")
+        assert s.status_code == 200 and len(s.content) > 10_000, name

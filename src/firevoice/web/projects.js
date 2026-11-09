@@ -22,12 +22,22 @@ window.loadProjects = async function loadProjects() {
   $$("#pj-grid .pj-card").forEach(c => c.onclick = () => openProject(c.dataset.id));
 };
 
+const SAMPLE_BOOK = `# Chapter One
+The keeper climbed the stairs every evening at dusk, one hundred and twelve of them, counting each step out loud.
+
+At the top, he trimmed the wick, wiped the great lens, and waited for the first ship of the night.
+
+# Chapter Two
+The fog came in early that October. By midnight the lamp was the only thing left in the world.
+
+Far out on the water, a bell answered.`;
+
 $("#pj-new").onclick = () => {
   const opt = (sel, items) => items.map(([v, l]) => `<option value="${esc(v)}" ${v === sel ? "selected" : ""}>${esc(l)}</option>`).join("");
   Drawer.open("New project", `
-    <div class="field"><label class="f">Title</label><input class="inp" id="np-title" placeholder="The Lighthouse Keeper"></div>
+    <div class="field"><label class="f">Title</label><input class="inp" id="np-title" placeholder="The Lighthouse Keeper" value="The Lighthouse Keeper"></div>
     <div class="field"><label class="f">Script <span class="hint">(optional: "# Title" or "Chapter 1" lines start chapters, blank lines split paragraphs)</span></label>
-      <textarea class="inp" id="np-text" rows="12" placeholder="# Chapter One&#10;The keeper climbed the stairs every evening at dusk.&#10;&#10;He counted each step out loud..."></textarea></div>
+      <textarea class="inp" id="np-text" rows="12" placeholder="# Chapter One&#10;The keeper climbed the stairs every evening at dusk.">${esc(SAMPLE_BOOK)}</textarea></div>
     <div class="grid2"><div class="field"><label class="f">Voice</label><select class="inp" id="np-voice">${opt(S.voice, [["default", "Default voice"], ...S.voices.map(v => [v.voice_id, `${v.name || v.voice_id}${v.tagline ? " · " + v.tagline : ""}`])])}</select></div>
       <div class="field"><label class="f">Style</label><select class="inp" id="np-style">${opt(S.style === "conversational" ? "audiobook" : S.style, S.styles.map(s => [s.name, s.title || s.name]))}</select></div></div>`,
     `<button class="btn ghost" onclick="Drawer.close()">Cancel</button><button class="btn primary" id="np-go">${icon("plus")}Create</button>`);

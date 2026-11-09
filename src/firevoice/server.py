@@ -384,7 +384,16 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     from fastapi.staticfiles import StaticFiles
     web = Path(__file__).parent / "web"
-    app.mount("/web", StaticFiles(directory=str(web)), name="web")
+
+    class _Revalidate(StaticFiles):
+        """The playground's scripts and styles: revalidated on every load (a cheap 304 when unchanged), so an update to
+        the backend never leaves a browser running yesterday's scripts against today's pages."""
+        async def get_response(self, path, scope):
+            r = await super().get_response(path, scope)
+            r.headers["Cache-Control"] = "no-cache"
+            return r
+
+    app.mount("/web", _Revalidate(directory=str(web)), name="web")
 
     @app.get("/playground", include_in_schema=False)
     def playground():

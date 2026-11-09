@@ -21,7 +21,7 @@ htmlcov/
 # sentence-level take cache
 .cache/
 # showcase renders and listening-test reports
-samples/
+/samples/
 # bake-off renders and scores
 bench/out/
 bench/judge/
@@ -46,3 +46,5 @@ renders/
 .DS_Store
 Thumbs.db
 desktop.ini
+# the sample recordings the playground and desktop "Try a sample" buttons load
+!src/firevoice/web/samples/*.mp3
