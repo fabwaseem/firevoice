@@ -111,6 +111,25 @@ export interface SetupReport {
 
 export type PathSettingKey = "engines_dir" | "weights_dir" | "ffmpeg" | "watermark";
 
+export interface QualityReport {
+  duration: number;
+  mos: { overall: number; signal: number; background: number; p808: number } | null;
+  similarity: { value: number; backend: "wavlm" | "resemblyzer"; same_speaker: boolean } | null;
+  drift: {
+    windows: { start: number; end: number; similarity?: number; f0: number | null; level_db: number }[];
+    flags: { start: number; end: number; why: string[] }[];
+    backend: string;
+    min_similarity?: number;
+    spread?: number;
+    pitch_hz?: number | null;
+    compared_with?: string;
+  };
+  verdict: "good" | "check";
+  notes: string[];
+  voice: string | null;
+  render_id?: string;
+}
+
 export interface WatermarkResult {
   watermarked: boolean;
   probability: number;

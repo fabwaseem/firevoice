@@ -1,5 +1,5 @@
 import { useSettings } from "@/stores/settings";
-import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
+import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
 
 export class ApiError extends Error {
   code: string;
@@ -96,6 +96,13 @@ export const api = {
   renderVoicePreview: (id: string) => request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/preview`, { method: "POST" }),
   addVoice: (form: FormData) => request<Voice>("/api/v1/voices", { method: "POST", body: form }),
   voiceConsent: (id: string) => request<ConsentRecord>(`/api/v1/voices/${encodeURIComponent(id)}/consent`),
+  qualityReport: (file: Blob, voice?: string) => {
+    const fd = new FormData();
+    fd.append("file", file, file instanceof File ? file.name : "audio");
+    if (voice) fd.append("voice", voice);
+    return request<QualityReport>("/api/v1/audio/quality", { method: "POST", body: fd });
+  },
+  renderQuality: (id: string) => request<QualityReport>(`/api/v1/renders/${encodeURIComponent(id)}/quality`),
   detectWatermark: (file: Blob, name = "audio") => {
     const fd = new FormData();
     fd.append("file", file, file instanceof File ? file.name : name);

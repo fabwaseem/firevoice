@@ -1,13 +1,14 @@
+import { QualityView } from "@/components/tools/QualityReport";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Captions, Lock, LockOpen, PencilLine, Plus, Shuffle } from "lucide-react";
+import { Captions, Gauge, Lock, LockOpen, PencilLine, Plus, Shuffle } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useKeptRender } from "@/lib/api/hooks";
-import type { KeptRender, RenderChunk, RenderTake, WordTime } from "@/lib/api/types";
+import type { KeptRender, QualityReport, RenderChunk, RenderTake, WordTime } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { usePlayer } from "@/stores/player";
-import { Badge, Button, Card, Skeleton, Tooltip } from "@/components/ui";
+import { Badge, Button, Card, Dialog, Skeleton, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /** Download subtitles for the result: from the kept render when there is one, else from the word times. */
@@ -41,6 +42,8 @@ export function TakesPanel({ renderId, format, onAudio }: {
   const qc = useQueryClient();
   const q = useKeptRender(renderId);
   const [busy, setBusy] = useState<string | null>(null);
+  const [quality, setQuality] = useState<QualityReport | null>(null);
+  const [qBusy, setQBusy] = useState(false);
   const [playing, setPlaying] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -92,6 +95,21 @@ export function TakesPanel({ renderId, format, onAudio }: {
         </span>
         {m.flagged ? <Badge tone="warn">{m.flagged} to check</Badge> : <Badge tone="ok">all passed the speech check</Badge>}
         <div className="flex-1" />
+        <Tooltip content="Similarity to the voice, DNSMOS scores and drift of the stitched audio">
+          <Button size="sm" variant="ghost" leading={<Gauge className="size-4" />} loading={qBusy} disabled={!!busy}
+            onClick={async () => {
+              setQBusy(true);
+              try {
+                setQuality(await api.renderQuality(renderId));
+              } catch (e) {
+                toast.error(errMessage(e));
+              } finally {
+                setQBusy(false);
+              }
+            }}>
+            Quality
+          </Button>
+        </Tooltip>
         <Tooltip content="A new take for every passage that is not locked">
           <Button size="sm" variant="ghost" leading={<Shuffle className="size-4" />} loading={busy === "all"}
             onClick={() => act("all", () => api.regenerateUnlocked(renderId), "New takes for every unlocked passage")} disabled={!!busy}>
@@ -116,6 +134,9 @@ export function TakesPanel({ renderId, format, onAudio }: {
         ))}
       </div>
       <p className="mt-2 text-[12px] text-muted">Click a take to hear it, double-click to use it. Underlined words were missed or misheard by the speech check.</p>
+      <Dialog open={!!quality} onOpenChange={(v) => !v && setQuality(null)} title="Quality report" size="lg">
+        {quality && <QualityView r={quality} />}
+      </Dialog>
     </Card>
   );
 }
