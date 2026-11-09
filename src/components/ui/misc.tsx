@@ -141,7 +141,16 @@ export function ProgressBar({ value, className, tone = "fire" }: { value: number
 }
 
 /** Generated artwork tile for a voice / render, deterministic from a seed string. */
-export function ArtTile({ seed, className, children }: { seed: string; className?: string; children?: ReactNode }) {
+export function ArtTile({ seed, className, children, image }: { seed: string; className?: string; children?: ReactNode; image?: string | null }) {
+  if (image) {
+    // a voice avatar: the image fills the tile; children (e.g. a playing indicator) sit on a soft shade above it
+    return (
+      <div className={cn("relative flex items-center justify-center overflow-hidden rounded-lg bg-surface-3 text-white", className)} aria-hidden>
+        <img src={image} alt="" loading="lazy" draggable={false} className="absolute inset-0 size-full object-cover" />
+        {children ? <span className="relative z-10 flex size-full items-center justify-center bg-black/35">{children}</span> : null}
+      </div>
+    );
+  }
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   const hue = h % 360;

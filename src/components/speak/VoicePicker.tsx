@@ -50,8 +50,9 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
             "data-[state=open]:border-fire/60 data-[state=open]:shadow-[0_0_0_3px_var(--fire-soft)] disabled:opacity-50",
           )}
         >
-          <ArtTile seed={isDesign ? "design" : value === "default" ? (defaultVoice?.voice_id ?? "default") : value} className="size-11 shrink-0 text-[13px] font-bold">
-            {isDesign ? <Wand2 className="size-5" /> : initials(selected?.name ?? defaultVoice?.name ?? "FV")}
+          <ArtTile seed={isDesign ? "design" : value === "default" ? (defaultVoice?.voice_id ?? "default") : value}
+            image={isDesign ? null : api.voiceAvatarUrl(value === "default" ? defaultVoice : selected)} className="size-11 shrink-0 text-[13px] font-bold">
+            {isDesign ? <Wand2 className="size-5" /> : (value === "default" ? defaultVoice : selected)?.avatar ? null : initials(selected?.name ?? defaultVoice?.name ?? "FV")}
           </ArtTile>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-semibold text-ink">{label}</span>
@@ -114,7 +115,8 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
                 onSelect={() => { onChange(v.voice_id); setOpen(false); }}
                 onPreview={() => preview(v)}
                 seed={v.voice_id}
-                tile={initials(v.name)}
+                image={api.voiceAvatarUrl(v)}
+                tile={v.avatar ? null : initials(v.name)}
                 title={v.name}
                 subtitle={v.tagline || [v.description, langName(v.language), v.gender, v.accent].filter(Boolean).join(" · ")}
                 badges={
@@ -136,14 +138,14 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
 }
 
 function VoiceRow({
-  active, onSelect, onPreview, seed, tile, title, subtitle, badges,
+  active, onSelect, onPreview, seed, tile, title, subtitle, badges, image,
 }: {
-  active: boolean; onSelect: () => void; onPreview?: () => void; seed: string; tile: React.ReactNode; title: string; subtitle?: string; badges?: React.ReactNode;
+  active: boolean; onSelect: () => void; onPreview?: () => void; seed: string; tile: React.ReactNode; title: string; subtitle?: string; badges?: React.ReactNode; image?: string | null;
 }) {
   return (
     <div className={cn("group/row flex items-center gap-2.5 rounded-lg p-1.5 pr-2 transition-colors hover:bg-surface-3", active && "bg-fire-soft/50")}>
       <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-        <ArtTile seed={seed} className="size-9 shrink-0 text-[11px] font-bold">{tile}</ArtTile>
+        <ArtTile seed={seed} image={image} className="size-9 shrink-0 text-[11px] font-bold">{tile}</ArtTile>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 text-[13px] font-medium text-ink"><span className="truncate">{title}</span>{badges}</span>
           {subtitle && <span className="block truncate text-[11.5px] text-muted">{subtitle}</span>}

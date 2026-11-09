@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { AudioLines, Pause, Play, Star, Trash2 } from "lucide-react";
+import { AudioLines, ImageOff, ImagePlus, Pause, Play, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Voice } from "@/lib/api/types";
 import { api } from "@/lib/api/client";
@@ -103,9 +104,10 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
     <div className="flex flex-col gap-5">
       <div className="flex items-start gap-4">
         <div className="relative shrink-0">
-          <ArtTile seed={voice.voice_id} className="size-24 text-[26px] font-bold">
-            {isPlaying(voice.voice_id) ? <Equalizer className="h-6 text-white" /> : initials(voice.name)}
+          <ArtTile seed={voice.voice_id} image={api.voiceAvatarUrl(voice)} className="size-24 text-[26px] font-bold">
+            {isPlaying(voice.voice_id) ? <Equalizer className="h-6 text-white" /> : voice.avatar ? null : initials(voice.name)}
           </ArtTile>
+          <AvatarButton voiceId={voice.voice_id} hasAvatar={!!voice.avatar} />
           {voice.has_ref !== false && (
             <button
               type="button"
@@ -277,5 +279,42 @@ function DetailSkeleton() {
       </div>
       <Skeleton className="h-40 w-full rounded-xl" />
     </div>
+  );
+}
+
+
+/** Change the voice's avatar (any image, centre-cropped) or remove it. */
+function AvatarButton({ voiceId, hasAvatar }: { voiceId: string; hasAvatar: boolean }) {
+  const qc = useQueryClient();
+  const ref = useRef<HTMLInputElement>(null);
+  const done = () => {
+    qc.invalidateQueries({ queryKey: ["voices"] });
+    qc.invalidateQueries({ queryKey: ["voice", voiceId] });
+  };
+  return (
+    <>
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (!f) return;
+        try {
+          await api.setVoiceAvatar(voiceId, f);
+          toast.success("Avatar updated");
+          done();
+        } catch (err) {
+          toast.error(errMessage(err));
+        }
+      }} />
+      <button type="button" onClick={() => ref.current?.click()} aria-label="Change avatar"
+        className="absolute -top-1.5 -left-1.5 flex size-7 items-center justify-center rounded-full border border-line bg-surface text-ink-2 shadow-sm hover:text-fire">
+        <ImagePlus className="size-3.5" />
+      </button>
+      {hasAvatar && (
+        <button type="button" aria-label="Remove avatar" className="absolute -bottom-1.5 -left-1.5 flex size-7 items-center justify-center rounded-full border border-line bg-surface text-ink-2 shadow-sm hover:text-bad"
+          onClick={async () => { try { await api.removeVoiceAvatar(voiceId); done(); } catch (err) { toast.error(errMessage(err)); } }}>
+          <ImageOff className="size-3.5" />
+        </button>
+      )}
+    </>
   );
 }

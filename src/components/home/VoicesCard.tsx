@@ -1,3 +1,4 @@
+import { api } from "@/lib/api/client";
 import { Link, useNavigate } from "react-router";
 import { Library, Star } from "lucide-react";
 import { ArtTile, Card, CardBody, CardHeader, EmptyState, Skeleton, Tooltip } from "@/components/ui";
@@ -46,8 +47,8 @@ export function VoicesCard() {
                   onClick={() => navigate(`/voices/${encodeURIComponent(v.voice_id)}`)}
                   className="relative rounded-xl transition-transform hover:-translate-y-0.5 focus-visible:-translate-y-0.5"
                 >
-                  <ArtTile seed={v.voice_id} className="size-11 rounded-xl text-[13px] font-semibold">
-                    {initials(v)}
+                  <ArtTile seed={v.voice_id} image={api.voiceAvatarUrl(v)} className="size-11 rounded-xl text-[13px] font-semibold">
+                    {v.avatar ? null : initials(v)}
                   </ArtTile>
                   {v.favorite && (
                     <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-surface text-warn shadow-sm" aria-hidden>

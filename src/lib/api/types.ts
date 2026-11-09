@@ -100,6 +100,8 @@ export interface Voice {
   featured?: boolean;
   /** a rendered "Hi, I'm …" introduction exists (GET /voices/{id}/preview) */
   has_preview?: boolean;
+  /** avatar version (modification time); null when the voice has no avatar */
+  avatar?: number | null;
 }
 
 export interface VoiceQuality {

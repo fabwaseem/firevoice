@@ -192,6 +192,16 @@ export const api = {
   testDictionary: (text: string, engine?: string | null) =>
     request<{ text: string; spoken: string; engine: string }>("/api/v1/dictionary/test", { method: "POST", body: json({ text, engine: engine ?? undefined }) }),
 
+  // ---- voice avatars
+  voiceAvatarUrl: (v: { voice_id: string; avatar?: number | null } | null | undefined) =>
+    v?.avatar ? withToken(url(`/api/v1/voices/${encodeURIComponent(v.voice_id)}/avatar`, { v: v.avatar })) : null,
+  setVoiceAvatar: (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/avatar`, { method: "POST", body: fd });
+  },
+  removeVoiceAvatar: (id: string) => request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/avatar`, { method: "DELETE" }),
+
   // ---- projects
   projects: async () => (await request<{ projects: ProjectSummary[] }>("/api/v1/projects")).projects,
   project: (id: string) => request<Project>(`/api/v1/projects/${encodeURIComponent(id)}`),

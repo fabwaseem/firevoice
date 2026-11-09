@@ -49,8 +49,8 @@ export function VoiceCard({ voice, onOpen, index = 0 }: { voice: Voice; onOpen: 
           className="block w-full rounded-lg focus-visible:outline-2 focus-visible:outline-fire"
           aria-label={`Open ${voice.name}`}
         >
-          <ArtTile seed={voice.voice_id} className="aspect-square w-full text-[28px] font-bold tracking-tight">
-            {playing ? <Equalizer className="h-6 text-white" /> : initials(voice.name)}
+          <ArtTile seed={voice.voice_id} image={api.voiceAvatarUrl(voice)} className="aspect-square w-full text-[28px] font-bold tracking-tight">
+            {playing ? <Equalizer className="h-6 text-white" /> : voice.avatar ? null : initials(voice.name)}
           </ArtTile>
         </button>
 
