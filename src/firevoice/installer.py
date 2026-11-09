@@ -253,6 +253,37 @@ def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = Non
         raise InstallError(f"{Path(cmd[0]).name} exited with {p.returncode}: " + " | ".join(tail[-4:]))
 
 
+# Weights go through the shared Hugging Face cache, then are hardlinked into the weights folder (copied when the cache is
+# on another drive): a model already fetched by anything on this machine is not downloaded again.
+_FETCH = """
+import os, shutil, sys
+from huggingface_hub import snapshot_download
+src, dst = snapshot_download(sys.argv[1]), sys.argv[2]
+for root, _dirs, files in os.walk(src):
+    rel = os.path.relpath(root, src)
+    os.makedirs(os.path.join(dst, rel), exist_ok=True)
+    for f in files:
+        s, d = os.path.realpath(os.path.join(root, f)), os.path.join(dst, rel, f)
+        if os.path.exists(d) and os.path.getsize(d) == os.path.getsize(s):
+            continue
+        if os.path.exists(d):
+            os.remove(d)
+        try:
+            os.link(s, d)
+        except OSError:
+            shutil.copy2(s, d)
+print("weights in", dst)
+"""
+
+
+def _hub_cache_dir(repo: str) -> Optional[Path]:
+    try:
+        from huggingface_hub import constants
+        return Path(constants.HF_HUB_CACHE) / ("models--" + repo.replace("/", "--"))
+    except Exception:
+        return None
+
+
 def _dir_bytes(d: Path) -> int:
     return sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) if d.exists() else 0
 
@@ -305,19 +336,19 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 total = _repo_size(repo)
                 label = f"downloading {repo}" + (f" ({total / 1e9:.1f} GB)" if total else "")
                 progress(k, steps, label)
-                code = ("import sys; from huggingface_hub import snapshot_download; "
-                        "snapshot_download(sys.argv[1], local_dir=sys.argv[2])")
                 stop = threading.Event()
+                cache = _hub_cache_dir(repo)
+                start_bytes = _dir_bytes(cache) if cache else 0
 
-                def watch(k=k, dest=dest, total=total, label=label):
+                def watch(k=k, dest=dest, total=total, label=label, cache=cache, start_bytes=start_bytes):
                     while not stop.wait(2.0):
                         if total:
-                            have = _dir_bytes(dest)
+                            have = max(_dir_bytes(dest), (_dir_bytes(cache) - start_bytes) if cache else 0)
                             progress(k, steps, f"{label}: {min(100, round(100 * have / total))}%")
                 w = threading.Thread(target=watch, daemon=True)
                 w.start()
                 try:
-                    _run([sys.executable, "-c", code, repo, str(dest)], log, cancel, env)
+                    _run([sys.executable, "-c", _FETCH, repo, str(dest)], log, cancel, env)
                 finally:
                     stop.set()
                 k += 1
