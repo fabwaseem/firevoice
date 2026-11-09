@@ -322,7 +322,7 @@ class Synthesizer:
 
     # ------------------------------------------------------------------ planning
     def _plan(self, items: list, base_style: Style, custom_style: Optional[Style], lang: Optional[str], seed: int, caps: dict,
-              stream_first: bool = False) -> tuple[list, list]:
+              stream_first: bool = False, rules: Optional[list] = None) -> tuple[list, list]:
         """-> (chunks, plan): plan is Pause | [chunk, gap_ms] in order.
 
         Every separate generation re-imagines the delivery a little, so each seam is a place where the voice can change.
@@ -341,7 +341,7 @@ class Synthesizer:
             if it.style == "custom" and custom_style is not None:
                 st = custom_style
             english = is_english_text(it.text, lang)
-            spoken = normalize(it.text, self.lexicon, lang, spell_acronyms=caps.get("spell_acronyms", True))
+            spoken = normalize(it.text, self.lexicon, lang, spell_acronyms=caps.get("spell_acronyms", True), rules=rules)
             if not caps.get("supports_tags", False):
                 spoken = strip_tags(spoken)
             units += [_Sent(s, st, it.pace, english) for s in make_chunks(spoken)]
@@ -488,6 +488,8 @@ class Synthesizer:
         on_chunk: Optional[Callable[[dict], None]] = None,
         cancel: Optional[threading.Event] = None,
         priority: int = 0,
+        rules: Optional[list] = None,
+        keep_takes: bool = False,
     ) -> Result:
         """`lang` (e.g. "en", "ur", "hi") picks text normalisation and whether takes are ASR-validated; when omitted
         it is guessed from the script (non-Latin text is read as-is and checked only for signal problems).
@@ -507,19 +509,11 @@ class Synthesizer:
         caps = self.pool.caps
         res = Result(audio=np.zeros(0, np.float32), sr=sr, voice=voice)
 
-        # voice resolution: a registered clip, the library default, or a designed voice (description only)
-        # a voice may carry per-style reference clips (a whispered take for horror/asmr, a bright one for excited)
-        v = self.voices.resolve(voice, needs_reference=caps.get("needs_reference", True), engine=self.pool.spec.name, style=base_style.name)
-        voice_key = self._file_key(v.get("ref")) if v.get("ref") else hashlib.sha1((v.get("desc") or v["voice_id"]).encode()).hexdigest()[:16]
-        # workers cache conditioning by id: fingerprint the clip and transcript so an edited voice is prepared afresh
-        fp = hashlib.sha1(f"{voice_key}|{v.get('ref_text') or ''}|{v.get('desc') or ''}".encode()).hexdigest()[:8]
-        pool_voice = Voice(f"{v['voice_id']}#{fp}", ref=v.get("ref"), ref_text=v.get("ref_text"), desc=v.get("desc"))
-        voice_key = f"{voice_key}#{fp}"   # cached takes depend on the transcript too (it switches the cloning mode)
-        self.pool.prepare_voice(pool_voice)
+        pool_voice, voice_key = self._voice(voice, base_style.name)
 
         # 1) plan every chunk
         stream_first = on_chunk is not None and bool(caps.get("streaming"))
-        chunks, plan = self._plan(items, base_style, custom_style, lang, seed, caps, stream_first=stream_first)
+        chunks, plan = self._plan(items, base_style, custom_style, lang, seed, caps, stream_first=stream_first, rules=rules)
         stats.chunks = len(chunks)
         if stream_first and chunks:
             import queue as _q
@@ -527,8 +521,10 @@ class Synthesizer:
         group = threading.Event()
         for ch in chunks:
             ch.group, ch.priority = group, priority
+            # a passage in the request's own style is re-taken with that style; a [style x] passage with style x
+            ch.style_key = "request" if ch.style is base_style else ch.style.name
         try:
-            return self._render(chunks, plan, res, stats, voice_key, pool_voice, sr, lead_ms, tail_ms, lufs, on_chunk, cancel, t_start)
+            return self._render(chunks, plan, res, stats, voice_key, pool_voice, sr, lead_ms, tail_ms, lufs, on_chunk, cancel, t_start, keep_takes)
         finally:
             group.set()      # finished, failed or abandoned: whatever is still queued for this render is dropped
 
@@ -614,6 +610,57 @@ class Synthesizer:
             res.warnings.append(f"no audio for: {ch.text[:60]!r}")
         return t, emitted, emit_t, _speech_level_db(a, sr) if len(a) else None
 
+    def _voice(self, voice: str, style_name: str) -> tuple:
+        """-> (pool Voice, cache key). A registered clip, the library default, or a designed voice (description only);
+        a voice may carry per-style reference clips (a whispered take for horror/asmr, a bright one for excited)."""
+        caps = self.pool.caps
+        v = self.voices.resolve(voice, needs_reference=caps.get("needs_reference", True), engine=self.pool.spec.name, style=style_name)
+        voice_key = self._file_key(v.get("ref")) if v.get("ref") else hashlib.sha1((v.get("desc") or v["voice_id"]).encode()).hexdigest()[:16]
+        # workers cache conditioning by id: fingerprint the clip and transcript so an edited voice is prepared afresh
+        fp = hashlib.sha1(f"{voice_key}|{v.get('ref_text') or ''}|{v.get('desc') or ''}".encode()).hexdigest()[:8]
+        pool_voice = Voice(f"{v['voice_id']}#{fp}", ref=v.get("ref"), ref_text=v.get("ref_text"), desc=v.get("desc"))
+        self.pool.prepare_voice(pool_voice)
+        return pool_voice, f"{voice_key}#{fp}"   # cached takes depend on the transcript too (it switches the cloning mode)
+
+    def _finish(self, cand: "_Cand", ch: "_Chunk", stream_level: Optional[float]) -> tuple:
+        """A raw take as it is heard: pace, level, fade, then any [pause] cut in. -> (audio, words relative to it)."""
+        sr = self.sr
+        a = A.change_tempo(cand.audio, sr, ch.pace * ch.style.pace) if len(cand.audio) else cand.audio
+        a = A.rms_match(a, sr, target_db=stream_level) if stream_level is not None else A.rms_match(a, sr)
+        a = A.fade(a, sr)
+        factor = len(a) / max(1, len(cand.audio))
+        words = [Word(w.text, w.start * factor, w.end * factor) for w in cand.words]
+        return self._apply_cuts(a, words, ch)
+
+    @staticmethod
+    def _chunk_record(ch: "_Chunk", takes: list, chosen: int) -> dict:
+        return {"index": ch.index, "text": ch.text, "style": getattr(ch, "style_key", "request"), "pace": ch.pace, "seed": ch.seed,
+                "cuts": [list(c) for c in ch.cuts], "asr": ch.asr, "takes": takes, "chosen": chosen}
+
+    def _take_record(self, cand: "_Cand", audio: np.ndarray, words: list) -> dict:
+        return {"audio": audio, "words": [Word(w.text, w.start, w.end) for w in words], "said": cand.said, "score": round(float(cand.score), 3),
+                "reasons": list(cand.reasons), "seed": int(cand.seed), "validated": bool(self.validating and cand.score >= self.accept)}
+
+    def retake(self, text: str, *, voice: str, style: Style, pace: float = 1.0, seed: int = 1234, cuts: Optional[list] = None,
+               asr: bool = True, priority: int = 0, cancel: Optional[threading.Event] = None) -> dict:
+        """One new take of one passage (already normalised text, as stored with a kept render): generated, checked and
+        finished exactly like the passages of a full render. -> take record (see _take_record)."""
+        if not self.pool.started:
+            self.pool.start()
+        pool_voice, _ = self._voice(voice, style.name)
+        ch = _Chunk(index=0, text=text, style=style, pace=pace, seed=seed, asr=asr, cuts=list(cuts or []))
+        ch.group, ch.priority = threading.Event(), priority
+        stats = Stats()
+        try:
+            with self._lock:
+                for k in range(self.candidates):
+                    self._launch(ch, pool_voice, style, seed + k * 7919, stats)
+            best: _Cand = self._wait(ch.done, cancel)
+        finally:
+            ch.group.set()
+        a, words = self._finish(best, ch, None)
+        return self._take_record(best, a, words)
+
     def _wait(self, fut: Future, cancel: Optional[threading.Event]):
         """Future.result() that notices a cancel request within 0.2 s instead of waiting for the GPU."""
         while True:
@@ -623,7 +670,9 @@ class Synthesizer:
                 if cancel is not None and cancel.is_set():
                     raise Cancelled("render cancelled")
 
-    def _render(self, chunks, plan, res, stats, voice_key, pool_voice, sr, lead_ms, tail_ms, lufs, on_chunk, cancel, t_start) -> Result:
+    def _render(self, chunks, plan, res, stats, voice_key, pool_voice, sr, lead_ms, tail_ms, lufs, on_chunk, cancel, t_start, keep_takes=False) -> Result:
+        if keep_takes:
+            res.plan = [{"pause": it.ms} if isinstance(it, Pause) else {"chunk": it[0].index, "gap": int(it[1])} for it in plan]
 
         # 2) fan out: cache first, then `candidates` takes per chunk, all at once
         with self._lock:
@@ -658,7 +707,14 @@ class Synthesizer:
                 continue
             ch, gap = item
             if ch.streamed and ch.cached is None:
+                n0 = len(parts)
                 t, emitted, emit_t, level = self._play_stream(ch, parts, t, emitted, emit_t, sr, len(chunks), on_chunk, cancel, res, stats)
+                if keep_takes:
+                    heard = np.concatenate(parts[n0:]).astype(np.float32) if len(parts) > n0 else np.zeros(0, np.float32)
+                    best_s: _Cand = ch.done.result()
+                    t0s = ch.stream_t0
+                    rel = [Word(w.text, w.start - t0s, w.end - t0s) for w in res.words if w.start >= t0s - 1e-6]
+                    res.chunks.append(self._chunk_record(ch, [self._take_record(best_s, heard, rel)], 0))
                 # later passages match the streamed one, within a sane band (a quiet opening can leave it a bit hot)
                 stream_level = None if level is None else min(-18.0, max(-26.0, level))
                 if gap:
@@ -673,24 +729,41 @@ class Synthesizer:
                     emit_t = t
                 continue
             self._wait(ch.done, cancel)
+            best = None
             if ch.cached is not None:
                 a, words, take = ch.cached
+                a, words = self._apply_cuts(a, words, ch)
             else:
-                best: _Cand = ch.done.result()
-                a = A.change_tempo(best.audio, sr, ch.pace * ch.style.pace) if len(best.audio) else best.audio
-                a = A.rms_match(a, sr, target_db=stream_level) if stream_level is not None else A.rms_match(a, sr)
-                a = A.fade(a, sr)
-                factor = len(a) / max(1, len(best.audio))
-                words = [Word(w.text, w.start * factor, w.end * factor) for w in best.words]
-                take = Take(text=ch.text, spoken=best.said, seed=best.seed, score=round(best.score, 3), attempts=ch.attempts, duration=len(a) / sr,
+                best = ch.done.result()
+                # the cache keeps the take before pauses are cut in (the cut depends on the plan, not the take)
+                a0 = A.change_tempo(best.audio, sr, ch.pace * ch.style.pace) if len(best.audio) else best.audio
+                a0 = A.rms_match(a0, sr, target_db=stream_level) if stream_level is not None else A.rms_match(a0, sr)
+                a0 = A.fade(a0, sr)
+                factor = len(a0) / max(1, len(best.audio))
+                words0 = [Word(w.text, w.start * factor, w.end * factor) for w in best.words]
+                take = Take(text=ch.text, spoken=best.said, seed=best.seed, score=round(best.score, 3), attempts=ch.attempts, duration=len(a0) / sr,
                             validated=self.validating and best.score >= self.accept)
                 key = getattr(ch, "_key", None)
-                if key and len(a):
+                if key and len(a0):
                     try:
-                        self._cache_put(key, a, words, take)
+                        self._cache_put(key, a0, words0, take)
                     except Exception:
                         pass
-            a, words = self._apply_cuts(a, words, ch)
+                a, words = self._apply_cuts(a0, words0, ch)
+            if keep_takes:
+                if best is None:     # from the cache: the one take we have
+                    cand = _Cand(a, words, take.spoken, take.score, take.seed, [])
+                    res.chunks.append(self._chunk_record(ch, [self._take_record(cand, a, words)], 0))
+                else:
+                    recs, chosen = [], 0
+                    for c in ch.takes:
+                        if c is best:
+                            chosen = len(recs)
+                            recs.append(self._take_record(c, a, words))
+                        elif len(c.audio):
+                            ca, cw = self._finish(c, ch, stream_level)
+                            recs.append(self._take_record(c, ca, cw))
+                    res.chunks.append(self._chunk_record(ch, recs, chosen))
             chunk_t0 = t
             for w in words:
                 res.words.append(Word(w.text, t + w.start, t + w.end))

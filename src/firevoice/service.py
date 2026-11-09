@@ -67,6 +67,8 @@ class TTSRequest:
     validate: bool = True                   # ASR-check takes (English) and retry bad ones
     lead_ms: int = 120
     tail_ms: int = 280
+    dictionary: Optional[object] = None      # extra pronunciation rules for this request: [{match, say, ...}] or {written: spoken}
+    keep_takes: bool = False                # store every take of every passage (see /api/v1/renders) to compare, swap, re-take
 
     @classmethod
     def from_dict(cls, d: dict) -> "TTSRequest":
@@ -79,7 +81,7 @@ class TTSRequest:
         vals = {k: v for k, v in d.items() if v is not None or k in ("lufs", "instruct", "language")}
         # jobs and the CLI build requests from plain JSON: check types here the way pydantic does for /tts
         kinds = {"text": str, "engine": str, "voice": str, "style": str, "language": str, "instruct": str, "pace": float, "seed": int,
-                 "lufs": float, "candidates": int, "accept": float, "validate": bool, "lead_ms": int, "tail_ms": int,
+                 "lufs": float, "candidates": int, "accept": float, "validate": bool, "lead_ms": int, "tail_ms": int, "keep_takes": bool,
                  "params": dict, "style_overrides": dict}
         for k, v in list(vals.items()):
             want = kinds.get(k)
@@ -108,6 +110,7 @@ class Render:
     engine: str
     seconds: float
     warnings: list = field(default_factory=list)
+    render_id: Optional[str] = None          # set when the render was kept (keep_takes)
 
     @property
     def audio(self) -> np.ndarray:
@@ -126,7 +129,7 @@ class Render:
         return {"engine": self.engine, "voice": self.request.voice, "style": self.request.style, "duration": round(self.duration, 3),
                 "sample_rate": self.sr, "seconds": round(self.seconds, 3), "rtf": getattr(st, "rtf", None), "chunks": getattr(st, "chunks", None),
                 "takes": getattr(st, "takes", None), "retries": getattr(st, "retries", None), "cache_hits": getattr(st, "cache_hits", None),
-                "warnings": self.warnings + list(self.result.warnings),
+                "warnings": self.warnings + list(self.result.warnings), "render_id": self.render_id,
                 "words": [w.__dict__ for w in self.result.words]}
 
 
@@ -160,7 +163,11 @@ class FireVoice:
         self._aligner = None
         self._aligner_lock = threading.Lock()
         self.started = time.time()
+        from .dictionary import Dictionary
         from .jobs import JobManager
+        from .takestore import RenderStore
+        self.dictionary = Dictionary(home() / "dictionary.json")
+        self.renders = RenderStore(home() / "takes")
         self.jobs = JobManager(self)
 
     # -------------------------------------------------------------------- engines
@@ -317,6 +324,11 @@ class FireVoice:
         eng = self._resolve_engine(req.engine)
         inf = catalog.info(eng)
         try:
+            from .dictionary import parse_rules
+            parse_rules(req.dictionary)
+        except ValueError as e:
+            raise FireVoiceError("bad_request", f"dictionary: {e}")
+        try:
             base = get_style(req.style or "conversational")
         except KeyError as e:
             raise FireVoiceError("not_found", str(e).strip("'\""))
@@ -376,7 +388,7 @@ class FireVoice:
             s = self._synth(ld, req.validate, req.candidates, req.accept)
             res = s.speak(req.text, voice=req.voice or "default", custom_style=style, pace=req.pace, seed=req.seed,
                           lufs=req.lufs, lead_ms=req.lead_ms, tail_ms=req.tail_ms, lang=req.language, on_chunk=on_chunk, cancel=cancel,
-                          priority=priority)
+                          priority=priority, rules=self._rules(req), keep_takes=req.keep_takes)
         except Cancelled:
             raise
         except FireVoiceError:
@@ -391,7 +403,160 @@ class FireVoice:
             with self._lock:
                 ld.active -= 1
                 ld.last_used = time.time()
-        return Render(res, req, eng, time.perf_counter() - t0, warn)
+        r = Render(res, req, eng, time.perf_counter() - t0, warn)
+        if req.keep_takes and res.chunks:
+            r.render_id = self.renders.save(res, req.to_dict(), eng, lufs=req.lufs, lead_ms=req.lead_ms, tail_ms=req.tail_ms)
+        return r
+
+    def _rules(self, req: "TTSRequest") -> list:
+        from .dictionary import parse_rules
+        try:
+            return self.dictionary.compiled(parse_rules(req.dictionary))
+        except ValueError as e:
+            raise FireVoiceError("bad_request", f"dictionary: {e}")
+
+    # -------------------------------------------------------------------- dictionary
+    def dictionary_view(self) -> dict:
+        try:
+            rules = self.dictionary.rules()
+        except ValueError as e:
+            raise FireVoiceError("internal", str(e))
+        return {"rules": rules, "builtin": self.dictionary.builtin()}
+
+    def dictionary_add(self, rule: dict) -> dict:
+        try:
+            return self.dictionary.add(rule)
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+
+    def dictionary_update(self, rule_id: str, fields: dict) -> dict:
+        try:
+            return self.dictionary.update(rule_id, fields)
+        except KeyError:
+            raise FireVoiceError("not_found", f"no dictionary rule {rule_id!r}")
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+
+    def dictionary_remove(self, rule_id: str) -> dict:
+        try:
+            self.dictionary.remove(rule_id)
+        except KeyError:
+            raise FireVoiceError("not_found", f"no dictionary rule {rule_id!r}")
+        return {"id": rule_id, "removed": True}
+
+    def dictionary_replace(self, rules: list) -> dict:
+        try:
+            return {"rules": self.dictionary.replace(rules)}
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+
+    def dictionary_test(self, text: str, engine: Optional[str] = None, language: Optional[str] = None, dictionary=None) -> dict:
+        """What the engine will actually read for `text`, after your rules and the built-in text pass."""
+        from .dictionary import parse_rules
+        from .frontend.normalize import normalize
+        eng = self._resolve_engine(engine)
+        spell = _adapter_attr(eng, "spell_acronyms", True)
+        try:
+            rules = self.dictionary.compiled(parse_rules(dictionary))
+        except ValueError as e:
+            raise FireVoiceError("bad_request", f"dictionary: {e}")
+        spoken = normalize(text, self.lexicon, language, spell_acronyms=spell, rules=rules)
+        return {"text": text, "spoken": spoken, "engine": eng}
+
+    # -------------------------------------------------------------------- kept renders (takes)
+    def render_list(self, limit: int = 50) -> list[dict]:
+        return self.renders.list(limit)
+
+    def render_get(self, rid: str) -> dict:
+        try:
+            return self.renders.view(rid)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def render_audio(self, rid: str) -> tuple:
+        try:
+            return self.renders.stitch(rid)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def render_take_path(self, rid: str, index: int, n: int) -> Path:
+        try:
+            return self.renders.take_path(rid, index, n)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def render_retake(self, rid: str, index: int, seed: Optional[int] = None, choose: bool = True,
+                      cancel: Optional[threading.Event] = None) -> dict:
+        """A new take of one passage of a kept render, made like the original (same voice, style, pace, checks)."""
+        import random
+        meta = self.render_get(rid)
+        ch = next((c for c in meta["chunks"] if c["index"] == index), None)
+        if ch is None:
+            raise FireVoiceError("not_found", f"render {rid} has no passage {index}")
+        req = TTSRequest.from_dict({k: v for k, v in meta["request"].items() if k in {f.name for f in dataclasses.fields(TTSRequest)}})
+        eng, style, _params, _warn = self.prepare(req)
+        if ch["style"] != "request":
+            try:
+                style = dataclasses.replace(get_style(ch["style"]), extra={**get_style(ch["style"]).extra, **style.extra})
+            except KeyError:
+                pass
+        ld = self._pool(eng, hold=True)
+        try:
+            s = self._synth(ld, req.validate, 1, req.accept)
+            take = s.retake(ch["text"], voice=req.voice or "default", style=style, pace=ch["pace"],
+                            seed=int(seed if seed is not None else random.randint(1, 2**31 - 1)),
+                            cuts=[tuple(c) for c in ch.get("cuts") or []], asr=ch.get("asr", True), cancel=cancel)
+        except Cancelled:
+            raise
+        except FireVoiceError:
+            raise
+        except Exception as e:
+            raise FireVoiceError("internal", f"{type(e).__name__}: {str(e)[:400]}")
+        finally:
+            with self._lock:
+                ld.active -= 1
+                ld.last_used = time.time()
+        self.renders.add_take(rid, index, take, choose=choose)
+        return self.render_get(rid)
+
+    def render_choose(self, rid: str, index: int, n: int) -> dict:
+        try:
+            self.renders.choose(rid, index, n)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        return self.render_get(rid)
+
+    def render_lock(self, rid: str, index: int, locked: bool) -> dict:
+        try:
+            self.renders.lock(rid, index, locked)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        return self.render_get(rid)
+
+    def render_regenerate(self, rid: str, indexes: Optional[list[int]] = None, cancel: Optional[threading.Event] = None) -> dict:
+        """New takes for the given passages, or for every unlocked one."""
+        meta = self.render_get(rid)
+        todo = indexes if indexes else [c["index"] for c in meta["chunks"] if not c.get("locked")]
+        locked = {c["index"] for c in meta["chunks"] if c.get("locked")}
+        for i in todo:
+            if cancel is not None and cancel.is_set():
+                raise Cancelled("cancelled")
+            if i in locked:
+                continue
+            self.render_retake(rid, i, cancel=cancel)
+        return self.render_get(rid)
+
+    def render_delete(self, rid: str) -> dict:
+        self.render_get(rid)
+        self.renders.delete(rid)
+        return {"id": rid, "deleted": True}
+
+    def subtitles(self, words, fmt: str = "srt") -> tuple[str, str]:
+        from . import subtitles as S
+        try:
+            return S.render(words, fmt)
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
 
     def stream(self, req: TTSRequest, cancel: Optional[threading.Event] = None) -> Iterator[dict]:
         """Yield chunks in order while later ones are still rendering (all chunks render in parallel). Each item:
@@ -758,3 +923,15 @@ def _atomic_write(path: Path, data: bytes) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(data)
     os.replace(tmp, path)
+
+
+def _adapter_attr(engine: str, name: str, default):
+    """A class attribute of an engine's adapter, read without loading the model (adapters import their heavy
+    libraries only when they load)."""
+    import importlib
+    from .core.adapters import ADAPTERS
+    try:
+        mod, cls = ADAPTERS[engine].split(":")
+        return getattr(getattr(importlib.import_module(mod), cls), name, default)
+    except Exception:
+        return default

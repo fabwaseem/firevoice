@@ -50,7 +50,7 @@ import os
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 from . import audio as A
 from .service import FireVoice, FireVoiceError, TTSRequest
@@ -64,6 +64,8 @@ TAGS = [
     {"name": "tts", "description": "Text to speech: whole file, streamed chunks (SSE) or raw PCM. One request shape for every engine."},
     {"name": "stt", "description": "Speech to text with word times and language detection."},
     {"name": "jobs", "description": "Background renders, batches and voice design with progress events and history."},
+    {"name": "takes", "description": "Kept renders (keep_takes): every take of every passage with its speech check. Compare, swap, re-take, lock, export."},
+    {"name": "dictionary", "description": "Pronunciation dictionary: your rules for how words are said, plus the built-in list."},
     {"name": "elevenlabs", "description": "ElevenLabs-compatible routes for existing clients."},
     {"name": "legacy", "description": "Older studio contract."},
 ]
@@ -128,7 +130,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     app.state.svc = svc
     app.add_middleware(CORSMiddleware, allow_origins=cors_origins or [], allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
                        allow_origin_regex=None if cors_origins else r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost|https?://tauri\.localhost|app://.*)$",
-                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "Content-Disposition"])
+                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "X-Render-Id", "Content-Disposition"])
 
     # ------------------------------------------------------------------ errors + auth
     def err(code: str, message: str, status: Optional[int] = None):
@@ -190,6 +192,10 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         format: Literal["wav", "mp3", "flac", "ogg", "opus", "m4a", "pcm16"] = "mp3"
         sample_rate: Optional[int] = Field(None, ge=8000, le=96000, description="resample the output; null = engine native")
         response: Literal["audio", "json"] = "audio"
+        dictionary: Optional[Union[list[dict[str, Any]], dict[str, str]]] = Field(
+            None, description='extra pronunciation rules for this request: [{"match": "SQL", "say": "sequel"}] or {"SQL": "sequel"}')
+        keep_takes: bool = Field(False, description="keep every take of every passage; the response names the kept render "
+                                                     "(X-Render-Id, render_id) for /api/v1/renders")
 
         def request(self) -> TTSRequest:
             d = self.model_dump(by_alias=True, exclude={"format", "sample_rate", "response"})
@@ -228,12 +234,54 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         payload: dict[str, Any]
         title: str = ""
 
+    class RuleBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        match: str = Field(..., min_length=1, max_length=200, description="the written word or phrase")
+        say: str = Field(..., max_length=400, description="how to say it (letters only, as you would type it)")
+        case: bool = Field(False, description="match this exact casing only")
+        whole_word: bool = Field(True, description="only whole words (\"cat\" leaves \"concatenate\" alone)")
+        note: str = ""
+
+    class RulePatch(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        match: Optional[str] = None
+        say: Optional[str] = None
+        case: Optional[bool] = None
+        whole_word: Optional[bool] = None
+        note: Optional[str] = None
+
+    class RulesBody(BaseModel):
+        rules: list[dict[str, Any]]
+
+    class DictTest(BaseModel):
+        text: str = Field(..., min_length=1, max_length=5000)
+        engine: Optional[str] = None
+        language: Optional[str] = None
+        dictionary: Optional[Union[list[dict[str, Any]], dict[str, str]]] = None
+
+    class RetakeBody(BaseModel):
+        seed: Optional[int] = Field(None, description="null = a fresh random seed")
+        choose: bool = Field(True, description="make the new take the one used in the stitched audio")
+
+    class ChooseBody(BaseModel):
+        take: int = Field(..., ge=1, description="take number (n) to use for this passage")
+
+    class LockBody(BaseModel):
+        locked: bool = True
+
+    class RegenBody(BaseModel):
+        chunks: Optional[list[int]] = Field(None, description="passage indexes; null = every unlocked passage")
+
+    class SubBody(BaseModel):
+        words: list[dict[str, Any]] = Field(..., description='[{"text", "start", "end"}] in seconds, as /tts returns them')
+        format: Literal["srt", "vtt"] = "srt"
+
     def info_headers(r) -> dict:
         i = r.info()
         return {"X-Duration": str(i["duration"]), "X-Sample-Rate": str(r.sr), "X-Engine": i["engine"], "X-RTF": str(i["rtf"]),
                 # the warnings themselves (";"-separated, ASCII-safe for a header), and how many there were
                 "X-Warnings": "; ".join(w.replace(";", ",") for w in i["warnings"]).encode("ascii", "replace").decode()[:900],
-                "X-Warning-Count": str(len(i["warnings"]))}
+                "X-Warning-Count": str(len(i["warnings"])), **({"X-Render-Id": i["render_id"]} if i.get("render_id") else {})}
 
     async def save_upload(f: UploadFile) -> str:
         data = await f.read()
@@ -484,6 +532,119 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 Path(x).unlink(missing_ok=True)
 
     # ------------------------------------------------------------------ jobs
+    # ------------------------------------------------------------------ dictionary
+    @app.get("/api/v1/dictionary", dependencies=deps, tags=["dictionary"])
+    def dictionary():
+        """Your rules and the built-in list. Your rules run first and win."""
+        return svc.dictionary_view()
+
+    @app.post("/api/v1/dictionary", dependencies=deps, tags=["dictionary"], status_code=201)
+    def dictionary_add(body: RuleBody):
+        """Add a rule. A rule with the same match (and casing option) replaces the old one."""
+        return svc.dictionary_add(body.model_dump())
+
+    @app.put("/api/v1/dictionary", dependencies=deps, tags=["dictionary"])
+    def dictionary_replace(body: RulesBody):
+        """Replace all your rules (import)."""
+        return svc.dictionary_replace(body.rules)
+
+    @app.post("/api/v1/dictionary/test", dependencies=deps, tags=["dictionary"])
+    def dictionary_test(body: DictTest):
+        """What the engine will actually read for this text, after your rules and the built-in text pass."""
+        return svc.dictionary_test(body.text, body.engine, body.language, body.dictionary)
+
+    @app.patch("/api/v1/dictionary/{rule_id}", dependencies=deps, tags=["dictionary"])
+    def dictionary_update(rule_id: str, body: RulePatch):
+        return svc.dictionary_update(rule_id, body.model_dump(exclude_none=True))
+
+    @app.delete("/api/v1/dictionary/{rule_id}", dependencies=deps, tags=["dictionary"])
+    def dictionary_remove(rule_id: str):
+        return svc.dictionary_remove(rule_id)
+
+    # ------------------------------------------------------------------ kept renders (takes)
+    @app.get("/api/v1/renders", dependencies=deps, tags=["takes"])
+    def renders(limit: int = Query(50, ge=1, le=500)):
+        """Kept renders, newest first, with how many passages are flagged by the speech check."""
+        return {"renders": svc.render_list(limit)}
+
+    @app.get("/api/v1/renders/{rid}", dependencies=deps, tags=["takes"])
+    def render_get(rid: str):
+        """The timeline, every passage, every take with its speech check (words missed or changed), and which take is used."""
+        return svc.render_get(rid)
+
+    @app.get("/api/v1/renders/{rid}/audio", dependencies=deps, tags=["takes"])
+    def render_audio(rid: str, format: str = "mp3", download: bool = False):
+        """The chosen take of every passage, stitched and mastered like the original render."""
+        a, sr, _w = svc.render_audio(rid)
+        data = svc.encode(a, format, sr=sr)
+        h = {"Content-Disposition": f'attachment; filename="{rid}.{A.FORMATS[format][2]}"'} if download else {}
+        return Response(data, media_type=A.media_type(format), headers=h)
+
+    @app.get("/api/v1/renders/{rid}/words", dependencies=deps, tags=["takes"])
+    def render_words(rid: str):
+        """Word times of the stitched audio (they move when a take of a different length is chosen)."""
+        a, sr, words = svc.render_audio(rid)
+        return {"words": words, "duration": round(len(a) / sr, 3)}
+
+    @app.get("/api/v1/renders/{rid}/subtitles", dependencies=deps, tags=["takes"])
+    def render_subtitles(rid: str, format: Literal["srt", "vtt"] = "srt", download: bool = False):
+        _a, _sr, words = svc.render_audio(rid)
+        text, mt = svc.subtitles(words, format)
+        h = {"Content-Disposition": f'attachment; filename="{rid}.{format}"'} if download else {}
+        return Response(text, media_type=mt, headers=h)
+
+    @app.get("/api/v1/renders/{rid}/chunks/{index}/takes/{n}/audio", dependencies=deps, tags=["takes"])
+    def render_take_audio(rid: str, index: int, n: int, format: str = "wav"):
+        """One take of one passage, as heard in the render."""
+        import soundfile as _sf
+        p = svc.render_take_path(rid, index, n)
+        a, sr = _sf.read(str(p), dtype="float32", always_2d=False)
+        return Response(svc.encode(a, format, sr=sr), media_type=A.media_type(format))
+
+    @app.post("/api/v1/renders/{rid}/chunks/{index}/takes", dependencies=deps, tags=["takes"])
+    async def render_retake(request: Request, rid: str, index: int, body: RetakeBody = Body(default_factory=RetakeBody)):
+        """A new take of one passage (same voice, style and checks); by default it becomes the one used."""
+        import asyncio
+        cancel = threading.Event()
+        task = asyncio.ensure_future(run_in_threadpool(lambda: svc.render_retake(rid, index, body.seed, body.choose, cancel=cancel)))
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done and await request.is_disconnected():
+                cancel.set()
+        return task.result()
+
+    @app.post("/api/v1/renders/{rid}/chunks/{index}/choose", dependencies=deps, tags=["takes"])
+    def render_choose(rid: str, index: int, body: ChooseBody):
+        return svc.render_choose(rid, index, body.take)
+
+    @app.post("/api/v1/renders/{rid}/chunks/{index}/lock", dependencies=deps, tags=["takes"])
+    def render_lock(rid: str, index: int, body: LockBody = Body(default_factory=LockBody)):
+        """A locked passage keeps its take when you regenerate the rest."""
+        return svc.render_lock(rid, index, body.locked)
+
+    @app.post("/api/v1/renders/{rid}/regenerate", dependencies=deps, tags=["takes"])
+    async def render_regenerate(rid: str, body: RegenBody = Body(default_factory=RegenBody)):
+        """New takes for the listed passages, or every unlocked one."""
+        return await run_in_threadpool(svc.render_regenerate, rid, body.chunks)
+
+    @app.delete("/api/v1/renders/{rid}", dependencies=deps, tags=["takes"])
+    def render_delete(rid: str):
+        return svc.render_delete(rid)
+
+    @app.post("/api/v1/subtitles", dependencies=deps, tags=["tts"])
+    def subtitles(body: SubBody):
+        """SRT or WebVTT from word timings (the `words` of any /tts JSON response or stream)."""
+        text, mt = svc.subtitles(body.words, body.format)
+        return Response(text, media_type=mt)
+
+    @app.get("/api/v1/jobs/{job_id}/subtitles", dependencies=deps, tags=["jobs"])
+    def job_subtitles(job_id: str, format: Literal["srt", "vtt"] = "srt", download: bool = False):
+        """Subtitles for a finished tts job."""
+        words = json.loads(svc.jobs.file(job_id, "words.json").read_text(encoding="utf-8"))
+        text, mt = svc.subtitles(words, format)
+        h = {"Content-Disposition": f'attachment; filename="{job_id}.{format}"'} if download else {}
+        return Response(text, media_type=mt, headers=h)
+
     @app.post("/api/v1/jobs", dependencies=deps, tags=["jobs"], status_code=202)
     async def job_submit(body: JobBody = Body(openapi_examples=JOB_EXAMPLES)):
         return await run_in_threadpool(svc.jobs.submit, body.kind, body.payload, body.title)

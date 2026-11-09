@@ -74,7 +74,7 @@ function busyBtn(btn, on, label) {
 }
 
 // ------------------------------------------------------------------------------------------------ router
-const PAGES = ["speak", "voices", "stt", "jobs", "styles", "engines"];
+const PAGES = ["speak", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
 function route() {
   const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "speak";
   $$(".page").forEach(s => s.classList.toggle("on", s.id === "page-" + p));
@@ -84,6 +84,7 @@ function route() {
   if (p === "jobs") loadJobs();
   if (p === "styles") renderStyles();
   if (p === "engines") loadEngines();
+  if (p === "dictionary") loadDict();
 }
 window.addEventListener("hashchange", route);
 
@@ -135,12 +136,13 @@ function restoreForm() {
   FORM_IDS.forEach(id => { if (f[id] !== undefined && $("#" + id)) $("#" + id).value = f[id]; });
   if (!$("#text").value) $("#text").value = "Hello! This is FireVoice, running entirely on your own GPU. [pause 400ms] Every sentence is rendered in parallel, checked by speech recognition, and mastered before you hear it.";
   if (f.validate !== undefined) $("#validate").checked = f.validate;
+  if (f.keep !== undefined) $("#keep").checked = f.keep;
 }
 const saveForm = debounce(() => {
-  const f = {}; FORM_IDS.forEach(id => f[id] = $("#" + id)?.value); f.validate = $("#validate").checked; store.set("form", f);
+  const f = {}; FORM_IDS.forEach(id => f[id] = $("#" + id)?.value); f.validate = $("#validate").checked; f.keep = $("#keep").checked; store.set("form", f);
   ["voice", "style", "engine", "params", "pace", "mode", "voiceMode"].forEach(k => store.set(k, S[k]));
 }, 300);
-FORM_IDS.forEach(id => $("#" + id)?.addEventListener("input", saveForm)); $("#validate").onchange = saveForm;
+FORM_IDS.forEach(id => $("#" + id)?.addEventListener("input", saveForm)); $("#validate").onchange = saveForm; $("#keep").onchange = saveForm;
 
 function updateStats() {
   const t = $("#text").value.replace(/\[[^\]]*\]/g, " "); const words = (t.match(/\S+/g) || []).length;
@@ -290,7 +292,7 @@ function buildRequest() {
   let voice = S.voice;
   if (S.voiceMode === "design") { const d = $("#design").value.trim(); if (!d) throw new Error("Describe the voice to design, or switch to Library."); voice = "design:" + d; }
   const b = { text, engine: e.name, voice, style: S.style, pace: S.pace, seed: +$("#seed").value || 1234, candidates: +$("#candidates").value,
-    validate: $("#validate").checked, params: { ...(S.params[e.name] || {}) }, format: $("#format").value };
+    validate: $("#validate").checked, params: { ...(S.params[e.name] || {}) }, format: $("#format").value, keep_takes: $("#keep").checked };
   if ($("#instruct").value.trim()) b.instruct = $("#instruct").value.trim();
   const lang = $("#language").value.trim(); if (lang && lang !== "auto") b.language = lang;
   b.lufs = $("#lufs").value === "" ? null : +$("#lufs").value;
@@ -423,7 +425,9 @@ function showResult(item, autoplay) {
     ${warns.length ? `<div class="warns">${warns.map(w => `<div class="warn-row">${esc(w)}</div>`).join("")}</div>` : ""}
     <div class="words" id="pwords">${(j.words || []).map(w => `<span data-s="${w.start}" data-e="${w.end}">${esc(w.text)}</span>`).join(" ")}</div>
     <div class="row" style="margin-top:12px"><a class="btn sm" download="firevoice-${item.id}.${item.format}" href="${url}">${icon("download", "sm")}Download ${esc(item.format)}</a>
-      <button class="btn sm ghost" id="reuse">${icon("reset", "sm")}Load these settings</button></div>`;
+      <button class="btn sm ghost" data-sub="srt">${icon("cc", "sm")}SRT</button><button class="btn sm ghost" data-sub="vtt">${icon("cc", "sm")}VTT</button>
+      <button class="btn sm ghost" id="reuse">${icon("reset", "sm")}Load these settings</button></div>
+    ${j.render_id ? `<div class="takes" id="takes"><div class="skeleton" style="height:48px"></div></div>` : ""}`;
   const a = $("#player"), cv = $("#wave canvas"), pp = $("#pp"), ws = $$("#pwords span"); let pk = new Float32Array(220).fill(0.3);
   const draw = () => drawWave(cv, pk, a.duration ? a.currentTime / a.duration : 0);
   blobPeaks(item.blob).then(p => { pk = p; draw(); }); draw();
@@ -434,8 +438,130 @@ function showResult(item, autoplay) {
   $("#wave").onclick = ev => { const r = $("#wave").getBoundingClientRect(); if (a.duration) { a.currentTime = ((ev.clientX - r.left) / r.width) * a.duration; loop(); } };
   ws.forEach(s => s.onclick = () => { a.currentTime = +s.dataset.s; a.play(); });
   $("#reuse").onclick = () => { $("#text").value = item.text; updateStats(); toast("Script restored"); };
+  $$("[data-sub]").forEach(b => b.onclick = () => downloadSubtitles(item, b.dataset.sub));
+  if (j.render_id) loadTakes(item);
   if (autoplay) a.play().catch(() => { /* autoplay blocked: the play button still works */ });
 }
+
+// ------------------------------------------------------------------------------------------------ subtitles
+async function downloadSubtitles(item, fmt) {
+  try {
+    let text;
+    if (item.info.render_id) {
+      const r = await API.req(`/api/v1/renders/${item.info.render_id}/subtitles?format=${fmt}`, { raw: true }); text = await r.text();
+    } else {
+      const r = await API.req("/api/v1/subtitles", { method: "POST", json: { words: item.info.words || [], format: fmt }, raw: true }); text = await r.text();
+    }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: fmt === "vtt" ? "text/vtt" : "application/x-subrip" }));
+    a.download = `firevoice-${item.id}.${fmt}`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch (e) { toast(e.message, "bad"); }
+}
+
+// ------------------------------------------------------------------------------------------------ takes and QA
+// Every passage of a kept render with its takes: what the speech check heard, A/B playback, a new take, lock.
+let TAKE_AUDIO = null;
+function playTake(rid, i, n, btn) {
+  if (TAKE_AUDIO) { TAKE_AUDIO.pause(); $$(".takes .pt.on").forEach(x => x.classList.remove("on")); if (TAKE_AUDIO._key === `${i}.${n}`) { TAKE_AUDIO = null; return; } }
+  $("#player")?.pause();
+  TAKE_AUDIO = new Audio(API.url(`/api/v1/renders/${rid}/chunks/${i}/takes/${n}/audio?format=mp3`)); TAKE_AUDIO._key = `${i}.${n}`;
+  btn?.classList.add("on"); TAKE_AUDIO.onended = () => { btn?.classList.remove("on"); TAKE_AUDIO = null; };
+  TAKE_AUDIO.play().catch(e => toast(e.message, "bad"));
+}
+function qaHTML(chunk, take) {
+  const qa = take?.qa;
+  if (!qa) return esc(chunk.text);
+  const words = qa.words.map(w => w.status === "ok" ? esc(w.text)
+    : `<mark class="${w.status}" title="${w.status === "changed" ? `heard: ${esc(w.heard)}` : "not heard"}">${esc(w.text)}</mark>`).join(" ");
+  return words + (qa.extra?.length ? ` <span class="extra" title="heard but not in the script">+ ${esc(qa.extra.join(" "))}</span>` : "");
+}
+async function loadTakes(item) {
+  const rid = item.info.render_id; const box = $("#takes"); if (!box) return;
+  let m; try { m = await API.req(`/api/v1/renders/${rid}`); } catch (e) { box.innerHTML = `<span class="small dim">${esc(e.message)}</span>`; return; }
+  const flagged = m.chunks.filter(c => c.flagged).length;
+  box.innerHTML = `<div class="takes-h"><b>Passages and takes</b><span class="small dim">${m.chunks.length} passage${m.chunks.length === 1 ? "" : "s"}${flagged ? ` · <span class="flag">${flagged} to check</span>` : " · all passed the speech check"}</span>
+      <div class="grow"></div><button class="btn sm ghost" id="regen-all" title="New takes for every unlocked passage">${icon("dice", "sm")}Re-take unlocked</button></div>
+    ${m.chunks.map(c => { const cur = c.takes.find(t => t.n === c.chosen);
+      return `<div class="take-row ${c.flagged ? "flagged" : ""} ${c.locked ? "locked" : ""}" data-i="${c.index}">
+        <div class="tx">${qaHTML(c, cur)}</div>
+        <div class="tk">${c.takes.map(t => `<button class="pill pt ${t.n === c.chosen ? "cur" : ""}" data-n="${t.n}" title="take ${t.n}: score ${t.score}, ${t.duration}s, seed ${t.seed}${t.n === c.chosen ? " (in use)" : " (click to play, double-click to use)"}">${t.n}</button>`).join("")}
+          <button class="btn sm icon ghost" data-act="new" title="New take of this passage">${icon("plus", "sm")}</button>
+          <button class="btn sm icon ghost" data-act="lock" title="${c.locked ? "Unlock" : "Lock: keep this take when re-taking the rest"}">${icon(c.locked ? "lock" : "unlock", "sm")}</button></div></div>`; }).join("")}
+    <div class="small dim" style="margin-top:6px">Click a take to hear it, double-click to use it. Underlined words were missed or misheard by the speech check.</div>`;
+  const refresh = async () => {
+    const [aud, w] = await Promise.all([API.req(`/api/v1/renders/${rid}/audio?format=${item.format === "pcm16" ? "wav" : item.format}`, { raw: true }), API.req(`/api/v1/renders/${rid}/words`)]);
+    if (item.url) URL.revokeObjectURL(item.url); item.url = null; item.blob = await aud.blob();
+    item.info = { ...item.info, words: w.words, duration: w.duration }; renderHistory(); showResult(item, false);
+  };
+  const act = async (btn, fn, done) => { busyBtn(btn, true); try { await fn(); await refresh(); if (done) toast(done, "ok"); } catch (e) { toast(e.message, "bad"); busyBtn(btn, false); } };
+  $$(".take-row", box).forEach(row => {
+    const i = +row.dataset.i;
+    $$(".pt", row).forEach(b => {
+      b.onclick = () => playTake(rid, i, +b.dataset.n, b);
+      b.ondblclick = () => act(b, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/choose`, { method: "POST", json: { take: +b.dataset.n } }), `Passage ${i + 1} uses take ${b.dataset.n}`);
+    });
+    $("[data-act=new]", row).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/takes`, { method: "POST", json: {}, timeout: 0 }), `New take for passage ${i + 1}`);
+    $("[data-act=lock]", row).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/lock`, { method: "POST", json: { locked: !row.classList.contains("locked") } }));
+  });
+  $("#regen-all").onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/regenerate`, { method: "POST", json: {}, timeout: 0 }), "New takes for every unlocked passage");
+}
+
+// ------------------------------------------------------------------------------------------------ dictionary page
+let DICT = { rules: [], builtin: [] };
+async function loadDict() {
+  try { DICT = await API.req("/api/v1/dictionary"); } catch (e) { toast(e.message, "bad"); return; }
+  $("#n-dict").textContent = DICT.rules.length || "";
+  $("#dt").innerHTML = DICT.rules.length ? DICT.rules.map(r => `<tr data-id="${esc(r.id)}">
+      <td><input class="inp sm" data-f="match" value="${esc(r.match)}"></td><td><input class="inp sm" data-f="say" value="${esc(r.say)}"></td>
+      <td><label class="toggle sm"><input type="checkbox" data-f="case" ${r.case ? "checked" : ""}><span class="sw"></span>exact case</label>
+        <label class="toggle sm"><input type="checkbox" data-f="anywhere" ${r.whole_word ? "" : "checked"}><span class="sw"></span>inside words</label></td>
+      <td style="text-align:right"><button class="btn sm icon ghost" data-del title="Delete">${icon("trash", "sm")}</button></td></tr>`).join("")
+    : `<tr><td colspan="4"><span class="small dim">No rules yet. Add a name or word above that the voices say wrong.</span></td></tr>`;
+  $$("#dt tr[data-id]").forEach(tr => {
+    const id = tr.dataset.id;
+    const save = debounce(async () => {
+      const body = { match: $("[data-f=match]", tr).value, say: $("[data-f=say]", tr).value, case: $("[data-f=case]", tr).checked, whole_word: !$("[data-f=anywhere]", tr).checked };
+      try { await API.req(`/api/v1/dictionary/${id}`, { method: "PATCH", json: body }); } catch (e) { toast(e.message, "bad"); }
+    }, 500);
+    $$("input", tr).forEach(x => x.addEventListener(x.type === "checkbox" ? "change" : "input", save));
+    $("[data-del]", tr).onclick = async () => { try { await API.req(`/api/v1/dictionary/${id}`, { method: "DELETE" }); loadDict(); } catch (e) { toast(e.message, "bad"); } };
+  });
+  $("#d-builtin").innerHTML = DICT.builtin.map(b => `<span class="bi"><b>${esc(b.match)}</b> ${esc(b.say)}</span>`).join("");
+}
+$("#d-add").onclick = async () => {
+  const body = { match: $("#d-match").value.trim(), say: $("#d-say").value.trim(), case: $("#d-case").checked, whole_word: !$("#d-anywhere").checked };
+  if (!body.match) { toast("Write the word as it appears in scripts", "bad"); return; }
+  try { await API.req("/api/v1/dictionary", { method: "POST", json: body }); $("#d-match").value = $("#d-say").value = ""; toast(`Added ${body.match}`, "ok"); loadDict(); }
+  catch (e) { toast(e.message, "bad"); }
+};
+$("#d-say").addEventListener("keydown", e => { if (e.key === "Enter") $("#d-add").click(); });
+$("#d-run").onclick = async () => {
+  const text = $("#d-test").value.trim(); if (!text) return;
+  try { const r = await API.req("/api/v1/dictionary/test", { method: "POST", json: { text, engine: S.engine } }); $("#d-out").textContent = r.spoken; }
+  catch (e) { toast(e.message, "bad"); }
+};
+$("#d-test").addEventListener("keydown", e => { if (e.key === "Enter") $("#d-run").click(); });
+$("#d-hear").onclick = async () => {
+  const text = $("#d-test").value.trim(); if (!text) { toast("Type a sentence first", "bad"); return; }
+  const btn = $("#d-hear"); busyBtn(btn, true);
+  try {
+    const r = await API.req("/api/v1/tts", { method: "POST", json: { text, engine: S.engine, voice: S.voice, style: S.style, format: "mp3" }, timeout: 0, raw: true });
+    const a = $("#d-audio"); a.src = URL.createObjectURL(await r.blob()); a.play();
+  } catch (e) { toast(e.message, "bad"); } finally { busyBtn(btn, false); }
+};
+$("#dict-export").onclick = () => {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify({ rules: DICT.rules }, null, 1)], { type: "application/json" }));
+  a.download = "firevoice-dictionary.json"; a.click();
+};
+$("#dict-import").onclick = () => $("#d-file").click();
+$("#d-file").onchange = async () => {
+  const f = $("#d-file").files[0]; if (!f) return;
+  try {
+    let data = JSON.parse(await f.text()); let rules = Array.isArray(data) ? data : data.rules ?? data;
+    if (!Array.isArray(rules)) rules = Object.entries(rules).map(([match, say]) => ({ match, say }));
+    if (!confirm(`Replace your ${DICT.rules.length} rule(s) with ${rules.length} from ${f.name}?`)) return;
+    await API.req("/api/v1/dictionary", { method: "PUT", json: { rules } }); toast(`Imported ${rules.length} rule(s)`, "ok"); loadDict();
+  } catch (e) { toast(e.message, "bad"); } finally { $("#d-file").value = ""; }
+};
 window.addEventListener("resize", debounce(() => { const cv = $("#wave canvas"); if (cv) $("#player")?.dispatchEvent(new Event("pause")); }, 150));
 
 function renderHistory() {

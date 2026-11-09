@@ -66,9 +66,15 @@ def is_english_text(text: str, lang: Optional[str] = None) -> bool:
 _SPELLED = re.compile(r"^(?:[A-Z]s?)(?: [A-Z]s?)+$")
 
 
-def normalize(text: str, lexicon: Optional[dict[str, str]] = None, lang: Optional[str] = None, spell_acronyms: bool = True) -> str:
+def normalize(text: str, lexicon: Optional[dict[str, str]] = None, lang: Optional[str] = None, spell_acronyms: bool = True,
+              rules: Optional[list] = None) -> str:
     """`spell_acronyms=False` keeps acronyms as written ("GPU") for engines that read them as letters themselves; the
-    other lexicon entries (pronunciations such as JSON -> jason, expansions such as e.g. -> for example) still apply."""
+    other lexicon entries (pronunciations such as JSON -> jason, expansions such as e.g. -> for example) still apply.
+    `rules`: compiled pronunciation-dictionary rules (see firevoice.dictionary); they run first, win over everything
+    else, and apply to every language."""
+    if rules:
+        for pat, say in rules:
+            text = pat.sub(lambda _m, s=say: s, text)
     if not is_english_text(text, lang):
         return re.sub(r"\s+", " ", text).strip()
     lex = lexicon if lexicon is not None else DEFAULT_LEXICON

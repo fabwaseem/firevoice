@@ -47,6 +47,9 @@ class Result:
     takes: list[Take] = field(default_factory=list)
     voice: str = "default"
     warnings: list[str] = field(default_factory=list)
+    # with keep_takes: every take of every passage, finished as heard, and the timeline to stitch them again
+    chunks: list = field(default_factory=list)
+    plan: list = field(default_factory=list)
 
     @property
     def duration(self) -> float:

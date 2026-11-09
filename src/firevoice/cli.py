@@ -66,7 +66,9 @@ def _request_dict(a, text: str) -> dict:
     voice = f"design:{a.design}" if a.design else a.voice
     return {"text": text, "engine": a.engine, "voice": voice, "style": a.style, "pace": a.pace, "seed": a.seed, "language": a.language,
             "instruct": a.instruct, "params": _kv(a.param, "--param"), "style_overrides": _kv(a.style_set, "--set"),
-            "lufs": a.lufs or None, "candidates": a.candidates, "accept": a.accept, "validate": not a.no_asr, "lead_ms": a.lead_ms, "tail_ms": a.tail_ms}
+            "lufs": a.lufs or None, "candidates": a.candidates, "accept": a.accept, "validate": not a.no_asr, "lead_ms": a.lead_ms, "tail_ms": a.tail_ms,
+            "dictionary": json.loads(Path(a.dict).read_text(encoding="utf-8")) if getattr(a, "dict", None) else None,
+            "keep_takes": bool(getattr(a, "keep_takes", False))}
 
 
 def _service(a, **kw):
@@ -133,6 +135,13 @@ def cmd_say(a) -> int:
         info = r.info()
         if not a.no_words:
             out.with_suffix(".words.json").write_text(json.dumps(info["words"], indent=1), encoding="utf-8")
+        for fmt_s in ("srt", "vtt"):
+            dest = getattr(a, fmt_s, None)
+            if dest:
+                text_s, _ = svc.subtitles(info["words"], fmt_s)
+                Path(dest).write_text(text_s, encoding="utf-8")
+        if info.get("render_id") and not a.json:
+            print(f"  kept every take as render {info['render_id']} (firevoice renders show {info['render_id']})", file=sys.stderr)
         if a.json:
             info.pop("words")
             print(json.dumps({"file": str(out), **info}, indent=1))
@@ -141,6 +150,107 @@ def cmd_say(a) -> int:
                   f"{len(info['warnings'])} warning(s)")
             for w in info["warnings"]:
                 print("  warn:", w, file=sys.stderr)
+        return 0
+    except FireVoiceError as e:
+        return _fail(e)
+    finally:
+        svc.close()
+
+
+def cmd_dict(a) -> int:
+    from .service import FireVoiceError
+    svc = _service(a)
+    try:
+        if a.action == "list":
+            rules = svc.dictionary_view()["rules"]
+            if not rules:
+                print("no rules yet: firevoice dict add MATCH SAY   (built-in list: firevoice dict builtin)")
+            for r in rules:
+                opts = ", ".join(x for x in ("case" if r["case"] else "", "anywhere" if not r["whole_word"] else "") if x)
+                print(f"{r['id']}  {r['match']!r:24} -> {r['say']!r}{'  (' + opts + ')' if opts else ''}{'  # ' + r['note'] if r['note'] else ''}")
+        elif a.action == "builtin":
+            for r in svc.dictionary_view()["builtin"]:
+                print(f"{r['match']!r:16} -> {r['say']!r}")
+        elif a.action == "add":
+            if len(a.args) != 2:
+                print("usage: firevoice dict add MATCH SAY [--case] [--anywhere] [--note TEXT]", file=sys.stderr)
+                return 2
+            r = svc.dictionary_add({"match": a.args[0], "say": a.args[1], "case": a.case, "whole_word": not a.anywhere, "note": a.note})
+            print(f"added {r['id']}: {r['match']!r} -> {r['say']!r}")
+        elif a.action == "remove":
+            for rid in a.args:
+                svc.dictionary_remove(rid)
+                print("removed", rid)
+        elif a.action == "test":
+            r = svc.dictionary_test(" ".join(a.args), a.engine, a.language)
+            print(r["spoken"])
+        elif a.action == "export":
+            dest = a.args[0] if a.args else "dictionary.json"
+            Path(dest).write_text(json.dumps({"rules": svc.dictionary_view()["rules"]}, indent=1, ensure_ascii=False), encoding="utf-8")
+            print("wrote", dest)
+        elif a.action == "import":
+            data = json.loads(Path(a.args[0]).read_text(encoding="utf-8"))
+            rules = data.get("rules", data) if isinstance(data, dict) else data
+            if isinstance(rules, dict):
+                rules = [{"match": k, "say": v} for k, v in rules.items()]
+            print(f"imported {len(svc.dictionary_replace(rules)['rules'])} rule(s)")
+        return 0
+    except FireVoiceError as e:
+        return _fail(e)
+    finally:
+        svc.close()
+
+
+def cmd_renders(a) -> int:
+    from .service import FireVoiceError
+    svc = _service(a)
+    try:
+        if a.action == "list":
+            for r in svc.render_list(a.limit):
+                flag = f", {r['flagged']} flagged" if r["flagged"] else ""
+                print(f"{r['id']}  {r['passages']} passage(s), {r['takes']} take(s){flag}  {r['voice']} / {r['style']}  {r['title']!r}")
+            return 0
+        if not a.id:
+            print("which render? (firevoice renders list)", file=sys.stderr)
+            return 2
+        if a.action == "show":
+            m = svc.render_get(a.id)
+            for ch in m["chunks"]:
+                mark = ("LOCKED " if ch["locked"] else "") + ("FLAGGED " if ch["flagged"] else "")
+                print(f"[{ch['index']}] {mark}{ch['text'][:90]}")
+                for t in ch["takes"]:
+                    used = "*" if t["n"] == ch["chosen"] else " "
+                    qa = t.get("qa") or {}
+                    issues = [w["text"] + ("->" + w["heard"] if w.get("heard") else "") for w in qa.get("words", []) if w["status"] != "ok"]
+                    print(f"   {used} take {t['n']}: score {t['score']}, {t['duration']}s, seed {t['seed']}"
+                          + (f", missed/changed: {' '.join(issues)}" if issues else "") + (f", heard extra: {' '.join(qa['extra'])}" if qa.get("extra") else ""))
+        elif a.action == "take":
+            m = svc.render_retake(a.id, a.passage, a.seed)
+            ch = next(c for c in m["chunks"] if c["index"] == a.passage)
+            t = ch["takes"][-1]
+            print(f"passage {a.passage}: new take {t['n']} (score {t['score']}){', now used' if ch['chosen'] == t['n'] else ''}")
+        elif a.action == "choose":
+            svc.render_choose(a.id, a.passage, a.take)
+            print(f"passage {a.passage} uses take {a.take}")
+        elif a.action in ("lock", "unlock"):
+            svc.render_lock(a.id, a.passage, a.action == "lock")
+            print(f"passage {a.passage} {a.action}ed")
+        elif a.action == "regenerate":
+            svc.render_regenerate(a.id, [a.passage] if a.passage is not None else None)
+            print("new takes made for", f"passage {a.passage}" if a.passage is not None else "every unlocked passage")
+        elif a.action == "export":
+            out = Path(a.out or f"{a.id}.wav")
+            audio, sr, words = svc.render_audio(a.id)
+            out.write_bytes(svc.encode(audio, _fmt_for(out, None), sr=sr))
+            print(f"{out}: {len(audio) / sr:.1f}s")
+        elif a.action == "subtitles":
+            out = Path(a.out or f"{a.id}.srt")
+            _a, _sr, words = svc.render_audio(a.id)
+            out.write_text(svc.subtitles(words, out.suffix.lstrip(".") or "srt")[0], encoding="utf-8")
+            print("wrote", out)
+        elif a.action == "delete":
+            svc.render_delete(a.id)
+            print("deleted", a.id)
         return 0
     except FireVoiceError as e:
         return _fail(e)
@@ -713,8 +823,33 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("-o", "--out", default="out.wav", help="output file; the extension picks the format (wav, mp3, flac, ogg, opus, m4a)")
     s.add_argument("--json", action="store_true", help="print the render info as JSON")
     s.add_argument("--no-words", action="store_true", help="do not write <out>.words.json")
+    s.add_argument("--srt", default=None, metavar="FILE", help="also write subtitles (SRT) to FILE")
+    s.add_argument("--vtt", default=None, metavar="FILE", help="also write subtitles (WebVTT) to FILE")
+    s.add_argument("--keep-takes", action="store_true", help="keep every take of every passage (see: firevoice renders)")
+    s.add_argument("--dict", default=None, metavar="FILE", help="JSON pronunciation rules for this render only "
+                                                                  "([{match, say}] or {written: spoken})")
     _tts_options(s)
     s.set_defaults(fn=cmd_say)
+
+    dc = sub.add_parser("dict", help="pronunciation dictionary: your rules for how words are said")
+    dc.add_argument("action", nargs="?", default="list", choices=["list", "add", "remove", "test", "import", "export", "builtin"])
+    dc.add_argument("args", nargs="*", help="add: MATCH SAY | remove: ID | test: TEXT | import/export: FILE")
+    dc.add_argument("--case", action="store_true", help="add: match this exact casing only")
+    dc.add_argument("--anywhere", action="store_true", help="add: also match inside longer words")
+    dc.add_argument("--note", default="")
+    dc.add_argument("--engine", default=None, help="test: which engine's text pass to show")
+    dc.add_argument("--language", default=None)
+    dc.set_defaults(fn=cmd_dict)
+
+    rd = sub.add_parser("renders", help="kept renders (say --keep-takes): compare takes, re-take, choose, lock, export")
+    rd.add_argument("action", nargs="?", default="list", choices=["list", "show", "take", "choose", "lock", "unlock", "regenerate", "export", "subtitles", "delete"])
+    rd.add_argument("id", nargs="?", help="render id (list shows them)")
+    rd.add_argument("passage", nargs="?", type=int, help="passage index (show lists them)")
+    rd.add_argument("take", nargs="?", type=int, help="choose: take number")
+    rd.add_argument("-o", "--out", default=None, help="export: audio file | subtitles: .srt or .vtt file")
+    rd.add_argument("--seed", type=int, default=None, help="take: seed for the new take (default: random)")
+    rd.add_argument("--limit", type=int, default=30)
+    rd.set_defaults(fn=cmd_renders)
 
     b = sub.add_parser("batch", help="synthesize many lines from a JSON file; every line may override any request field")
     b.add_argument("file")

@@ -415,3 +415,35 @@ pre.code { background: var(--bg-2); border: 1px solid var(--line); border-radius
 .shelf .n { font-size: 12px; color: var(--mute); }
 .uses { font-size: 12px; color: var(--mute); }
 .uses b { color: var(--fg-2); font-weight: 700; }
+
+/* ---------------------------------------------------------------- takes and QA */
+.takes { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.takes-h { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.takes-h .flag { color: var(--warn); font-weight: 700; }
+.take-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); margin-bottom: 6px; border: 1px solid transparent; }
+.take-row.flagged { border-color: rgba(255, 196, 87, 0.35); }
+.take-row.locked { opacity: 0.85; }
+.take-row .tx { flex: 1; min-width: 0; font-size: 14.5px; line-height: 1.6; color: var(--fg-2); }
+.take-row .tx mark { background: none; color: var(--fg); text-decoration: underline wavy; text-underline-offset: 4px; cursor: help; }
+.take-row .tx mark.missed { text-decoration-color: var(--bad); }
+.take-row .tx mark.changed { text-decoration-color: var(--warn); }
+.take-row .tx .extra { color: var(--warn); font-size: 12.5px; }
+.take-row .tk { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.pill.pt { min-width: 28px; height: 28px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-3); color: var(--fg-2); font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.pill.pt:hover { border-color: var(--acc); color: var(--fg); }
+.pill.pt.cur { background: var(--acc-soft); border-color: var(--acc); color: #ffb08f; }
+.pill.pt.on { background: var(--acc); color: #fff; }
+@media (max-width: 720px) { .take-row { flex-direction: column; } }
+
+/* ---------------------------------------------------------------- dictionary */
+.dict-add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+.dict-add .field { margin: 0; }
+@media (max-width: 720px) { .dict-add { grid-template-columns: 1fr; } }
+.inp.sm { padding: 6px 9px; font-size: 13.5px; }
+.toggle.sm { font-size: 12.5px; margin-right: 12px; }
+.dict-out { margin-top: 12px; font-size: 15px; color: var(--fg); min-height: 1.4em; font-family: var(--mono, ui-monospace, monospace); }
+.builtin { display: flex; flex-wrap: wrap; gap: 6px; }
+.builtin .bi { font-size: 12.5px; padding: 3px 9px; border-radius: 999px; background: var(--surface-3); color: var(--fg-2); }
+.builtin .bi b { color: var(--fg); margin-right: 4px; }
+details.adv-card > summary { cursor: pointer; list-style: none; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+details.adv-card > summary::-webkit-details-marker { display: none; }

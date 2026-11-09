@@ -147,6 +147,22 @@ Two pages ship with the server for testing by hand:
 curl -s localhost:8787/api/v1/tts -H "Content-Type: application/json" -o hello.mp3   -d '{"text": "Hello there.", "voice": "lib-f-4992", "style": "storyteller", "params": {"inference_timesteps": 12}}'
 ```
 
+## Takes, QA, subtitles and the dictionary
+
+```bash
+firevoice say "Script..." -o out.wav --keep-takes --srt out.srt   # keep every take, write subtitles
+firevoice renders list                                             # kept renders, with flagged passages
+firevoice renders show ID                                          # every passage and take: score, words missed or misheard
+firevoice renders take ID 2                                        # a new take of passage 2 (it becomes the one used)
+firevoice renders choose ID 2 1 ; firevoice renders lock ID 2      # use take 1 of passage 2 and keep it
+firevoice renders regenerate ID ; firevoice renders export ID -o final.wav
+firevoice dict add Ayesha "Aa-ye-sha" ; firevoice dict test "Ayesha is here" ; firevoice dict list
+```
+
+The playground and the desktop app show the same thing after a render: each passage with the words the speech check
+missed or misheard underlined, its takes to compare, a new-take button and a lock, plus SRT and VTT downloads. The
+Dictionary page edits your pronunciation rules and plays them back.
+
 ## Markup, styles and voices
 
 ### Markup

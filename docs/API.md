@@ -64,6 +64,8 @@ Every TTS route takes the same body. Only `text` is required.
 | `format` | `"mp3"` | `wav`, `mp3`, `flac`, `ogg`, `opus`, `m4a` or `pcm16`. |
 | `sample_rate` | `null` | Resample the output. `null` keeps the engine's native rate: 48 kHz for VoxCPM2 and dots, 24 kHz for most others. |
 | `response` | `"audio"` | `"audio"` returns the bytes; `"json"` returns base64 audio plus word times and stats. |
+| `dictionary` | `null` | Extra pronunciation rules for this request only: `[{"match": "SQL", "say": "sequel"}]` or `{"SQL": "sequel"}`. They win over your saved dictionary. |
+| `keep_takes` | `false` | Keep every take of every passage. The response names the kept render (`X-Render-Id` header, `render_id` in JSON and in the stream's `done` event); see Takes below. |
 
 A request is fully validated before rendering starts: unknown fields, styles, voices or engine settings, out-of-range values, and an engine that can't do what you asked for. Each fails with `400` or `404` and a readable message.
 
@@ -151,6 +153,47 @@ The `chunk` event:
 ```
 
 `start` is the chunk's position in the final timeline; word times are absolute. Streamed chunks are loudness-matched, but the final studio chain (loudness normalisation and limiter) applies only to `/tts` and to jobs. Closing the connection cancels the render at the next sentence.
+
+In stream mode, VoxCPM2 hands out the first passage piece by piece while it renders (first audio in about half a
+second). Such pieces arrive as `chunk` events with `"partial": true` and no words; the event that closes the passage
+carries its words. A streamed passage is heard as it renders, so it is never re-taken; a weak one is reported in
+`warnings`.
+
+`POST /api/v1/subtitles` turns word timings (`{"words": [...], "format": "srt" | "vtt"}`) into SRT or WebVTT.
+
+### Pronunciation dictionary
+
+Your rules for how words are said, stored in `FIREVOICE_HOME/dictionary.json`. They run before the built-in text pass
+(numbers, money, dates, tech terms), win over it, and apply to every language.
+
+| | |
+|---|---|
+| `GET /api/v1/dictionary` | `{rules: [{id, match, say, case, whole_word, note}], builtin: [{match, say}]}` |
+| `POST /api/v1/dictionary` | Add a rule `{match, say, case?: false, whole_word?: true, note?}`. The same match again replaces the old rule. |
+| `PATCH /api/v1/dictionary/{id}` | Change a rule. |
+| `DELETE /api/v1/dictionary/{id}` | Remove a rule. |
+| `PUT /api/v1/dictionary` | Replace every rule (import): `{rules: [...]}`. |
+| `POST /api/v1/dictionary/test` | `{text, engine?}` -> `{spoken}`: what the engine will actually read. |
+
+### Takes (kept renders)
+
+A render made with `keep_takes` keeps every take of every passage in `FIREVOICE_HOME/takes/<id>/`, each with what the
+speech check heard. Swap or re-take one passage and the stitched audio is rebuilt from the chosen takes; nothing else
+is re-rendered.
+
+| | |
+|---|---|
+| `GET /api/v1/renders` | Kept renders, newest first, with how many passages are flagged. |
+| `GET /api/v1/renders/{id}` | The timeline and every passage: `text`, `takes: [{n, seed, score, duration, said, words, qa}]`, `chosen`, `locked`, `flagged`. `qa.words` marks each word `ok`, `missed` or `changed` (with what was heard). |
+| `GET /api/v1/renders/{id}/audio?format=` | The chosen takes, stitched and mastered like the original. |
+| `GET /api/v1/renders/{id}/words` | Word times of the stitched audio. |
+| `GET /api/v1/renders/{id}/subtitles?format=srt\|vtt` | Subtitles of the stitched audio. |
+| `GET /api/v1/renders/{id}/chunks/{i}/takes/{n}/audio` | One take of one passage. |
+| `POST /api/v1/renders/{id}/chunks/{i}/takes` | A new take `{seed?, choose?: true}` (same voice, style and checks). |
+| `POST /api/v1/renders/{id}/chunks/{i}/choose` | Use take `{take: n}`. |
+| `POST /api/v1/renders/{id}/chunks/{i}/lock` | `{locked: true}` keeps that passage when the rest are re-taken. |
+| `POST /api/v1/renders/{id}/regenerate` | New takes for `{chunks: [i, ...]}`, or every unlocked passage. |
+| `DELETE /api/v1/renders/{id}` | Delete a kept render. The newest 200 are kept (and any with a locked passage). |
 
 ### Speech to text
 
