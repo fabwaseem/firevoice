@@ -78,7 +78,7 @@ means the same thing in both. Add `--remote` to any everyday command to send it 
 firevoice say "Hello there. [pause 400ms] Welcome back." -o hello.mp3 --voice lib-f-4992 --style storyteller
 firevoice say @script.txt -o narration.wav --engine voxcpm2 --voice glb-m-sco-s01863 --style documentary     --param inference_timesteps=16 --param cfg_value=2.5 --set pause=1.2 --candidates 2 --sample-rate 44100
 firevoice say "Beep. I was designed from a sentence." -o robot.mp3 --design "a flat robotic AI assistant"
-firevoice say "आज मौसम बहुत अच्छा है।" -o urdu.mp3 --voice urd-m-cv03 --language hi
+firevoice say "Aaj mausam bohat acha hai. Chalo chai peetay hain." -o urdu.mp3 --voice Ayesha --language ur
 echo "Text from a pipe." | firevoice say - -o piped.wav --json
 firevoice batch lines.json -o voice_out/ --format mp3 --parallel 3   # [{"id": "s01", "text": "...", <any option>}, ...]
 firevoice transcribe talk.mp3 --language auto --print               # STT with word times

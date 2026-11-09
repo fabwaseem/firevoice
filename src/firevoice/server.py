@@ -76,9 +76,8 @@ TTS_EXAMPLES = {
         "text": "Every password you have ever typed went somewhere. Some were stored safely. Others were not.", "engine": "voxcpm2",
         "voice": "glb-m-sco-s01863", "style": "documentary", "params": {"cfg_value": 2.5, "inference_timesteps": 14},
         "style_overrides": {"pause": 1.2}, "candidates": 2, "format": "wav", "sample_rate": 44100}},
-    "urdu": {"summary": "Urdu (written in Devanagari reads best)", "value": {
-        "text": "\u0906\u091c \u092e\u094c\u0938\u092e \u092c\u0939\u0941\u0924 \u0905\u091a\u094d\u091b\u093e \u0939\u0948\u0964",
-        "voice": "urd-m-cv03", "format": "mp3"}},
+    "urdu": {"summary": "Urdu in Roman script with a native Urdu voice", "value": {
+        "text": "Aaj mausam bohat acha hai. Chalo, chai peetay hain.", "voice": "Ayesha", "language": "ur", "format": "mp3"}},
     "json with word times": {"summary": "JSON response: base64 audio plus word timestamps", "value": {
         "text": "Word timestamps come back with the audio.", "voice": "hifi-f-92", "response": "json"}},
     "another engine": {"summary": "The same request on Chatterbox Turbo", "value": {
@@ -189,6 +188,9 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     class VoicePatch(BaseModel):
         model_config = ConfigDict(extra="forbid")
         name: Optional[str] = None
+        tagline: Optional[str] = None
+        traits: Optional[list[str]] = None
+        use_cases: Optional[list[str]] = None
         description: Optional[str] = None
         gender: Optional[str] = None
         language: Optional[str] = None
@@ -209,7 +211,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     class JobBody(BaseModel):
         model_config = ConfigDict(extra="forbid")
-        kind: Literal["tts", "batch", "design"]
+        kind: Literal["tts", "batch", "design", "previews"]
         payload: dict[str, Any]
         title: str = ""
 
@@ -316,6 +318,26 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
             return svc.jobs.submit("design", body.model_dump())
         return await run_in_threadpool(lambda: svc.voice_design(body.name, body.description, engine=body.engine, text=body.text, gender=body.gender,
                                                                 language=body.language, seed=body.seed))
+
+    @app.get("/api/v1/voices/collections", dependencies=deps, tags=["voices"])
+    def voice_collections():
+        """Curated shelves (featured, narrators, conversational, characters, accents, Urdu, designed) of voice ids."""
+        return {"collections": svc.voice_collections()}
+
+    @app.post("/api/v1/voices/brand", dependencies=deps, tags=["voices"])
+    async def voice_brand(force: bool = False):
+        """(Re)assign names, taglines, traits, use cases and quality tiers. Names set by hand are kept unless force=true."""
+        return {"branded": await run_in_threadpool(svc.voice_brand, None, force)}
+
+    @app.get("/api/v1/voices/{voice_id}/preview", dependencies=deps, tags=["voices"])
+    def voice_preview(voice_id: str):
+        """The voice introducing itself ("Hi, I'm Isla..."); falls back to the original reference clip."""
+        p = svc.voice_preview_clip(voice_id)
+        return FileResponse(p, media_type="audio/mpeg" if p.suffix == ".mp3" else "audio/wav")
+
+    @app.post("/api/v1/voices/{voice_id}/preview", dependencies=deps, tags=["voices"])
+    async def voice_preview_render(voice_id: str, engine: Optional[str] = None):
+        return await run_in_threadpool(svc.voice_render_preview, voice_id, engine)
 
     @app.get("/api/v1/voices/{voice_id}", dependencies=deps, tags=["voices"])
     def voice(voice_id: str):

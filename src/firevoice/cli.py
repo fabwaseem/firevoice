@@ -206,6 +206,21 @@ def cmd_voices(a) -> int:
     try:
         if a.action == "list":
             return _print_voices(svc.voice_list(language=a.language, gender=a.gender, tag=a.tag, q=a.q, kind=a.kind), a)
+        if a.action == "brand":
+            rows = svc.voice_brand(a.report, force=a.force, log=print)
+            print(f"{len(rows)} voice(s) branded")
+            return 0
+        if a.action == "previews":
+            ids = [a.name] if a.name else [v["voice_id"] for v in svc.voice_list() if v.get("has_ref")]
+            todo = [i for i in ids if a.force or not svc.voice(i).get("has_preview")]
+            print(f"rendering {len(todo)} preview(s) ({len(ids) - len(todo)} already done)")
+            for i, vid in enumerate(todo, 1):
+                try:
+                    r = svc.voice_render_preview(vid, engine=a.engine)
+                    print(f"  {i:3}/{len(todo)} {vid:22} {r['name']:12} {r['preview_seconds']}s")
+                except FireVoiceError as e:
+                    print(f"  {i:3}/{len(todo)} {vid:22} FAILED {e.message}")
+            return 0
         if not a.name:
             print(f"voices {a.action} needs --name", file=sys.stderr)
             return 2
@@ -232,7 +247,7 @@ def cmd_voices(a) -> int:
                 svc.voices.remove(a.name)
             print(json.dumps(svc.voice_design(a.name, desc, engine=a.engine, text=a.text, gender=a.gender or "", language=a.language or ""), indent=1))
         elif a.action == "update":
-            fields = {k: getattr(a, k) for k in ("description", "gender", "language", "accent") if getattr(a, k)}
+            fields = {k: getattr(a, k) for k in ("description", "gender", "language", "accent", "tagline") if getattr(a, k)}
             if a.tags:
                 fields["tags"] = [t for t in a.tags.split(",") if t]
             if a.rename:
@@ -265,8 +280,9 @@ def _print_voices(rows: list[dict], a) -> int:
     for v in rows:
         flags = ("*" if v.get("default") else " ") + (" designed" if v.get("kind") == "designed" else "")
         styles = f"  styles: {','.join(v['styles'])}" if v.get("styles") else ""
-        print(f"{flags[:1]} {v['voice_id']:24} {v.get('gender') or '-':7} {v.get('language') or 'en':3} {(v.get('accent') or '')[:28]:28} "
-              f"{(v.get('description') or '')[:60]}{styles}")
+        tier = (v.get("quality") or {}).get("tier") or "-"
+        print(f"{flags[:1]} {v['voice_id']:22} {str(v.get('name') or ''):12} {tier:2} {v.get('gender') or '-':7} {v.get('language') or 'en':3} "
+              f"{(v.get('tagline') or v.get('description') or '')[:64]}{styles}")
     print(f"{len(rows)} voice(s)" + ("  (* = default)" if any(v.get("default") for v in rows) else ""))
     return 0
 
@@ -696,7 +712,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.set_defaults(fn=cmd_batch)
 
     v = sub.add_parser("voices", help="list, add, design, update and remove voices")
-    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest"])
+    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews"])
     v.add_argument("--name")
     v.add_argument("--ref", help="add / style-ref: audio clip (6-20 s of clean speech)")
     v.add_argument("--consent", action="store_true", help="confirm you own or have permission to use this voice")
@@ -707,6 +723,9 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--tags", default=None, help="comma-separated")
     v.add_argument("--transcript", default=None, help="what the reference clip says (default: transcribed)")
     v.add_argument("--rename", default=None, help="update: new display name")
+    v.add_argument("--tagline", default=None, help="update: one-line description shown in voice browsers")
+    v.add_argument("--report", default=None, help="brand: listening-test report.json used for quality tiers")
+    v.add_argument("--force", action="store_true", help="brand: also rename voices you named yourself; previews: re-render existing")
     v.add_argument("--source")
     v.add_argument("--license")
     v.add_argument("--style-name", help="style-ref: the style this clip is a reference for")

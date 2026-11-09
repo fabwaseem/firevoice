@@ -113,7 +113,7 @@ T_TOPP = Param("top_p", "float", 0.95, 0.1, 1.0, 0.01, label="Top-p")
 
 
 CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
-    EngineInfo("null", "Null (test)", clone=False, needs_reference=False, design=True, tags=True, languages=["*"], notes="silence, for tests"),
+    EngineInfo("null", "Null (test)", clone=True, needs_reference=False, design=True, tags=True, languages=["*"], notes="silence, for tests"),
     EngineInfo("chatterbox-turbo", "Chatterbox Turbo 350M", tags=True, languages=["en"], speed_rtf=0.22,
                notes="fastest cloner; [laugh] [sigh] tags; PerTh watermark",
                params=[T_TEMP, T_TOPP, Param("top_k", "int", 1000, 1, 4000, 1, label="Top-k"),

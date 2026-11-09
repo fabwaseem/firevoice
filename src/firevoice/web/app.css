@@ -14,11 +14,11 @@
   --fg-2: #c9cdd8;
   --mute: #8a90a2;
   --dim: #5f6577;
-  --acc: #ff6b35;
-  --acc-2: #ff9a3d;
-  --acc-3: #ff3d6e;
-  --grad: linear-gradient(135deg, #ff9a3d 0%, #ff6b35 45%, #ff3d6e 100%);
-  --acc-soft: rgba(255, 107, 53, 0.12);
+  --acc: #ff6a3d;
+  --acc-2: #ff9a5c;
+  --acc-3: #ff5a2d;
+  --grad: linear-gradient(135deg, #ff9a5c 0%, #ff6a3d 100%);
+  --acc-soft: rgba(255, 106, 61, 0.16);
   --ok: #3ecf8e;
   --ok-soft: rgba(62, 207, 142, 0.12);
   --warn: #f5b74f;
@@ -42,7 +42,7 @@
 html, body { margin: 0; height: 100%; }
 body {
   background: radial-gradient(1200px 600px at 85% -10%, rgba(255, 107, 53, 0.07), transparent 60%),
-              radial-gradient(900px 500px at -10% 110%, rgba(255, 61, 110, 0.05), transparent 60%), var(--bg);
+              radial-gradient(900px 500px at -10% 110%, rgba(120, 110, 255, 0.05), transparent 60%), var(--bg);
   color: var(--fg);
   font: 500 14.5px/1.5 var(--font);
   letter-spacing: 0.005em;
@@ -70,8 +70,8 @@ svg.i.lg { width: 22px; height: 22px; }
   display: flex; flex-direction: column; padding: 18px 14px; gap: 6px; overflow-y: auto;
 }
 .brand { display: flex; align-items: center; gap: 11px; padding: 4px 8px 18px; }
-.brand .mark { width: 36px; height: 36px; border-radius: 11px; background: var(--grad); display: grid; place-items: center; box-shadow: 0 8px 24px -8px rgba(255, 107, 53, 0.7); }
-.brand .mark svg { stroke: #fff; width: 20px; height: 20px; }
+.brand .mark { width: 38px; height: 38px; display: block; border-radius: 10px; box-shadow: 0 8px 24px -8px rgba(255, 106, 61, 0.7); }
+
 .brand .name { font-weight: 800; font-size: 19px; letter-spacing: -0.01em; line-height: 1.1; }
 .brand .name span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .brand .sub { font-size: 11.5px; color: var(--mute); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -398,3 +398,20 @@ pre.code { background: var(--bg-2); border: 1px solid var(--line); border-radius
   .page { padding: 18px 16px 40px; }
   .grid2, .grid3 { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------- branding: names, tiers, shelves */
+.vname { font-weight: 800; font-size: 15.5px; letter-spacing: -0.005em; }
+.vid { font: 500 11.5px var(--mono); color: var(--dim); }
+.tier { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; letter-spacing: 0.02em; white-space: nowrap; }
+.tier.S { background: var(--grad); color: #fff; }
+.tier.A { background: var(--acc-soft); color: #ffb08f; }
+.tier.B { background: var(--surface-3); color: var(--fg-2); }
+.tier.C { background: var(--surface-2); color: var(--dim); }
+.shelves { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.shelf { border: 1px solid var(--line-2); background: var(--surface); border-radius: 12px; padding: 9px 13px; cursor: pointer; text-align: left; min-width: 150px; transition: all 0.15s; color: var(--fg); }
+.shelf:hover { border-color: rgba(255, 106, 61, 0.35); }
+.shelf.on { background: var(--acc-soft); border-color: rgba(255, 106, 61, 0.55); }
+.shelf .t { font-weight: 800; font-size: 14px; }
+.shelf .n { font-size: 12px; color: var(--mute); }
+.uses { font-size: 12px; color: var(--mute); }
+.uses b { color: var(--fg-2); font-weight: 700; }

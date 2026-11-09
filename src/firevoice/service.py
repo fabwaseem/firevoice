@@ -444,15 +444,18 @@ class FireVoice:
                 continue
             if q and q.lower() not in " ".join(str(x) for x in (v["voice_id"], v.get("name"), v.get("description"), v.get("accent"), v.get("source"))).lower():
                 continue
+            v["has_preview"] = (self.voices.root / v["voice_id"] / "preview.mp3").exists()
             out.append(_voice_view(v, default))
         return out
 
     def voice(self, voice_id: str) -> dict:
+        voice_id = self.voices.canonical(voice_id)
         try:
             m = self.voices.get(voice_id)
         except KeyError:
             raise FireVoiceError("not_found", f"unknown voice {voice_id!r}")
-        d = _voice_view({**m, "has_ref": bool(self.voices.ref_path(voice_id)), "styles": self.voices.list_styles(voice_id)}, self.voices.default_id())
+        d = _voice_view({**m, "has_ref": bool(self.voices.ref_path(voice_id)), "styles": self.voices.list_styles(voice_id),
+                         "has_preview": (Path(m["dir"]) / "preview.mp3").exists()}, self.voices.default_id())
         d["transcript"] = self.voices.ref_text(voice_id)
         return d
 
@@ -478,14 +481,17 @@ class FireVoice:
         return self.voice(meta["voice_id"])
 
     def voice_update(self, voice_id: str, **fields) -> dict:
-        allowed = {"name", "description", "gender", "tags", "language", "accent", "license", "source", "favorite", "notes"}
+        allowed = {"name", "description", "gender", "tags", "language", "accent", "license", "source", "favorite", "notes", "tagline", "traits", "use_cases"}
         bad = set(fields) - allowed
         if bad:
             raise FireVoiceError("bad_request", f"cannot update {', '.join(sorted(bad))}; editable: {', '.join(sorted(allowed))}")
-        self.voice(voice_id)
+        voice_id = self.voice(voice_id)["voice_id"]
+        if fields.get("name"):
+            clash = [v["voice_id"] for v in self.voices.list() if str(v.get("name", "")).lower() == fields["name"].lower() and v["voice_id"] != voice_id]
+            if clash:
+                raise FireVoiceError("conflict", f"the name {fields['name']!r} is already used by {clash[0]}")
+            fields["branded_by"] = "user"
         self.voices.update(voice_id, **{k: v for k, v in fields.items() if v is not None})
-        if "transcript" in fields:
-            pass
         return self.voice(voice_id)
 
     def voice_set_transcript(self, voice_id: str, transcript: str) -> dict:
@@ -542,6 +548,32 @@ class FireVoice:
         finally:
             tmp.unlink(missing_ok=True)
         return self.voice(name)
+
+    def voice_collections(self) -> list[dict]:
+        from .branding import collections
+        return collections(self.voice_list())
+
+    def voice_preview_clip(self, voice_id: str) -> Path:
+        """The branded preview ("Hi, I'm Isla...") when rendered, otherwise the original reference clip."""
+        v = self.voice(voice_id)
+        p = self.voices.root / v["voice_id"] / "preview.mp3"
+        return p if p.exists() else self.voice_preview_path(v["voice_id"])
+
+    def voice_render_preview(self, voice_id: str, engine: Optional[str] = None, seed: int = 1234) -> dict:
+        from .branding import preview_text
+        v = self.voice(voice_id)
+        text, lang = preview_text(v)
+        r = self.tts(TTSRequest(text=text, engine=engine, voice=v["voice_id"], style="conversational", instruct="", language=lang, seed=seed,
+                                validate=lang == "en"))
+        (self.voices.root / v["voice_id"] / "preview.mp3").write_bytes(self.encode(r, "mp3"))
+        return {**self.voice(v["voice_id"]), "preview_text": text, "preview_seconds": round(r.duration, 2)}
+
+    def voice_brand(self, report: Optional[str] = None, force: bool = False, log=None) -> list[dict]:
+        """Names, taglines, traits, use cases and quality tiers for every voice. `report` is a listening-test report.json
+        (default: $FIREVOICE_REPORT, else samples/voxcpm2/judge/report.json next to the code when present)."""
+        from .branding import brand, load_report
+        report = report or os.environ.get("FIREVOICE_REPORT") or str(Path(__file__).resolve().parents[2] / "samples" / "voxcpm2" / "judge" / "report.json")
+        return brand(self.voices, load_report(report), force=force, log=log or (lambda *_: None))
 
     def _forget_voice(self, voice_id: str) -> None:
         """Cached conditioning in running workers would keep the old clip; drop it so the next request re-prepares."""
@@ -622,8 +654,9 @@ DESIGN_TEXT = ("Hello there, and welcome; today I want to walk you through somet
 
 
 def _voice_view(v: dict, default: Optional[str]) -> dict:
-    keep = ("voice_id", "name", "category", "description", "gender", "language", "accent", "age", "tags", "source", "license", "ref_seconds",
-            "created", "has_ref", "styles", "design_prompt", "favorite", "notes")
+    keep = ("voice_id", "name", "tagline", "traits", "use_cases", "quality", "featured", "category", "description", "gender",
+            "language", "accent", "age", "tags", "source", "license", "ref_seconds", "created", "has_ref", "has_preview", "styles", "design_prompt",
+            "favorite", "notes")
     d = {k: v.get(k) for k in keep if k in v}
     d.setdefault("language", "en")
     d["kind"] = "designed" if ("designed" in (v.get("tags") or []) or v.get("category") == "designed") else "cloned"

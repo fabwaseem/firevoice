@@ -9,6 +9,7 @@ Kinds and payloads
   tts     {"request": TTSRequest fields, "format": "mp3", "sample_rate": null}
   batch   {"lines": [{"id": "l1", "text": "...", <any TTSRequest field>}...], "defaults": {TTSRequest fields}, "format": "wav"}
   design  {"name": "...", "description": "...", "engine": null, "text": null, "gender": "", "language": ""}
+  previews {"voices": null (all) or ["id", ...], "engine": null, "force": false}   branded "Hi, I'm ..." clip per voice
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design")
+KINDS = ("tts", "batch", "design", "previews")
 
 
 @dataclass
@@ -95,6 +96,8 @@ class JobManager:
             if not payload.get("name") or not payload.get("description"):
                 raise FireVoiceError("bad_request", "design needs a name and a description")
             title = title or f"design voice {payload['name']}"
+        elif kind == "previews":
+            title = title or f"voice previews ({len(payload.get('voices') or []) or 'all'})"
         job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload)
         with self.lock:
             self.jobs[job.id] = job
@@ -307,6 +310,24 @@ class JobManager:
         self._progress(j, len(lines), len(lines))
         j.result = {"manifest": "manifest.json", "files": [m["file"] for m in manifest if "file" in m], "failed": failed,
                     "duration": round(sum(m.get("duration", 0) for m in manifest), 2), "audio": next((m["file"] for m in manifest if "file" in m), None)}
+
+    def _run_previews(self, j: Job, cancel: threading.Event) -> None:
+        from .types import Cancelled
+        p = j.payload
+        ids = p.get("voices") or [v["voice_id"] for v in self.svc.voice_list() if v.get("has_ref")]
+        todo = [i for i in ids if p.get("force") or not (self.svc.voices.root / self.svc.voices.canonical(i) / "preview.mp3").exists()]
+        done, failed = [], []
+        for k, vid in enumerate(todo):
+            if cancel.is_set():
+                raise Cancelled("cancelled")
+            self._progress(j, k, len(todo), message=f"{vid} ({k + 1} of {len(todo)})")
+            try:
+                self.svc.voice_render_preview(vid, engine=p.get("engine"))
+                done.append(vid)
+            except Exception as e:  # noqa: BLE001  one bad voice never stops the batch
+                failed.append({"voice": vid, "error": str(getattr(e, "message", e))[:200]})
+        self._progress(j, len(todo), max(1, len(todo)))
+        j.result = {"rendered": done, "failed": failed, "skipped": len(ids) - len(todo)}
 
     def _run_design(self, j: Job, cancel: threading.Event) -> None:
         p = j.payload

@@ -13,7 +13,12 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem("fv." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("fv." + k, JSON.stringify(v)); } catch { /* private mode: settings just do not persist */ } },
 };
-const initials = id => (id || "?").replace(/^(lib|glb|hifi|exp|urd|dsg)-/, "").replace(/^[mfx]-/, "").replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "V";
+const initials = s => { s = String(s || "?").replace(/^(lib|glb|hifi|exp|urd|dsg)-/, "").replace(/^[mfx]-/, ""); const w = s.split(/[\s-]+/).filter(Boolean);
+  return ((w.length > 1 ? w[0][0] + w[1][0] : s.slice(0, 2)) || "V").toUpperCase(); };
+const TIER = { S: "Top pick", A: "Excellent", B: "Great", C: "Good" };
+const tierBadge = v => v.quality?.tier ? `<span class="tier ${v.quality.tier}" title="Listening test: #${v.quality.rank} of ${v.quality.of}">${v.quality.tier === "S" ? "★ " : ""}${TIER[v.quality.tier]}</span>` : "";
+const vName = id => { if (!id || id === "default") { const d = (window.S?.voices || []).find(v => v.default); return d ? (d.name || d.voice_id) : "Default voice"; }
+  if (id.startsWith("design:")) return "Designed: " + id.slice(7); const v = (window.S?.voices || []).find(x => x.voice_id === id); return v ? (v.name || id) : id; };
 const MIME = { mp3: "audio/mpeg", wav: "audio/wav", flac: "audio/flac", ogg: "audio/ogg", opus: "audio/ogg", m4a: "audio/aac" };
 const b64ToBytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
 
@@ -44,7 +49,7 @@ const API = {
 };
 
 // ------------------------------------------------------------------------------------------------ state
-const S = {
+const S = window.S = {
   opt: null, voices: [], styles: [], engines: [], online: null, mode: store.get("mode", "render"), voiceMode: store.get("voiceMode", "library"),
   voice: store.get("voice", "default"), style: store.get("style", "conversational"), engine: store.get("engine", null),
   params: store.get("params", {}), pace: store.get("pace", 1), busy: false, abort: null, history: [], jobs: {}, es: null, vquick: "",
@@ -179,17 +184,17 @@ function renderVoiceQuick() {
 function voiceMatches(v, q, quick) {
   if (quick) { const [k, val] = quick.split(":"); if (k === "g" && v.gender !== val) return false; if (k === "k" && v.kind !== val) return false; if (k === "l" && (v.language || "en") !== val) return false; }
   if (!q) return true; q = q.toLowerCase();
-  return [v.voice_id, v.name, v.description, v.accent, v.language, v.gender, ...(v.tags || [])].join(" ").toLowerCase().includes(q);
+  return [v.voice_id, v.name, v.tagline, v.description, v.accent, v.language, v.gender, ...(v.tags || []), ...(v.traits || []), ...(v.use_cases || [])].join(" ").toLowerCase().includes(q);
 }
 function voiceSub(v) { return [v.gender || "voice", langName(v.language || "en"), v.accent && v.accent.replace(/ accent$/, "").slice(0, 34), v.kind === "designed" ? "designed" : ""].filter(Boolean).join(" · "); }
-function avatar(v, lg) { return `<div class="avatar ${v.kind === "designed" ? "design" : esc(v.gender || "neutral")} ${lg ? "lg" : ""}">${esc(initials(v.voice_id))}</div>`; }
+function avatar(v, lg) { return `<div class="avatar ${v.kind === "designed" ? "design" : esc(v.gender || "neutral")} ${lg ? "lg" : ""}">${esc(initials(v.name || v.voice_id))}</div>`; }
 function renderVoiceMini() {
   const q = $("#vsearch").value;
   let list = S.voices.filter(v => voiceMatches(v, q, S.vquick)).sort((a, b) => (a.kind === "designed") - (b.kind === "designed"));   // real voices first
   const def = S.voices.find(v => v.default);
-  const rows = [`<div class="v-row ${S.voice === "default" ? "on" : ""}" data-id="default"><div class="avatar neutral">★</div><div class="meta"><div class="id">Default voice</div><div class="sub">${esc(def ? def.voice_id : "library default")}</div></div></div>`]
-    .concat(list.slice(0, 400).map(v => `<div class="v-row ${S.voice === v.voice_id ? "on" : ""}" data-id="${esc(v.voice_id)}">${avatar(v)}<div class="meta"><div class="id">${esc(v.voice_id)}</div><div class="sub">${esc(voiceSub(v))}</div></div>
-      ${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}" title="Hear the original">${icon("play")}</button>` : ""}</div>`));
+  const rows = [`<div class="v-row ${S.voice === "default" ? "on" : ""}" data-id="default"><div class="avatar neutral">★</div><div class="meta"><div class="id">Default voice</div><div class="sub">${esc(def ? (def.name || def.voice_id) + " · " + (def.tagline || "") : "library default")}</div></div></div>`]
+    .concat(list.slice(0, 400).map(v => `<div class="v-row ${S.voice === v.voice_id ? "on" : ""}" data-id="${esc(v.voice_id)}" title="${esc(v.voice_id)}">${avatar(v)}<div class="meta"><div class="id">${esc(v.name || v.voice_id)} ${v.quality?.tier === "S" ? '<span class="tier S">★</span>' : ""}</div><div class="sub">${esc(v.tagline || voiceSub(v))}</div></div>
+      ${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}" title="Hear ${esc(v.name || v.voice_id)}">${icon("play")}</button>` : ""}</div>`));
   $("#vlist-mini").innerHTML = rows.join("") + (list.length ? "" : `<div class="small dim" style="padding:10px">No voices match.</div>`);
   $$("#vlist-mini .v-row").forEach(r => r.onclick = e => { if (e.target.closest(".playbtn")) return; S.voice = r.dataset.id; $$("#vlist-mini .v-row").forEach(x => x.classList.toggle("on", x === r)); checkCompat(); saveForm(); });
   bindPreview($("#vlist-mini"));
@@ -203,7 +208,7 @@ function bindPreview(root) {
     e.stopPropagation(); const a = $("#preview-audio"); const id = b.dataset.play;
     if (PREV === id && !a.paused) { a.pause(); return; }
     $$("[data-play].on").forEach(x => { x.classList.remove("on"); x.innerHTML = icon("play"); });
-    a.src = API.url(`/api/v1/voices/${encodeURIComponent(id)}/audio`); a.play().catch(err => toast("cannot play: " + err.message, "bad"));
+    a.src = API.url(`/api/v1/voices/${encodeURIComponent(id)}/${b.dataset.orig ? "audio" : "preview"}`); a.play().catch(err => toast("cannot play: " + err.message, "bad"));
     PREV = id; b.classList.add("on"); b.innerHTML = icon("pause");
     a.onended = a.onpause = () => { b.classList.remove("on"); b.innerHTML = icon("play"); };
   });
@@ -394,7 +399,7 @@ function drawWave(cv, pk, progress = 0, fill = 1) {
   if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
   const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
   const n = pk.length, gap = 2, bw = Math.max(1.5, (w * fill) / n - gap); const grad = c.createLinearGradient(0, 0, w, 0);
-  grad.addColorStop(0, "#ff9a3d"); grad.addColorStop(0.5, "#ff6b35"); grad.addColorStop(1, "#ff3d6e");
+  grad.addColorStop(0, "#ff9a5c"); grad.addColorStop(1, "#ff6a3d");
   for (let i = 0; i < n; i++) { const x = (i * (w * fill)) / n, bh = Math.max(2, pk[i] * (h - 6)); c.fillStyle = i / n < progress ? grad : "#2b3142";
     c.beginPath(); c.roundRect ? c.roundRect(x, (h - bh) / 2, bw, bh, 2) : c.rect(x, (h - bh) / 2, bw, bh); c.fill(); }
 }
@@ -404,7 +409,7 @@ async function blobPeaks(blob, n = 220) {
 }
 function showResult(item, autoplay) {
   const j = item.info; const url = item.url || (item.url = URL.createObjectURL(item.blob));
-  $("#res-tags").innerHTML = `<span class="tag acc">${esc(item.engine)}</span><span class="tag">${esc(item.style)}</span>${item.streamed ? '<span class="tag info">streamed</span>' : ""}`;
+  $("#res-tags").innerHTML = `<span class="tag">${esc(vName(item.voice).slice(0, 40))}</span><span class="tag acc">${esc(item.engine)}</span><span class="tag">${esc(item.style)}</span>${item.streamed ? '<span class="tag info">streamed</span>' : ""}`;
   const warns = j.warnings || [];
   $("#result").innerHTML = `<div class="player"><button class="pp" id="pp">${icon("play")}</button><div class="wave" id="wave"><canvas></canvas></div><span class="time" id="ptime">0:00 / ${fmtTime(j.duration)}</span></div>
     <audio id="player" src="${url}" preload="auto"></audio>
@@ -436,27 +441,37 @@ window.addEventListener("resize", debounce(() => { const cv = $("#wave canvas");
 function renderHistory() {
   if (!S.history.length) { $("#history").innerHTML = `<span class="small dim">Renders from this session appear here.</span>`; return; }
   $("#history").innerHTML = S.history.slice(0, 30).map((h, i) => `<div class="h-row"><button class="playbtn" data-h="${i}">${icon("play")}</button>
-    <div class="meta"><div class="t">${esc(h.text.replace(/\[[^\]]*\]/g, "").slice(0, 110))}</div><div class="s">${esc(h.voice.replace(/^design:/, "designed: ").slice(0, 50))} · ${esc(h.style)} · ${esc(h.engine)} · ${(+h.info.duration).toFixed(1)}s${h.streamed ? " · streamed" : ""}</div></div>
+    <div class="meta"><div class="t">${esc(h.text.replace(/\[[^\]]*\]/g, "").slice(0, 110))}</div><div class="s">${esc(vName(h.voice).slice(0, 50))} · ${esc(h.style)} · ${esc(h.engine)} · ${(+h.info.duration).toFixed(1)}s${h.streamed ? " · streamed" : ""}</div></div>
     <a class="btn sm icon ghost" title="Download" download="firevoice-${h.id}.${h.format}" href="${h.url || (h.url = URL.createObjectURL(h.blob))}">${icon("download", "sm")}</a></div>`).join("");
   $$("#history [data-h]").forEach(b => b.onclick = () => { showResult(S.history[+b.dataset.h], true); $("#result").scrollIntoView({ behavior: "smooth", block: "center" }); });
 }
 $("#clear-history").onclick = () => { S.history.forEach(h => h.url && URL.revokeObjectURL(h.url)); S.history = []; renderHistory(); };
 
 // ------------------------------------------------------------------------------------------------ voices page
-let VF = { q: "", lang: "", gender: "", kind: "" };
+let VF = { q: "", lang: "", gender: "", kind: "", shelf: "" };
+let SHELVES = [];
+async function loadShelves() {
+  try { SHELVES = (await API.req("/api/v1/voices/collections")).collections; } catch { SHELVES = []; }
+  $("#shelves").innerHTML = [`<button class="shelf ${VF.shelf ? "" : "on"}" data-shelf=""><div class="t">All voices</div><div class="n">${S.voices.length} voices</div></button>`]
+    .concat(SHELVES.map(c => `<button class="shelf ${VF.shelf === c.id ? "on" : ""}" data-shelf="${c.id}" title="${esc(c.description)}"><div class="t">${esc(c.title)}</div><div class="n">${c.voices.length} voices</div></button>`)).join("");
+  $$("#shelves .shelf").forEach(b => b.onclick = () => { VF.shelf = b.dataset.shelf; $$("#shelves .shelf").forEach(x => x.classList.toggle("on", x === b)); renderVoiceGrid(); });
+}
 function renderVoiceGrid() {
-  const list = S.voices.filter(v => voiceMatches(v, VF.q, "") && (!VF.lang || (v.language || "en") === VF.lang) && (!VF.gender || v.gender === VF.gender) && (!VF.kind || v.kind === VF.kind))
-    .sort((a, b) => (a.kind === "designed") - (b.kind === "designed"));
+  if (!SHELVES.length && S.voices.length) loadShelves();
+  const shelf = VF.shelf ? new Set((SHELVES.find(c => c.id === VF.shelf) || { voices: [] }).voices) : null;
+  const list = S.voices.filter(v => (!shelf || shelf.has(v.voice_id)) && voiceMatches(v, VF.q, "") && (!VF.lang || (v.language || "en") === VF.lang) && (!VF.gender || v.gender === VF.gender) && (!VF.kind || v.kind === VF.kind))
+    .sort((a, b) => VF.shelf ? ((a.quality?.rank ?? 999) - (b.quality?.rank ?? 999)) : (a.kind === "designed") - (b.kind === "designed"));
   $("#voices-sub").textContent = `${S.voices.length} voices · ${S.voices.filter(v => v.kind === "designed").length} designed · ${new Set(S.voices.map(v => v.language || "en")).size} languages. Showing ${list.length}.`;
-  $("#vgrid").innerHTML = list.map(v => `<div class="vcard"><div class="head">${avatar(v, true)}<div class="meta"><div class="id">${v.default ? `<span class="star">★</span> ` : ""}${esc(v.voice_id)}</div>
-      <div class="small muted">${esc(voiceSub(v))}</div></div>${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}" title="Hear the original">${icon("play")}</button>` : ""}</div>
-      <div class="desc">${esc(v.description || "No description")}</div>
-      <div class="tags">${(v.styles || []).map(s => `<span class="tag acc">style: ${esc(s)}</span>`).join("")}${v.license ? `<span class="tag">${esc(v.license)}</span>` : ""}${v.ref_seconds ? `<span class="tag">${v.ref_seconds}s clip</span>` : ""}</div>
+  $("#vgrid").innerHTML = list.map(v => `<div class="vcard"><div class="head">${avatar(v, true)}<div class="meta"><div class="vname">${v.default ? `<span class="star">★</span> ` : ""}${esc(v.name || v.voice_id)}</div>
+      <div class="small muted">${esc(voiceSub(v))}</div></div>${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}" title="Hear ${esc(v.name || v.voice_id)} introduce themselves">${icon("play")}</button>` : ""}</div>
+      <div class="desc">${esc(v.tagline || v.description || "No description")}</div>
+      ${v.use_cases?.length ? `<div class="uses">Great for <b>${v.use_cases.map(esc).join("</b>, <b>")}</b></div>` : ""}
+      <div class="tags">${tierBadge(v)}${(v.styles || []).map(s => `<span class="tag acc">style: ${esc(s)}</span>`).join("")}<span class="tag" title="voice id">${esc(v.voice_id)}</span></div>
       <div class="foot"><button class="btn sm primary" data-use="${esc(v.voice_id)}">${icon("wave", "sm")}Use</button><button class="btn sm" data-edit="${esc(v.voice_id)}">${icon("edit", "sm")}Edit</button>
       <div style="flex:1"></div><button class="btn sm icon ghost" title="Make default" data-def="${esc(v.voice_id)}">${icon("star", "sm")}</button></div></div>`).join("")
     || `<div class="empty" style="grid-column:1/-1"><svg class="i"><use href="#i-users"/></svg><b>No voices match</b><span class="small">Clear the filters or add a voice.</span></div>`;
   bindPreview($("#vgrid"));
-  $$("#vgrid [data-use]").forEach(b => b.onclick = () => { S.voice = b.dataset.use; setVoiceMode("library"); $("#vsearch").value = ""; S.vquick = ""; renderVoiceQuick(); renderVoiceMini(); saveForm(); location.hash = "#speak"; toast(`Voice: ${S.voice}`, "ok"); });
+  $$("#vgrid [data-use]").forEach(b => b.onclick = () => { S.voice = b.dataset.use; setVoiceMode("library"); $("#vsearch").value = ""; S.vquick = ""; renderVoiceQuick(); renderVoiceMini(); saveForm(); location.hash = "#speak"; toast(`Voice: ${vName(S.voice)}`, "ok"); });
   $$("#vgrid [data-def]").forEach(b => b.onclick = () => setDefault(b.dataset.def));
   $$("#vgrid [data-edit]").forEach(b => b.onclick = () => editVoice(b.dataset.edit));
 }
@@ -464,7 +479,7 @@ $("#vq").addEventListener("input", debounce(e => { VF.q = e.target.value; render
 $("#vlang").onchange = e => { VF.lang = e.target.value; renderVoiceGrid(); };
 $$("#vgender button").forEach(b => b.onclick = () => { VF.gender = b.dataset.g; $$("#vgender button").forEach(x => x.classList.toggle("on", x === b)); renderVoiceGrid(); });
 $$("#vkind button").forEach(b => b.onclick = () => { VF.kind = b.dataset.k; $$("#vkind button").forEach(x => x.classList.toggle("on", x === b)); renderVoiceGrid(); });
-async function reloadVoices() { S.voices = (await API.req("/api/v1/voices")).voices; $("#n-voices").textContent = S.voices.length; renderVoiceGrid(); renderVoiceMini(); renderVoiceQuick(); }
+async function reloadVoices() { S.voices = (await API.req("/api/v1/voices")).voices; SHELVES = []; $("#n-voices").textContent = S.voices.length; renderVoiceGrid(); renderVoiceMini(); renderVoiceQuick(); }
 async function setDefault(id) { try { await API.req(`/api/v1/voices/${encodeURIComponent(id)}/default`, { method: "POST" }); toast(`${id} is now the default voice`, "ok"); reloadVoices(); } catch (e) { toast(e.message, "bad"); } }
 
 const GENDER_OPTS = g => ["", "female", "male", "neutral"].map(x => `<option value="${x}" ${g === x ? "selected" : ""}>${x || "unspecified"}</option>`).join("");
@@ -520,8 +535,9 @@ $("#open-design").onclick = () => {
 };
 async function editVoice(id) {
   let v; try { v = await API.req(`/api/v1/voices/${encodeURIComponent(id)}`); } catch (e) { return toast(e.message, "bad"); }
-  Drawer.open(v.voice_id, `<div class="row" style="gap:12px;margin-bottom:16px">${avatar(v, true)}<div style="flex:1"><div style="font-weight:800;font-size:16px">${esc(v.voice_id)}</div><div class="small muted">${esc(v.source || "")}</div></div>
-      ${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}">${icon("play")}</button>` : ""}</div>
+  Drawer.open(v.name || v.voice_id, `<div class="row" style="gap:12px;margin-bottom:16px">${avatar(v, true)}<div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(v.name || v.voice_id)} ${tierBadge(v)}</div><div class="small muted">${esc(v.voice_id)} · ${esc(v.source || "")}</div></div>
+      ${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}" title="Introduction">${icon("play")}</button><button class="playbtn" data-play="${esc(v.voice_id)}" data-orig="1" title="Original recording">${icon("mic")}</button>` : ""}</div>
+    <div class="field"><label class="f">Tagline <span class="hint">(shown under the name)</span></label><input class="inp" id="ed-tagline" value="${esc(v.tagline || "")}"></div>
     <div class="grid2"><div class="field"><label class="f">Display name</label><input class="inp" id="ed-name" value="${esc(v.name || "")}"></div>
     <div class="field"><label class="f">Gender</label><select class="inp" id="ed-gender">${GENDER_OPTS(v.gender || "")}</select></div>
     <div class="field"><label class="f">Language</label><input class="inp" id="ed-lang" value="${esc(v.language || "")}"></div><div class="field"><label class="f">Accent</label><input class="inp" id="ed-accent" value="${esc(v.accent || "")}"></div></div>
@@ -541,7 +557,7 @@ async function editVoice(id) {
     busyBtn($("#ed-save"), true, "Saving…");
     try {
       await API.req(`/api/v1/voices/${encodeURIComponent(id)}`, { method: "PATCH", json: { name: $("#ed-name").value, gender: $("#ed-gender").value, language: $("#ed-lang").value,
-        accent: $("#ed-accent").value, description: $("#ed-desc").value, tags: $("#ed-tags").value.split(",").map(t => t.trim()).filter(Boolean) } });
+        accent: $("#ed-accent").value, description: $("#ed-desc").value, tagline: $("#ed-tagline").value, tags: $("#ed-tags").value.split(",").map(t => t.trim()).filter(Boolean) } });
       if ($("#ed-tr").value.trim() !== (v.transcript || "").trim()) await API.req(`/api/v1/voices/${encodeURIComponent(id)}/transcript`, { method: "PUT", json: { transcript: $("#ed-tr").value.trim() } });
       toast("Saved", "ok"); Drawer.close(); reloadVoices();
     } catch (e) { toast(e.message, "bad"); busyBtn($("#ed-save"), false); }

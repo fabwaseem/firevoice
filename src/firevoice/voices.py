@@ -60,11 +60,28 @@ class VoiceLibrary:
                     out.append(meta)
         return out
 
+    def canonical(self, key: str) -> str:
+        """Voice id for an id or a display name ("lib-f-4992" or "Rachel"); unknown keys come back unchanged."""
+        if not key or key == DEFAULT or key.startswith("design:") or (self.root / _slug(key) / "meta.json").exists():
+            return key
+        k = key.strip().lower()
+        if self.root.exists():
+            for m in self.root.glob("*/meta.json"):
+                try:
+                    meta = json.loads(m.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if k == str(meta.get("name", "")).lower():
+                    return meta["voice_id"]
+        return key
+
     def list_styles(self, voice_id: str) -> list[str]:
+        voice_id = self.canonical(voice_id)
         d = self.root / _slug(voice_id) / "refs"
         return sorted(p.stem for p in d.glob("*.wav")) if d.exists() else []
 
     def get(self, voice_id: str) -> dict:
+        voice_id = self.canonical(voice_id)
         d = self.root / _slug(voice_id)
         m = d / "meta.json"
         if not m.exists():
@@ -74,11 +91,12 @@ class VoiceLibrary:
         return meta
 
     def exists(self, voice_id: str) -> bool:
-        return (self.root / _slug(voice_id) / "meta.json").exists()
+        return (self.root / _slug(self.canonical(voice_id)) / "meta.json").exists()
 
     def ref_path(self, voice_id: str, style: Optional[str] = None) -> Optional[str]:
         if voice_id in (DEFAULT, "", None):
             return None
+        voice_id = self.canonical(voice_id)
         d = self.root / _slug(voice_id)
         if not (d / "meta.json").exists():
             raise KeyError(f"unknown voice {voice_id!r}")
@@ -88,6 +106,7 @@ class VoiceLibrary:
         return str(p) if p.exists() else None
 
     def ref_text(self, voice_id: str, style: Optional[str] = None) -> Optional[str]:
+        voice_id = self.canonical(voice_id)
         d = self.root / _slug(voice_id)
         cands = []
         if style:
@@ -115,6 +134,7 @@ class VoiceLibrary:
                     raise ValueError("this engine needs a reference voice: `firevoice voices add --name narrator --ref clip.wav --consent` then --voice narrator (or `firevoice voices default narrator`)")
                 return {"voice_id": DEFAULT, "ref": None, "ref_text": None, "desc": None}
             vid = d
+        vid = self.canonical(vid)
         meta = self.get(vid)
         ref = self.ref_path(vid, style)
         if ref is None and needs_reference:
@@ -124,6 +144,7 @@ class VoiceLibrary:
 
     # -- default --------------------------------------------------------------------
     def set_default(self, voice_id: str) -> None:
+        voice_id = self.canonical(voice_id)
         self.get(voice_id)
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "default.txt").write_text(_slug(voice_id), encoding="utf-8")
@@ -199,15 +220,16 @@ class VoiceLibrary:
         return str(p)
 
     def update(self, voice_id: str, **fields) -> dict:
+        voice_id = self.canonical(voice_id)
         d = self.root / _slug(voice_id)
         meta = self.get(voice_id)
         meta.pop("dir", None)
         meta.update({k: v for k, v in fields.items() if v is not None})
-        (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        (d / "meta.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8")
         return meta
 
     def remove(self, voice_id: str) -> None:
-        d = self.root / _slug(voice_id)
+        d = self.root / _slug(self.canonical(voice_id))
         if d.exists():
             shutil.rmtree(d)
 
