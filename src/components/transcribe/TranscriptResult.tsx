@@ -97,16 +97,16 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
                   i === active && "bg-fire text-white hover:bg-fire hover:text-white",
                 )}
               >
-                {w.text}{" "}
+                {w.roman ?? w.text}{" "}
               </button>
               </span>
             ))
           ) : (
-            <p>{result.text}</p>
+            <p>{result.text_roman ?? result.text}</p>
           )}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button size="sm" leading={<Copy className="size-4" />} onClick={() => void copy(result.text, "Text")}>
+          <Button size="sm" leading={<Copy className="size-4" />} onClick={() => void copy(result.text_roman ?? result.text, "Text")}>
             Copy text
           </Button>
           <Tooltip content="Subtitle cues built from word times" disabled={!srt}>

@@ -473,7 +473,9 @@ export interface STTResult {
   seconds: number;
   model: string;
   device: string;
-  words: (WordTime & { speaker?: string })[];
+  words: (WordTime & { speaker?: string; roman?: string })[];
+  /** Urdu transcripts also in English letters (Roman Urdu) */
+  text_roman?: string;
   segments?: { start: number; end: number; text: string; speaker?: string }[];
 }
 
