@@ -22,7 +22,7 @@ import numpy as np
 
 SR = 16000
 TAG = [1, 1, 1, 1, 0, 1, 0, 1]          # 0xF5: "FireVoice"
-KINDS = {"render": 1, "convert": 2}
+KINDS = {"render": 1, "convert": 2, "sound": 3}
 WINDOW_S = 30.0                          # embed long audio in windows (bounded memory; the mark is local anyway)
 
 _lock = threading.Lock()

@@ -72,6 +72,10 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
              # misaki's English G2P loads this spaCy model by name
              "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"], check="kokoro",
              venv_gb=3.5, notes="weights (about 330 MB) download on first load"),
+    Manifest("audioldm2", "sfx", _T211, packages=["diffusers==0.35.2", "transformers==4.57.3", "accelerate==1.12.0", "scipy", "soundfile"],
+             weights=[("cvssp/audioldm2", "audioldm2")], check="diffusers", notes="sound effects; shares the sfx venv with musicgen"),
+    Manifest("musicgen", "sfx", _T211, packages=["diffusers==0.35.2", "transformers==4.57.3", "accelerate==1.12.0", "scipy", "soundfile"],
+             weights=[("facebook/musicgen-small", "musicgen-small")], check="transformers", notes="music beds; shares the sfx venv with audioldm2"),
     Manifest("chatterbox-turbo", None, manual="runs inside the backend's own environment: install the backend with the "
              "`gpu` extra (pip install \"firevoice[gpu]\"); the desktop app's bundled backend includes it"),
     Manifest("chatterbox", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),

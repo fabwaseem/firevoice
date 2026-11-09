@@ -145,6 +145,14 @@ The style fields:
 | `sample` | showcase paragraph |
 | `extra` | raw engine settings |
 
+### Sound effects and music
+
+`POST /api/v1/sound` `{prompt, kind: "sfx" | "music", duration (1-30 s), seed?, engine?, params?, format}` returns the audio,
+with headers `X-Seed`, `X-Engine`, `X-Duration` and `X-License`. Effects and ambience come from AudioLDM 2 (`audioldm2`),
+music beds from MusicGen small (`musicgen`). Both run in the `sfx` venv and are installed from Engines. Their weights
+are non-commercial. `GET /api/v1/engines?task=sfx` lists them; speech engine lists leave them out (`task=all` shows
+everything).
+
 ### Dubbing
 
 A recording or video in another language, on the original timeline. Every step runs locally: Whisper turns the speech

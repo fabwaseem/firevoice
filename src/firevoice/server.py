@@ -135,7 +135,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     app.state.svc = svc
     app.add_middleware(CORSMiddleware, allow_origins=cors_origins or [], allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
                        allow_origin_regex=None if cors_origins else r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost|https?://tauri\.localhost|app://.*)$",
-                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "X-Watermarked", "X-Render-Id", "X-Quality-Before", "X-Quality-After", "Content-Disposition"])
+                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "X-Watermarked", "X-Seed", "X-License", "X-Render-Id", "X-Quality-Before", "X-Quality-After", "Content-Disposition"])
 
     # ------------------------------------------------------------------ errors + auth
     def err(code: str, message: str, status: Optional[int] = None):
@@ -467,8 +467,36 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     # ------------------------------------------------------------------ engines
     @app.get("/api/v1/engines", dependencies=deps, tags=["engines"])
-    def engines():
-        return {"engines": svc.engines()}
+    def engines(task: Literal["tts", "sfx", "vc", "all"] = "tts"):
+        """Engines for one task: tts (default), sfx (sound effects and music), vc (voice changer) or all."""
+        return {"engines": svc.engines(task)}
+
+    class SoundBody(BaseModel):
+        prompt: str = Field(..., description="describe the sound: 'rain on a tin roof, distant thunder' or 'calm lo-fi piano bed'")
+        kind: Literal["sfx", "music"] = "sfx"
+        duration: float = Field(5.0, ge=1.0, le=30.0)
+        seed: Optional[int] = None
+        engine: Optional[str] = None
+        params: dict = Field(default_factory=dict)
+        format: str = "mp3"
+
+    @app.post("/api/v1/sound", dependencies=deps, tags=["sound"])
+    async def sound(request: Request, body: SoundBody):
+        """A sound effect or ambience (kind sfx, AudioLDM 2) or a music bed (kind music, MusicGen) from a description.
+        Headers: X-Seed (to make it again), X-Engine, X-Duration, X-License. Both engines' weights are non-commercial."""
+        import asyncio
+        cancel = threading.Event()
+        task = asyncio.ensure_future(run_in_threadpool(lambda: svc.sound(body.prompt, body.kind, body.duration, body.seed, engine=body.engine,
+                                                                          params=body.params, cancel=cancel)))
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done and await request.is_disconnected():
+                cancel.set()
+        a, sr, info = task.result()
+        fmt = body.format if body.format in A.FORMATS else "mp3"
+        return Response(svc.encode(a, fmt, sr=sr), media_type=A.media_type(fmt),
+                        headers={"X-Seed": str(info["seed"]), "X-Engine": info["engine"], "X-Duration": str(info["duration"]),
+                                 "X-License": str(info["license"])})
 
     @app.get("/api/v1/engines/{name}", dependencies=deps, tags=["engines"])
     def engine(name: str):

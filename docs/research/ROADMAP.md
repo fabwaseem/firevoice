@@ -25,6 +25,26 @@ Surfaces use these codes:
 | P    | playground  |
 | D    | desktop app |
 
+## Status, 2026-11-09
+
+Phases 0 to 6 are built in the API, the CLI, the playground and the desktop app. So are most of the Later items:
+
+| Item | State |
+|---|---|
+| Phases 0-5 | Done. Cancellation and priority, takes and QA, subtitles, dictionary, projects and M4B export, clip cleaning, voice changer, per-style clips, design previews, avatars, dialogue and tags, OpenAI routes, WebSocket streaming, diarization and key terms. |
+| 6.1 Configurable paths | Done (`paths.py`, `GET /system/paths`, `PUT /system/settings`). |
+| 6.2 Engine installer | Done. Pinned manifests, install jobs, a shared uv cache, and install markers. |
+| 6.3 Sidecar | Done. The desktop builds a private backend runtime from the bundled wheel, starts and stops it, and keeps its logs. Release CSP and a narrower file-system scope. |
+| 6.4 First run | Done. A GPU check (`GET /system/setup`), a recommended engine installed in place, and a test line. |
+| 6.5 Updates | The API version handshake and the backend runtime update are done. The app's own auto-updater needs a signing key and a release feed (your call). |
+| Edit a word inside a take | Done. The passage is re-recorded and only the changed words are spliced in. |
+| Watermark and consent | Done. AudioSeal marks every output, there is a detector, and consent records are kept. C2PA manifests need a signing certificate (not done). |
+| Better metrics | Done. WavLM speaker similarity, DNSMOS, and a drift check, for files and kept renders. |
+| Dubbing | Done. Local Whisper, M2M100 (418M fast, 1.2B better), the original timeline, video re-mux, and an option to keep the original voices (with consent). |
+| Sound effects and music | Done. AudioLDM 2 and MusicGen engines (non-commercial weights), installable, with `/sound`. Not yet: `[sfx: ...]` cues inside scripts and dialogue. |
+| New engines (Ming-3.0, IndexTTS-2.5, MOSS-TTS, MOSS-TTSD, Step-Audio-EditX) | Waiting on a decision. They run code from their own repositories (`trust_remote_code` or a cloned repo), which this setup does not do without your go-ahead. |
+| Deferred | Aborting a generation already on the GPU; a CTC forced aligner; a neural denoiser (DeepFilterNet clashes with torch 2.11) and music/voice separation (3.3); Urdu ASR validation (5.3); `--remote` on every CLI command. |
+
 ## Where we stand
 
 **Where FireVoice already leads:**

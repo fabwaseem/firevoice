@@ -27,6 +27,8 @@ ADAPTERS: dict[str, str] = {
     "kokoro": "firevoice.core.adapters.kokoro:KokoroAdapter",
     "maya1": "firevoice.core.adapters.maya1:Maya1Adapter",
     "chatterbox-vc": "firevoice.core.adapters.chatterbox_vc:ChatterboxVCAdapter",
+    "audioldm2": "firevoice.core.adapters.audioldm2:AudioLDM2Adapter",
+    "musicgen": "firevoice.core.adapters.musicgen:MusicGenAdapter",
 }
 
 

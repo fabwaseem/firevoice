@@ -174,13 +174,66 @@ class FireVoice:
         self.jobs = JobManager(self)
 
     # -------------------------------------------------------------------- engines
-    def engine_names(self) -> list[str]:
-        """Text-to-speech engines (the voice changer is reached through voice_convert)."""
-        names = [n for n in all_engines() if _task(n) == "tts"]
+    def engine_names(self, task: str = "tts") -> list[str]:
+        """Engines for one task: "tts" (default), "sfx" (sound effects and music), "vc" (the voice changer) or "all"."""
+        names = [n for n in all_engines() if task == "all" or _task(n) == task]
         return [n for n in names if n != "null"] if os.environ.get("FIREVOICE_HIDE_NULL", "1") == "1" else names
 
-    def engines(self) -> list[dict]:
-        return [self.engine(n) for n in self.engine_names()]
+    def engines(self, task: str = "tts") -> list[dict]:
+        return [{**self.engine(n), "task": _task(n)} for n in self.engine_names(task)]
+
+    # -------------------------------------------------------------------- sound effects and music
+    def sound(self, prompt: str, kind: str = "sfx", duration: float = 5.0, seed: Optional[int] = None, *, engine: Optional[str] = None,
+              params: Optional[dict] = None, priority: int = 0, cancel: Optional[threading.Event] = None) -> tuple:
+        """A sound effect, ambience (kind "sfx", AudioLDM 2) or a music bed (kind "music", MusicGen) from a description.
+        -> (audio, sample rate, info)"""
+        import random
+        from concurrent.futures import TimeoutError as FutTimeout
+        prompt = re.sub(r"\s+", " ", str(prompt or "")).strip()
+        if not prompt:
+            raise FireVoiceError("bad_request", "describe the sound")
+        if kind not in ("sfx", "music"):
+            raise FireVoiceError("bad_request", "kind must be 'sfx' (effects, ambience) or 'music'")
+        eng = engine or ("musicgen" if kind == "music" else "audioldm2")
+        if _task(eng) != "sfx":
+            raise FireVoiceError("bad_request", f"{eng} does not make sound effects or music")
+        if not catalog.info(eng).status()["ready"]:
+            raise FireVoiceError("unavailable", f"{eng} is not installed: install it from Engines (POST /api/v1/engines/{eng}/install)")
+        seed = int(seed if seed is not None else random.randint(1, 2**31 - 1))
+        p = {**(params or {}), "duration": float(max(1.0, min(30.0, duration)))}
+        ld = self._pool(eng, hold=True)
+        group = threading.Event()
+        t0 = time.perf_counter()
+        try:
+            fut = ld.pool.submit(prompt, None, p, seed, priority=priority, group=group)
+            while True:
+                try:
+                    out = fut.result(timeout=0.25)
+                    break
+                except FutTimeout:
+                    if cancel is not None and cancel.is_set():
+                        group.set()
+                        raise Cancelled("cancelled")
+        except (Cancelled, FireVoiceError):
+            raise
+        except Exception as e:
+            raise FireVoiceError("internal", f"{eng} failed: {str(e)[:300]}")
+        finally:
+            group.set()
+            with self._lock:
+                ld.active -= 1
+                ld.last_used = time.time()
+        sr = ld.pool.sr or catalog.info(eng).sample_rate
+        a = np.asarray(out, dtype=np.float32)
+        a = a - float(a.mean()) if len(a) else a
+        peak = float(np.abs(a).max()) if len(a) else 0.0
+        if peak > 0:
+            a = a / peak * 0.89                      # -1 dBFS
+        a = A.fade(a, sr)
+        if self._mark_wanted(None, None):
+            a = self._mark(a, sr, "sound")
+        return a, sr, {"engine": eng, "kind": kind, "seed": seed, "duration": round(len(a) / sr, 2), "seconds": round(time.perf_counter() - t0, 2),
+                       "prompt": prompt, "license": catalog.info(eng).to_dict().get("license") or get_engine(eng).license}
 
     @staticmethod
     def _installable(name: str) -> bool:

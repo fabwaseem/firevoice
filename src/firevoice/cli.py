@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -392,6 +393,22 @@ def cmd_jobs(a) -> int:
     except Exception as e:  # connection refused and the like
         print(f"cannot reach the server at {a.remote or DEFAULT_URL}: {e}", file=sys.stderr)
         return 1
+
+
+def cmd_sound(a) -> int:
+    from .service import FireVoiceError
+    kind = "music" if a.music else "sfx"
+    out = Path(a.out or (re.sub(r"[^a-z0-9]+", "-", a.prompt.lower()).strip("-")[:40] + ".wav"))
+    svc = _service(a)
+    try:
+        audio, sr, info = svc.sound(a.prompt, kind, a.seconds or (8.0 if a.music else 5.0), a.seed)
+        out.write_bytes(svc.encode(audio, _fmt_for(out, None), sr=sr))
+        print(f"{out}: {info['duration']}s from {info['engine']} in {info['seconds']}s (seed {info['seed']}; licence {info['license']})")
+        return 0
+    except FireVoiceError as e:
+        return _fail(e)
+    finally:
+        svc.close()
 
 
 def cmd_dub(a) -> int:
@@ -1287,6 +1304,14 @@ def build_parser() -> argparse.ArgumentParser:
     jb.add_argument("--remote", default=None, help="server URL (default $FIREVOICE_URL or http://127.0.0.1:8787)")
     jb.add_argument("--token", default=None)
     jb.set_defaults(fn=cmd_jobs)
+
+    so = sub.add_parser("sound", help="a sound effect, ambience or music bed from a description (AudioLDM 2 / MusicGen)")
+    so.add_argument("prompt")
+    so.add_argument("--music", action="store_true", help="a music bed (MusicGen) instead of a sound effect (AudioLDM 2)")
+    so.add_argument("--seconds", type=float, default=None, help="length (default 5 for effects, 8 for music; up to 30)")
+    so.add_argument("--seed", type=int, default=None)
+    so.add_argument("-o", "--out", default=None)
+    so.set_defaults(fn=cmd_sound)
 
     db = sub.add_parser("dub", help="dub a recording or video into another language (local translation, original timing)")
     db.add_argument("file", help="audio or video")

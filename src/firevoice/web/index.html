@@ -22,6 +22,7 @@
       <a href="#dialogue" data-page="dialogue"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Dialogue</span></a>
       <a href="#changer" data-page="changer"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Voice changer</span></a>
       <a href="#dub" data-page="dub"><svg class="i"><use href="#i-sparkle"/></svg><span class="lbl">Dubbing</span></a>
+      <a href="#sound" data-page="sound"><svg class="i"><use href="#i-wave"/></svg><span class="lbl">Sound</span></a>
       <a href="#voices" data-page="voices"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Voices</span><span class="count" id="n-voices"></span></a>
       <a href="#stt" data-page="stt"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Speech to text</span></a>
       <a href="#jobs" data-page="jobs"><svg class="i"><use href="#i-layers"/></svg><span class="lbl">Jobs</span><span class="count" id="n-jobs"></span></a>
@@ -264,6 +265,20 @@
         <div id="qr-out" style="margin-top:12px"></div></div></div>
     </section>
 
+    <!-- ============================================================== SOUND -->
+    <section class="page" id="page-sound">
+      <div class="page-head"><div><h1>Sound</h1><p>Sound effects, ambience and music beds from a description, made on this machine. Both models' weights are for non-commercial use.</p></div></div>
+      <div class="card"><div class="card-b">
+        <div class="row" style="gap:10px;margin-bottom:12px"><div class="seg" id="sn-kind"><button class="on" data-k="sfx">Sound effect</button><button data-k="music">Music bed</button></div><span class="small dim" id="sn-engine"></span></div>
+        <div class="field"><label class="f">Describe it</label><textarea class="inp" id="sn-prompt" rows="3" placeholder="a wooden door creaks open slowly, footsteps on a stone floor"></textarea></div>
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:12px" id="sn-ideas"></div>
+        <div class="grid2"><div class="field"><label class="f">Length <span class="hint" id="sn-len-v">5 s</span></label><input type="range" id="sn-len" min="1" max="30" step="0.5" value="5"></div>
+          <div class="field"><label class="f">Seed <span class="hint">(empty = new)</span></label><input class="inp" id="sn-seed" inputmode="numeric"></div></div>
+        <button class="btn primary" id="sn-go"><svg class="i"><use href="#i-sparkle"/></svg>Make it</button>
+      </div></div>
+      <div id="sn-list" style="margin-top:16px"></div>
+    </section>
+
     <!-- ============================================================== DUBBING -->
     <section class="page" id="page-dub">
       <div class="page-head"><div><h1>Dubbing</h1><p>A recording or video in another language, on the original timeline. Speech to text, translation and voices all run on this machine.</p></div></div>
@@ -381,5 +396,6 @@
 <script src="/web/tools.js"></script>
 <script src="/web/dialogue.js"></script>
 <script src="/web/dub.js"></script>
+<script src="/web/sound.js"></script>
 </body>
 </html>

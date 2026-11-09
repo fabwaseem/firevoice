@@ -239,6 +239,16 @@ firevoice voices build-styles --name Ember --styles calm,serious   # the voice's
 firevoice voices avatar --name Ember --image face.png
 ```
 
+## Sound effects and music
+
+```bash
+firevoice engines install audioldm2 ; firevoice engines install musicgen     # one shared venv, ~3 GB of models
+firevoice sound "rain on a tin roof, distant thunder" --seconds 8 -o rain.wav
+firevoice sound "calm lo-fi piano bed, warm and slow" --music --seconds 20 -o bed.mp3
+```
+
+AudioLDM 2 and MusicGen weights are licensed for non-commercial use only.
+
 ## Dubbing
 
 ```bash

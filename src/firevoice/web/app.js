@@ -74,7 +74,7 @@ function busyBtn(btn, on, label) {
 }
 
 // ------------------------------------------------------------------------------------------------ router
-const PAGES = ["speak", "projects", "dialogue", "changer", "dub", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
+const PAGES = ["speak", "projects", "dialogue", "changer", "dub", "sound", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
 function route() {
   const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "speak";
   $$(".page").forEach(s => s.classList.toggle("on", s.id === "page-" + p));
@@ -89,6 +89,7 @@ function route() {
   if (p === "changer") window.loadChanger?.();
   if (p === "dialogue") window.loadDialogue?.();
   if (p === "dub") window.loadDub?.();
+  if (p === "sound") window.loadSound?.();
 }
 window.addEventListener("hashchange", route);
 
@@ -869,13 +870,14 @@ async function reloadStyles() { S.styles = (await API.req("/api/v1/styles")).sty
 async function refreshEngines() { try { S.engines = (await API.req("/api/v1/engines")).engines; renderEngineSelect(); } catch { /* offline banner handles it */ } }
 async function loadEngines() {
   try {
-    const [es, s] = await Promise.all([API.req("/api/v1/engines"), API.req("/api/v1/system")]); S.engines = es.engines; renderEngineSelect();
+    const [es, all, s] = await Promise.all([API.req("/api/v1/engines"), API.req("/api/v1/engines?task=all"), API.req("/api/v1/system")]); S.engines = es.engines; renderEngineSelect();
+    const TASK = { tts: "", sfx: "sound", vc: "voice changer" };
     const g = s.gpu || {};
     $("#sys-metrics").innerHTML = [["GPU", g.name ? g.name.replace("NVIDIA GeForce ", "") : "none"], ["VRAM used", g.vram_total_gb ? `${(g.vram_used_gb ?? 0).toFixed(1)}<small> / ${g.vram_total_gb.toFixed(1)} GB</small>` : "-"],
       ["GPU load", g.utilization != null ? `${g.utilization}<small>%</small>` : "-"], ["Temperature", g.temperature_c != null ? `${g.temperature_c}<small>°C</small>` : "-"],
       ["Loaded", s.loaded_engines.join(", ") || "none"], ["Voices", s.voices], ["Styles", s.styles], ["Uptime", fmtTime(s.uptime_seconds)], ["Version", s.version]]
       .map(([l, v]) => `<div class="metric"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
-    $("#ecards").innerHTML = S.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t">${esc(e.title)}</div><div class="n">${esc(e.name)}</div></div>
+    $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t">${esc(e.title)}</div><div class="n">${esc(e.name)}${TASK[e.task] ? ` · ${TASK[e.task]}` : ""}</div></div>
         ${e.loaded ? '<span class="tag ok">loaded</span>' : e.ready ? '<span class="tag">ready</span>' : '<span class="tag bad">not installed</span>'}</div>
       <div class="tags">${["clone", "design", "instruct", "tags"].filter(k => e[k]).map(k => `<span class="tag acc">${k}</span>`).join("")}<span class="tag">${esc(e.license)}</span>${e.commercial ? "" : '<span class="tag warn">non-commercial</span>'}</div>
       <div class="notes">${esc(e.notes || e.description || "")}${e.problems?.length ? `<div style="color:var(--bad)">${esc(e.problems.join("; "))}</div>` : ""}</div>
