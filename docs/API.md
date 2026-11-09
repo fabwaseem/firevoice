@@ -53,7 +53,7 @@ Every TTS route takes the same body. Only `text` is required.
 | `pace` | `1.0` | Tempo multiplier, from 0.25 to 4. |
 | `instruct` | `null` | Delivery instruction for instruction-following engines. `null` uses the style's own instruction; `""` sends none. |
 | `language` | `null` | ISO code. `null` detects it from the script. |
-| `params` | `{}` | Engine-specific settings, validated against that engine's `params` schema. Example: `{"cfg_value": 2.5, "inference_timesteps": 16, "ultimate": true}`. |
+| `params` | `{}` | Engine-specific settings, validated against that engine's `params` schema. Example: `{"cfg_value": 2.5, "inference_timesteps": 16}`. VoxCPM2 `ultimate` (default `true`) clones from the clip and its transcript so the voice stays the same across sentences; an explicit `instruct` turns it off unless you also send `"ultimate": true`. |
 | `style_overrides` | `{}` | Override any style field: `temperature`, `top_p`, `cfg`, `pause`, `exaggeration`, `cfg_weight`, `emo_vector`, and so on. |
 | `seed` | `1234` | Same seed and inputs give the same take. |
 | `candidates` | `1` | Takes per sentence; the best validated one is kept. Range 1 to 8. |

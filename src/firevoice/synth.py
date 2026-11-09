@@ -39,6 +39,10 @@ from .voices import VoiceLibrary
 WORD_RE = re.compile(r"[a-z0-9']+")
 
 
+# bump when a change makes earlier cached takes wrong (2: VoxCPM2 clones from clip + transcript by default)
+CACHE_REV = 2
+
+
 def _seeded_jitter(seed: int, spread: float = 0.15) -> float:
     """Deterministic +-spread multiplier so pauses are not metronomic."""
     x = (seed * 2654435761) % 4294967296 / 4294967296
@@ -138,7 +142,7 @@ class Synthesizer:
     def _cache_key(self, text: str, style: Style, pace: float, seed: int, voice_key: str) -> str:
         parts = {"engine": self.pool.spec.name, "voice": voice_key, "style": asdict(style), "text": text, "pace": round(float(pace), 4), "seed": int(seed),
                  "candidates": self.candidates, "accept": self.accept, "asr": getattr(self.aligner, "model_name", "none") if self.aligner is not None else "none",
-                 "validating": self.validating, "lexicon": self._lex_key}
+                 "validating": self.validating, "lexicon": self._lex_key, "rev": CACHE_REV}
         return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
     def _cache_paths(self, key: str) -> tuple[Path, Path]:
@@ -322,6 +326,7 @@ class Synthesizer:
         # workers cache conditioning by id: fingerprint the clip and transcript so an edited voice is prepared afresh
         fp = hashlib.sha1(f"{voice_key}|{v.get('ref_text') or ''}|{v.get('desc') or ''}".encode()).hexdigest()[:8]
         pool_voice = Voice(f"{v['voice_id']}#{fp}", ref=v.get("ref"), ref_text=v.get("ref_text"), desc=v.get("desc"))
+        voice_key = f"{voice_key}#{fp}"   # cached takes depend on the transcript too (it switches the cloning mode)
         self.pool.prepare_voice(pool_voice)
 
         # 1) plan every chunk

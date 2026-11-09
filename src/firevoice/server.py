@@ -325,15 +325,16 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return {"collections": svc.voice_collections()}
 
     @app.post("/api/v1/voices/brand", dependencies=deps, tags=["voices"])
-    async def voice_brand(force: bool = False):
-        """(Re)assign names, taglines, traits, use cases and quality tiers. Names set by hand are kept unless force=true."""
-        return {"branded": await run_in_threadpool(svc.voice_brand, None, force)}
+    async def voice_brand(force: bool = False, only: Optional[list[str]] = Query(None, description="re-brand only these voices; every other name stays")):
+        """(Re)assign names, taglines, traits, use cases and quality tiers. Names set by hand are kept unless force=true.
+        Pass `only` (repeatable) to refresh a few voices, e.g. after correcting a voice's gender."""
+        return {"branded": await run_in_threadpool(lambda: svc.voice_brand(None, force, only=only or None))}
 
     @app.get("/api/v1/voices/{voice_id}/preview", dependencies=deps, tags=["voices"])
     def voice_preview(voice_id: str):
         """The voice introducing itself ("Hi, I'm Isla..."); falls back to the original reference clip."""
         p = svc.voice_preview_clip(voice_id)
-        return FileResponse(p, media_type="audio/mpeg" if p.suffix == ".mp3" else "audio/wav")
+        return FileResponse(p, media_type="audio/mpeg" if p.suffix == ".mp3" else "audio/wav", headers={"Cache-Control": "no-cache"})   # re-renders show up at once
 
     @app.post("/api/v1/voices/{voice_id}/preview", dependencies=deps, tags=["voices"])
     async def voice_preview_render(voice_id: str, engine: Optional[str] = None):

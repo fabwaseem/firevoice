@@ -96,6 +96,12 @@ times. Every option:
 | `--style` | delivery style (`firevoice styles`); `--instruct` overrides its instruction, `--set FIELD=VALUE` any of its fields |
 | `--pace`, `--seed`, `--language` | tempo, reproducibility, language (default: detected from the script) |
 | `--param KEY=VALUE` | engine settings, validated against `firevoice engines info NAME` (e.g. VoxCPM2 `cfg_value`, `inference_timesteps`, `ultimate`) |
+
+**One speaker for the whole script.** VoxCPM2 clones from the voice's clip *and* its transcript by default (`ultimate`), so every
+sentence continues from the same recording and the voice does not drift between sentences or across a `[pause]`. A delivery
+instruction (`--instruct`) needs clip-only cloning, so passing one turns `ultimate` off for that render unless you set
+`--param ultimate=true`. Style presets still shape pace, pauses and per-style reference clips. Voices added without a
+transcript are transcribed automatically.
 | `--candidates`, `--accept`, `--no-asr` | takes per sentence, ASR agreement needed, skip validation |
 | `--lufs` (0 = raw), `--lead-ms`, `--tail-ms` | mastering and padding |
 | `--format`, `--sample-rate` | output encoding |

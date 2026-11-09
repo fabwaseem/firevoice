@@ -132,7 +132,7 @@ CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
                notes="48 kHz; clone, ultimate clone, design and style instructions in 30 languages; compiled with triton when available",
                params=[Param("cfg_value", "float", 2.0, 1.0, 4.0, 0.1, label="Guidance", help="how strictly it follows the text and voice prompt"),
                        Param("inference_timesteps", "int", 10, 4, 32, 1, label="Diffusion steps", help="fewer = faster, more = cleaner"),
-                       Param("ultimate", "bool", False, label="Ultimate clone", help="also feed the reference transcript and continue from the clip")]),
+                       Param("ultimate", "bool", True, label="Consistent voice", help="continue from the reference clip and its transcript so every sentence keeps the same speaker; off = clip only, which follows style instructions but can drift between sentences")]),
     EngineInfo("dots", "dots.tts SOAR 2B", languages=["en", "zh"], sample_rate=48000, venv="dots", weights="dots-tts-soar", speed_rtf=1.28,
                notes="48 kHz; very high speaker similarity",
                params=[Param("guidance_scale", "float", 1.2, 1.0, 4.0, 0.1, label="Guidance"), Param("num_steps", "int", 10, 4, 32, 1, label="Steps"),

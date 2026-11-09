@@ -207,7 +207,8 @@ def cmd_voices(a) -> int:
         if a.action == "list":
             return _print_voices(svc.voice_list(language=a.language, gender=a.gender, tag=a.tag, q=a.q, kind=a.kind), a)
         if a.action == "brand":
-            rows = svc.voice_brand(a.report, force=a.force, log=print)
+            only = [x.strip() for x in (a.only or "").split(",") if x.strip()] or None
+            rows = svc.voice_brand(a.report, force=a.force, log=print, only=only)
             print(f"{len(rows)} voice(s) branded")
             return 0
         if a.action == "previews":
@@ -725,6 +726,7 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--rename", default=None, help="update: new display name")
     v.add_argument("--tagline", default=None, help="update: one-line description shown in voice browsers")
     v.add_argument("--report", default=None, help="brand: listening-test report.json used for quality tiers")
+    v.add_argument("--only", default=None, help="brand: comma-separated voices to re-brand; every other name stays as it is")
     v.add_argument("--force", action="store_true", help="brand: also rename voices you named yourself; previews: re-render existing")
     v.add_argument("--source")
     v.add_argument("--license")

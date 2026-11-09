@@ -320,6 +320,9 @@ class FireVoice:
             if req.instruct and not inf.instruct:
                 warn.append(f"engine {eng} ignores delivery instructions")
         extra = {**base.extra, **params}
+        if req.instruct and "ultimate" not in params and inf.param("ultimate") is not None:
+            # an explicit instruction only works in clip-only cloning; style presets' own instructions do not switch it
+            extra["ultimate"] = False
         if req.language and "language" not in params and inf.param("language") is not None:
             extra["language"] = _language_param(inf, req.language)
         style = dataclasses.replace(base, extra=extra, **fields)
@@ -568,12 +571,17 @@ class FireVoice:
         (self.voices.root / v["voice_id"] / "preview.mp3").write_bytes(self.encode(r, "mp3"))
         return {**self.voice(v["voice_id"]), "preview_text": text, "preview_seconds": round(r.duration, 2)}
 
-    def voice_brand(self, report: Optional[str] = None, force: bool = False, log=None) -> list[dict]:
+    def voice_brand(self, report: Optional[str] = None, force: bool = False, log=None, only: Optional[list[str]] = None,
+                    names: Optional[dict[str, str]] = None) -> list[dict]:
         """Names, taglines, traits, use cases and quality tiers for every voice. `report` is a listening-test report.json
-        (default: $FIREVOICE_REPORT, else samples/voxcpm2/judge/report.json next to the code when present)."""
+        (default: $FIREVOICE_REPORT, else samples/voxcpm2/judge/report.json next to the code when present). `only` limits
+        it to some voices and keeps every other name; `names` pins names."""
         from .branding import brand, load_report
         report = report or os.environ.get("FIREVOICE_REPORT") or str(Path(__file__).resolve().parents[2] / "samples" / "voxcpm2" / "judge" / "report.json")
-        return brand(self.voices, load_report(report), force=force, log=log or (lambda *_: None))
+        for k in list(only or []) + list(names or {}):
+            if not self.voices.exists(k):
+                raise FireVoiceError("voice_not_found", f"no voice {k!r}")
+        return brand(self.voices, load_report(report), force=force, only=only, names=names, log=log or (lambda *_: None))
 
     def _forget_voice(self, voice_id: str) -> None:
         """Cached conditioning in running workers would keep the old clip; drop it so the next request re-prepares."""

@@ -203,8 +203,11 @@ def tier_for(m: dict, ranks_total: int) -> Optional[str]:
 
 
 # ------------------------------------------------------------------------------------------------ apply
-def brand(lib, report: Optional[dict] = None, *, force: bool = False, log=print) -> list[dict]:
-    """Assign names, taglines, traits, use cases and quality tiers. A name set by hand (`branded_by: user`) is kept unless force."""
+def brand(lib, report: Optional[dict] = None, *, force: bool = False, only: Optional[list[str]] = None,
+          names: Optional[dict[str, str]] = None, log=print) -> list[dict]:
+    """Assign names, taglines, traits, use cases and quality tiers. A name set by hand (`branded_by: user`) is kept unless force.
+    `only` re-brands just those voices (ids or names) and leaves every other voice's name alone, e.g. after fixing a
+    voice's gender. `names` maps a voice to the name it should get."""
     voices = lib.list()
     m = measure(lib, report)
     pop: dict[str, list[float]] = {}
@@ -215,10 +218,13 @@ def brand(lib, report: Optional[dict] = None, *, force: bool = False, log=print)
             if x.get(k) is not None:
                 pop.setdefault(key, []).append(x[k])
     ranks_total = sum(1 for x in m.values() if x.get("rank") is not None)
+    names = {lib.canonical(k): n for k, n in (names or {}).items()}
+    only_ids = {lib.canonical(k) for k in only} if only else None
     used: set[str] = set()
-    for v in voices:   # names already chosen by hand are reserved first
+    for v in voices:   # names already chosen by hand (or, with `only`, every untouched voice's name) are reserved first
         meta = lib.get(v["voice_id"])
-        if meta.get("branded_by") == "user" and meta.get("name"):
+        keep = only_ids is not None and v["voice_id"] not in only_ids
+        if meta.get("name") and (keep or meta.get("branded_by") == "user"):
             used.add(meta["name"].lower())
     pools = {k: list(v) for k, v in POOLS.items()}
     out = []
@@ -226,13 +232,17 @@ def brand(lib, report: Optional[dict] = None, *, force: bool = False, log=print)
     for v in order:
         vid = v["voice_id"]
         meta = lib.get(vid)
-        if meta.get("branded_by") == "user" and not force:
+        if only_ids is not None and vid not in only_ids:
+            continue
+        if meta.get("branded_by") == "user" and not force and vid not in names:
             continue
         kind = "designed" if (meta.get("category") == "designed" or "designed" in (meta.get("tags") or [])) else "cloned"
         v = {**meta, "kind": kind, "voice_id": vid}
         fam = _family(v)
-        name = None
-        if vid in SPECIAL:
+        name = names.get(vid)
+        if name:
+            pass
+        elif vid in SPECIAL:
             name = SPECIAL[vid]
         elif kind == "designed":
             name = DESIGNED.get(re.sub(r"^dsg-", "", vid)) or vid.replace("dsg-", "").replace("-", " ").title()
@@ -262,14 +272,21 @@ def brand(lib, report: Optional[dict] = None, *, force: bool = False, log=print)
 
 
 # ------------------------------------------------------------------------------------------------ previews
+# Spoken as two words so every engine says "Fire Voice" rather than guessing at "FireVoice".
+SPOKEN_BRAND = "Fire Voice"
+
+
 def preview_text(v: dict) -> tuple[str, str]:
-    """-> (text, lang): the voice introducing itself. Always written in English letters: Urdu voices speak Urdu,
-    written in Roman Urdu; everyone else speaks English."""
+    """-> (text, lang): the voice introducing itself as a FireVoice voice. Always written in English letters: Urdu voices
+    speak Urdu, written in Roman Urdu; everyone else speaks English."""
     name = v.get("name") or v["voice_id"]
     if v.get("language") == "ur":
-        return (f"Assalam o Alaikum, mera naam {name} hai. Aap ki kahani, aap ka paighaam, meri awaaz mein. Chaliye, shuru karte hain.", "ur")
+        return (f"Assalam o Alaikum, main {name} hoon, aur aap sun rahe hain {SPOKEN_BRAND}. "
+                "Aap ki kahani, aap ka paighaam, meri awaaz mein. Chaliye, shuru karte hain.", "ur")
     use = (v.get("use_cases") or ["narration"])[0].lower()
-    return (f"Hi, I'm {name}. {v.get('tagline') or 'A natural, expressive voice'}, ready for your {use} projects. Let's make something great together.", "en")
+    tagline = (v.get("tagline") or "A natural, expressive voice").rstrip(".")
+    return (f"Hi, I'm {name}, and you're listening to {SPOKEN_BRAND}. {tagline}, ready for your {use} projects. "
+            f"Type anything, and I'll bring it to life.", "en")
 
 
 def collections(voices: list[dict]) -> list[dict]:

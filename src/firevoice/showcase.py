@@ -11,7 +11,7 @@ A plan is a JSON file:
         "limit": 0,                             # cap on selected voices (0 = all), picked evenly across the list
         "styles": ["conversational"],           # style names; text "@sample" means each style's showcase paragraph
         "texts": ["intro"],
-        "variants": [{"label": "clone"}, {"label": "ultimate", "set": {"ultimate": true}}],
+        "variants": [{"label": "clone", "set": {"ultimate": false}}, {"label": "ultimate", "set": {"ultimate": true}}],
         "lock": false}                          # design sections: keep each render as a reusable library voice
      ]}
 

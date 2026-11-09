@@ -35,7 +35,7 @@ def test_previews_are_english_and_user_names_survive(tmp_path):
     brand(lib, None, log=lambda *_: None)
     for v in lib.list():
         text, lang = preview_text(v)
-        assert text.isascii() and v["name"] in text   # English letters only, never Hindi or Urdu script
+        assert text.isascii() and v["name"] in text and "Fire Voice" in text   # English letters only, never Hindi or Urdu script
         assert lang == ("ur" if v.get("language") == "ur" else "en")
     lib.update("lib-m-1188", name="Captain", branded_by="user")
     brand(lib, None, log=lambda *_: None)
@@ -67,3 +67,17 @@ def test_api_brand_and_name_lookup(svc, tmp_path):
     assert c.get("/api/v1/voices/glb-f-sco-s00002/preview").status_code == 200   # falls back to the original clip
     r = c.post("/api/v1/tts", json={"text": "Hello there.", "voice": "Fiona", "engine": "null", "format": "wav"})
     assert r.status_code == 200, r.text
+
+
+def test_rebrand_only_keeps_other_names(tmp_path):
+    lib = _lib(tmp_path)
+    brand(lib, None, log=lambda *_: None)
+    before = {v["voice_id"]: v["name"] for v in lib.list()}
+    lib.update("urd-m-cv01", gender="female")   # the clip turned out to be a woman
+    rows = brand(lib, None, only=["Bilal"], log=lambda *_: None)
+    assert [r["voice_id"] for r in rows] == ["urd-m-cv01"]
+    after = lib.get("urd-m-cv01")
+    assert after["name"] != "Bilal" and "woman" in after["tagline"]
+    assert {k: v for k, v in before.items() if k != "urd-m-cv01"} == {v["voice_id"]: v["name"] for v in lib.list() if v["voice_id"] != "urd-m-cv01"}
+    brand(lib, None, only=["urd-m-cv01"], names={"urd-m-cv01": "Ayesha"}, log=lambda *_: None)
+    assert lib.get("Ayesha")["voice_id"] == "urd-m-cv01"
