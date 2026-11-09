@@ -195,6 +195,7 @@ firevoice renders list                                             # kept render
 firevoice renders show ID                                          # every passage and take: score, words missed or misheard
 firevoice renders take ID 2                                        # a new take of passage 2 (it becomes the one used)
 firevoice renders choose ID 2 1 ; firevoice renders lock ID 2      # use take 1 of passage 2 and keep it
+firevoice renders edit ID 2 --text "...ships on Friday..."        # change words; only the edit is re-recorded
 firevoice renders regenerate ID ; firevoice renders export ID -o final.wav
 firevoice dict add Ayesha "Aa-ye-sha" ; firevoice dict test "Ayesha is here" ; firevoice dict list
 ```

@@ -502,6 +502,7 @@ async function mountTakes(box, rid, onChanged) {
       return `<div class="take-row ${c.flagged ? "flagged" : ""} ${c.locked ? "locked" : ""}" data-i="${c.index}">
         <div class="tx">${qaHTML(c, cur)}</div>
         <div class="tk">${c.takes.map(t => `<button class="pill pt ${t.n === c.chosen ? "cur" : ""}" data-n="${t.n}" title="take ${t.n}: score ${t.score}, ${t.duration}s, seed ${t.seed}${t.n === c.chosen ? " (in use)" : " (click to play, double-click to use)"}">${t.n}</button>`).join("")}
+          <button class="btn sm icon ghost" data-act="edit" title="Edit words: re-record only what you change" ${c.locked ? "disabled" : ""}>${icon("edit", "sm")}</button>
           <button class="btn sm icon ghost" data-act="new" title="New take of this passage">${icon("plus", "sm")}</button>
           <button class="btn sm icon ghost" data-act="lock" title="${c.locked ? "Unlock" : "Lock: keep this take when re-taking the rest"}">${icon(c.locked ? "lock" : "unlock", "sm")}</button></div></div>`; }).join("")}
     <div class="small dim" style="margin-top:6px">Click a take to hear it, double-click to use it. Underlined words were missed or misheard by the speech check.</div>`;
@@ -517,6 +518,24 @@ async function mountTakes(box, rid, onChanged) {
       b.ondblclick = () => act(b, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/choose`, { method: "POST", json: { take: +b.dataset.n } }), `Passage ${i + 1} uses take ${b.dataset.n}`);
     });
     $("[data-act=new]", row).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/takes`, { method: "POST", json: {}, timeout: 0 }), `New take for passage ${i + 1}`);
+    $("[data-act=edit]", row).onclick = () => {
+      const c = m.chunks.find(x => x.index === i), tx = $(".tx", row);
+      if ($("textarea", tx)) return;
+      const before = tx.innerHTML;
+      tx.innerHTML = `<textarea class="inp" rows="2" style="width:100%">${esc(c.text)}</textarea>
+        <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm primary" data-ed="splice" title="Keep the original audio; only the changed words are new">Splice in</button>
+        <button class="btn sm ghost" data-ed="passage" title="Use the whole re-recorded passage">Re-record passage</button><button class="btn sm ghost" data-ed="cancel">Cancel</button></div>`;
+      const ta = $("textarea", tx); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+      $$("[data-ed]", tx).forEach(b => b.onclick = () => {
+        if (b.dataset.ed === "cancel") { tx.innerHTML = before; return; }
+        if (ta.value.trim() === c.text) { toast("Change some words first", ""); return; }
+        act(b, async () => {
+          const r = await API.req(`/api/v1/renders/${rid}/chunks/${i}/edit`, { method: "POST", json: { text: ta.value, mode: b.dataset.ed }, timeout: 0 });
+          const e = r.chunks.find(x => x.index === i).takes.slice(-1)[0].edit || {};
+          if (e.note) toast(e.note, "");
+        }, b.dataset.ed === "splice" ? `Passage ${i + 1}: edited words spliced in` : `Passage ${i + 1} re-recorded`);
+      });
+    };
     $("[data-act=lock]", row).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/lock`, { method: "POST", json: { locked: !row.classList.contains("locked") } }));
   });
   $("[data-regen]", box).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/regenerate`, { method: "POST", json: {}, timeout: 0 }), "New takes for every unlocked passage");

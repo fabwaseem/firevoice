@@ -205,6 +205,7 @@ is re-rendered.
 | `GET /api/v1/renders/{id}/subtitles?format=srt\|vtt` | Subtitles of the stitched audio. |
 | `GET /api/v1/renders/{id}/chunks/{i}/takes/{n}/audio` | One take of one passage. |
 | `POST /api/v1/renders/{id}/chunks/{i}/takes` | A new take `{seed?, choose?: true}` (same voice, style and checks). |
+| `POST /api/v1/renders/{id}/chunks/{i}/edit` | Change the passage's words: `{text, mode?: "splice" \| "passage", seed?}`. The passage is re-recorded with the new text; `splice` (default) keeps the original audio around the change and swaps in only the changed words, cut at quiet points and crossfaded. A big change uses the whole re-recording. The new take is chosen and records `edit: {mode, from_take, old_text, changed_words, cuts_s, note?}`; older takes keep their own `text`. Locked passages refuse. |
 | `POST /api/v1/renders/{id}/chunks/{i}/choose` | Use take `{take: n}`. |
 | `POST /api/v1/renders/{id}/chunks/{i}/lock` | `{locked: true}` keeps that passage when the rest are re-taken. |
 | `POST /api/v1/renders/{id}/regenerate` | New takes for `{chunks: [i, ...]}`, or every unlocked passage. |

@@ -522,11 +522,56 @@ class FireVoice:
     def render_retake(self, rid: str, index: int, seed: Optional[int] = None, choose: bool = True,
                       cancel: Optional[threading.Event] = None) -> dict:
         """A new take of one passage of a kept render, made like the original (same voice, style, pace, checks)."""
-        import random
         meta = self.render_get(rid)
         ch = next((c for c in meta["chunks"] if c["index"] == index), None)
         if ch is None:
             raise FireVoiceError("not_found", f"render {rid} has no passage {index}")
+        take = self._passage_take(meta, ch, ch["text"], seed, cancel)
+        self.renders.add_take(rid, index, take, choose=choose)
+        return self.render_get(rid)
+
+    def render_edit(self, rid: str, index: int, text: str, mode: str = "splice", seed: Optional[int] = None,
+                    cancel: Optional[threading.Event] = None) -> dict:
+        """Change the words of one passage of a kept render. "splice" re-records the passage with the new text and
+        keeps the original audio around the change (only the edited words are new); "passage" uses the whole new
+        recording. Splicing falls back to the whole passage when most of it changed. The result is a new take, chosen."""
+        import soundfile as sf
+
+        from . import wordedit
+        from .types import Word
+        if mode not in ("splice", "passage"):
+            raise FireVoiceError("bad_request", "mode must be 'splice' (keep the audio around the edit) or 'passage'")
+        text = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not text:
+            raise FireVoiceError("bad_request", "the new text is empty")
+        meta = self.render_get(rid)
+        ch = next((c for c in meta["chunks"] if c["index"] == index), None)
+        if ch is None:
+            raise FireVoiceError("not_found", f"render {rid} has no passage {index}")
+        if ch.get("locked"):
+            raise FireVoiceError("conflict", f"passage {index} is locked; unlock it to edit it")
+        if text == ch["text"]:
+            raise FireVoiceError("bad_request", "the text did not change")
+        same_shape = len(text.split()) == len(ch["text"].split())
+        take = self._passage_take(meta, {**ch, "cuts": ch.get("cuts") if same_shape else []}, text, seed, cancel)
+        info = {"mode": "passage", "from_take": ch["chosen"], "old_text": ch["text"]}
+        if mode == "splice":
+            old = next((t for t in ch["takes"] if t["n"] == ch["chosen"]), None)
+            if old is not None and old.get("words"):
+                a, _sr = sf.read(str(self.renders.take_path(rid, index, old["n"])), dtype="float32", always_2d=False)
+                sp = wordedit.splice(a, old["words"], np.asarray(take["audio"], dtype=np.float32), take["words"], meta["sample_rate"])
+                if sp is not None:
+                    take = {**take, "audio": sp["audio"], "words": [Word(w["text"], w["start"], w["end"]) for w in sp["words"]],
+                            "said": " ".join(w["text"] for w in sp["words"])}
+                    info.update(mode="splice", changed_words=sp["changed"], cuts_s=sp["cuts_s"])
+                else:
+                    info["note"] = "most of the passage changed (or its words could not be lined up), so the whole new take is used"
+        self.renders.add_take(rid, index, take, choose=True, text=text, edit=info)
+        return self.render_get(rid)
+
+    def _passage_take(self, meta: dict, ch: dict, text: str, seed: Optional[int], cancel: Optional[threading.Event]) -> dict:
+        """Generate, check and finish one passage of a kept render like the original (voice, style, pace, cuts)."""
+        import random
         req = TTSRequest.from_dict({k: v for k, v in meta["request"].items() if k in {f.name for f in dataclasses.fields(TTSRequest)}})
         eng, style, _params, _warn = self.prepare(req)
         if ch["style"] != "request":
@@ -537,7 +582,7 @@ class FireVoice:
         ld = self._pool(eng, hold=True)
         try:
             s = self._synth(ld, req.validate, 1, req.accept)
-            take = s.retake(ch["text"], voice=req.voice or "default", style=style, pace=ch["pace"],
+            return s.retake(text, voice=req.voice or "default", style=style, pace=ch["pace"],
                             seed=int(seed if seed is not None else random.randint(1, 2**31 - 1)),
                             cuts=[tuple(c) for c in ch.get("cuts") or []], asr=ch.get("asr", True), cancel=cancel)
         except Cancelled:
@@ -550,8 +595,6 @@ class FireVoice:
             with self._lock:
                 ld.active -= 1
                 ld.last_used = time.time()
-        self.renders.add_take(rid, index, take, choose=choose)
-        return self.render_get(rid)
 
     def render_choose(self, rid: str, index: int, n: int) -> dict:
         try:

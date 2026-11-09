@@ -268,6 +268,11 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         seed: Optional[int] = Field(None, description="null = a fresh random seed")
         choose: bool = Field(True, description="make the new take the one used in the stitched audio")
 
+    class EditBody(BaseModel):
+        text: str = Field(..., description="the passage's new text (as shown in the render's chunks)")
+        mode: Literal["splice", "passage"] = Field("splice", description="splice: only the edited words are new; passage: the whole re-recorded passage")
+        seed: Optional[int] = None
+
     class ChooseBody(BaseModel):
         take: int = Field(..., ge=1, description="take number (n) to use for this passage")
 
@@ -959,6 +964,20 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         import asyncio
         cancel = threading.Event()
         task = asyncio.ensure_future(run_in_threadpool(lambda: svc.render_retake(rid, index, body.seed, body.choose, cancel=cancel)))
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done and await request.is_disconnected():
+                cancel.set()
+        return task.result()
+
+    @app.post("/api/v1/renders/{rid}/chunks/{index}/edit", dependencies=deps, tags=["takes"])
+    async def render_edit(request: Request, rid: str, index: int, body: EditBody):
+        """Change the words of one passage. The passage is re-recorded with the new text and, in `splice` mode, only
+        the changed words are swapped into the original take (cut at quiet points, crossfaded); a big change uses the
+        whole new recording. The result is a new take of that passage, chosen; the take records what was edited."""
+        import asyncio
+        cancel = threading.Event()
+        task = asyncio.ensure_future(run_in_threadpool(lambda: svc.render_edit(rid, index, body.text, body.mode, body.seed, cancel=cancel)))
         while not task.done():
             done, _ = await asyncio.wait({task}, timeout=0.5)
             if not done and await request.is_disconnected():

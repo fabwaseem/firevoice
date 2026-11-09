@@ -92,12 +92,22 @@ class RenderStore:
                 "words": [{"text": w.text, "start": round(w.start, 3), "end": round(w.end, 3)} for w in t["words"]],
                 "qa": qa_words(asked, t["said"]) if t["said"] else None}
 
-    def add_take(self, rid: str, index: int, take: dict, *, choose: bool = True) -> dict:
+    def add_take(self, rid: str, index: int, take: dict, *, choose: bool = True, text: Optional[str] = None,
+                 edit: Optional[dict] = None) -> dict:
+        """Store a new take of a passage. `text` (a word edit) becomes the passage's text from now on; earlier takes
+        keep the text they said in their own `text`."""
         with self._lock:
             meta = self.get(rid)
             ch = self._chunk(meta, index)
+            if text is not None and text != ch["text"]:
+                for t in ch["takes"]:
+                    t.setdefault("text", ch["text"])
+                ch["text"] = text
             n = max((t["n"] for t in ch["takes"]), default=0) + 1
             rec = self._write_take(self.root / rid, index, n, take, meta["sample_rate"], ch["text"])
+            rec["text"] = ch["text"]
+            if edit:
+                rec["edit"] = edit
             ch["takes"].append(rec)
             if choose and not ch.get("locked"):
                 ch["chosen"] = n

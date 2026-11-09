@@ -229,6 +229,16 @@ def cmd_renders(a) -> int:
             ch = next(c for c in m["chunks"] if c["index"] == a.passage)
             t = ch["takes"][-1]
             print(f"passage {a.passage}: new take {t['n']} (score {t['score']}){', now used' if ch['chosen'] == t['n'] else ''}")
+        elif a.action == "edit":
+            if a.passage is None or not a.text:
+                print("renders edit ID PASSAGE --text \"new words\"", file=sys.stderr)
+                return 2
+            m = svc.render_edit(a.id, a.passage, a.text, "passage" if a.whole else "splice", a.seed)
+            ch = next(c for c in m["chunks"] if c["index"] == a.passage)
+            t = ch["takes"][-1]
+            e = t.get("edit") or {}
+            how = ("spliced words " + "-".join(map(str, e["changed_words"][:2]))) if e.get("mode") == "splice" else "whole passage re-recorded"
+            print(f"passage {a.passage}: take {t['n']} ({how}), score {t['score']}" + (f"; {e['note']}" if e.get("note") else ""))
         elif a.action == "choose":
             svc.render_choose(a.id, a.passage, a.take)
             print(f"passage {a.passage} uses take {a.take}")
@@ -1178,12 +1188,14 @@ def build_parser() -> argparse.ArgumentParser:
     dc.set_defaults(fn=cmd_dict)
 
     rd = sub.add_parser("renders", help="kept renders (say --keep-takes): compare takes, re-take, choose, lock, export")
-    rd.add_argument("action", nargs="?", default="list", choices=["list", "show", "take", "choose", "lock", "unlock", "regenerate", "export", "subtitles", "delete"])
+    rd.add_argument("action", nargs="?", default="list", choices=["list", "show", "take", "edit", "choose", "lock", "unlock", "regenerate", "export", "subtitles", "delete"])
     rd.add_argument("id", nargs="?", help="render id (list shows them)")
     rd.add_argument("passage", nargs="?", type=int, help="passage index (show lists them)")
     rd.add_argument("take", nargs="?", type=int, help="choose: take number")
     rd.add_argument("-o", "--out", default=None, help="export: audio file | subtitles: .srt or .vtt file")
     rd.add_argument("--seed", type=int, default=None, help="take: seed for the new take (default: random)")
+    rd.add_argument("--text", default=None, help="edit: the passage's new text")
+    rd.add_argument("--whole", action="store_true", help="edit: use the whole re-recorded passage instead of splicing the changed words")
     rd.add_argument("--limit", type=int, default=30)
     rd.set_defaults(fn=cmd_renders)
 
