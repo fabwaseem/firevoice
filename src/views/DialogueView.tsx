@@ -94,6 +94,10 @@ export function DialogueView() {
           </div>
           <Textarea rows={14} value={script} onChange={(e) => setScript(e.target.value)} aria-label="Dialogue script"
             placeholder={"Ayesha: Assalam o Alaikum! Welcome to the show.\nBilal: Thanks for having me. (laughs)\nNarrator: And so it began."} />
+          <p className="mt-2 text-[12px] text-faint">
+            Sound cues on their own line: <code className="font-mono">[sfx: a door creaks open, 2s]</code> and one{" "}
+            <code className="font-mono">[music: calm lo-fi piano]</code> bed under everything (needs the sound engines from Engines).
+          </p>
           <div className="mt-2 flex items-center gap-2">
             <Button variant="outline" leading={<Search className="size-4" />} onClick={() => void detect()}>Find speakers</Button>
             {turnsCount > 0 && <span className="text-[12.5px] text-muted">{turnsCount} turns · {speakers.length} speaker{speakers.length === 1 ? "" : "s"}</span>}
