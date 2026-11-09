@@ -19,7 +19,7 @@ dependencies = [
 # Install torch/torchaudio for YOUR GPU first (cu128 index on Blackwell), then:
 gpu = ["chatterbox-tts>=0.1.7"]                       # the in-venv engine; other engines live in .envs/<name>/
 asr = ["faster-whisper>=1.2"]                         # GPU Whisper for take validation + `firevoice transcribe`
-server = ["fastapi>=0.110", "uvicorn>=0.29", "websockets>=12", "python-multipart>=0.0.9", "httpx>=0.27"]   # API + `--remote` client
+server = ["fastapi>=0.110", "uvicorn>=0.29", "websockets>=12", "uv>=0.5", "python-multipart>=0.0.9", "httpx>=0.27"]   # API + `--remote` client
 harvest = ["pyarrow<17", "librosa>=0.10"]             # `firevoice voices harvest` from HF parquet datasets
 bench = ["resemblyzer>=0.1.4", "jiwer>=3", "speechmos>=0.0.1", "py-spy"]   # bake-off scorer
 dev = ["pytest>=8", "httpx"]

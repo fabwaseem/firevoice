@@ -386,7 +386,56 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     # ------------------------------------------------------------------ system
     @app.get("/health", tags=["system"])
     def health():
-        return {"ok": True, "version": __version__, "auth": bool(token)}
+        from . import API_VERSION, MIN_CLIENT_API
+        return {"ok": True, "version": __version__, "api_version": API_VERSION, "min_client_api": MIN_CLIENT_API, "auth": bool(token)}
+
+    @app.get("/api/v1/engines/{name}/install", dependencies=deps, tags=["engines"])
+    def engine_install_plan(name: str, sizes: bool = True):
+        """What installing this engine does (venv, CUDA torch, pinned packages, weights) with what is already done
+        and an estimated download. `auto: false` engines carry the manual steps instead."""
+        return svc.engine_install_plan(name, sizes=sizes)
+
+    @app.post("/api/v1/engines/{name}/install", dependencies=deps, tags=["engines"], status_code=202)
+    def engine_install(name: str, force: bool = False):
+        """Install as a background job (kind `install`): follow it on the jobs event stream; the log is the job's
+        install.log file. `force` rebuilds the venv and downloads the weights again."""
+        return svc.jobs.submit("install", {"engine": name, "force": force})
+
+    @app.delete("/api/v1/engines/{name}/install", dependencies=deps, tags=["engines"])
+    def engine_uninstall(name: str, weights: bool = False):
+        """Remove the engine's venv (shared venvs go for every engine using them, listed in `also_affects`); add
+        `weights=true` to delete its downloaded weights as well."""
+        return svc.engine_uninstall(name, weights=weights)
+
+    @app.get("/api/v1/system/paths", dependencies=deps, tags=["system"])
+    def system_paths():
+        """Where the data folder, engine venvs, model weights and ffmpeg were found, and why (env var, settings.json,
+        source checkout or default)."""
+        from . import paths
+        return paths.report()
+
+    class SettingsBody(BaseModel):
+        engines_dir: Optional[str] = None
+        weights_dir: Optional[str] = None
+        ffmpeg: Optional[str] = None
+
+    @app.put("/api/v1/system/settings", dependencies=deps, tags=["system"])
+    def system_settings(body: SettingsBody):
+        """Store path settings in FIREVOICE_HOME/settings.json. Send only the keys to change; an empty string removes a
+        key (back to the default). Environment variables still win over these. Changing engines_dir or weights_dir
+        takes effect after a restart; ffmpeg applies at once."""
+        from . import paths
+        changes = body.model_dump(exclude_unset=True)
+        for k, v in changes.items():
+            if not v:
+                continue
+            p = Path(v)
+            if k == "ffmpeg" and not p.is_file():
+                raise FireVoiceError("bad_request", f"ffmpeg not found at {v}")
+            if k != "ffmpeg" and not p.is_dir():
+                raise FireVoiceError("bad_request", f"{k}: folder not found: {v}")
+        stored = paths.save_settings(changes)
+        return {"settings": stored, "restart_required": any(k in changes for k in ("engines_dir", "weights_dir")), "paths": paths.report()}
 
     @app.get("/api/v1/system", dependencies=deps, tags=["system"])
     def system():

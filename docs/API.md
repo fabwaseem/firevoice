@@ -97,6 +97,14 @@ Fields on each engine:
 - **Runtime:** `loaded`, plus `workers` and `active_requests` while loaded.
 - **`params`:** the settings schema. Each entry is `{name, type, default, min, max, step, choices, length, labels, label, help}`, with `type` one of `float`, `int`, `bool`, `str`, `enum` or `vector`.
 
+Installing engines:
+
+| | |
+|---|---|
+| `GET /api/v1/engines/{name}/install` | The plan: `{auto, manual, venv_state, installed, steps: [{step, what, done, gb}], estimated_gb, uv}`. `?sizes=false` skips asking the Hub for sizes. |
+| `POST /api/v1/engines/{name}/install` | Starts an `install` job (`202`). `?force=true` rebuilds. Install jobs run beside renders, not behind them. The job's `install.log` is under `/api/v1/jobs/{id}/files/`. |
+| `DELETE /api/v1/engines/{name}/install` | Removes the venv; `?weights=true` deletes the weights too. `also_affects` lists engines sharing that venv. |
+
 ### Voices
 
 | | |
@@ -136,6 +144,13 @@ The style fields:
 | `tags` | suggested inline tags |
 | `sample` | showcase paragraph |
 | `extra` | raw engine settings |
+
+### System paths and settings
+
+- `GET /health` adds `api_version` (the HTTP contract, now 2) and `min_client_api`, so clients can check compatibility.
+- `GET /api/v1/system/paths`: the data folder, engine venvs, weights and ffmpeg, each with where it came from.
+- `PUT /api/v1/system/settings`: `{"engines_dir", "weights_dir", "ffmpeg"}` stored in `settings.json`. An empty string
+  removes a key. Folders must exist. `restart_required` is true when engine folders changed.
 
 ### Text to speech
 

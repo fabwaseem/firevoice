@@ -66,8 +66,8 @@ def _rnnoise_model():
     None when they cannot be had (offline): cleaning then falls back to the FFT denoiser."""
     from pathlib import Path
 
-    from .service import home
-    f = home() / "models" / "rnnoise" / "sh.rnnn"
+    from .paths import models_dir
+    f = models_dir() / "rnnoise" / "sh.rnnn"
     shared = Path.home() / ".firevoice" / "models" / "rnnoise" / "sh.rnnn"
     if not f.exists() and shared.exists():
         return shared

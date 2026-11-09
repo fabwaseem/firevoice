@@ -681,8 +681,76 @@ def _harvest(a) -> int:
     return 0
 
 
+def cmd_engine_install(a) -> int:
+    """plan / install / uninstall an engine: locally, or as a job on a running server with --remote."""
+    from . import installer
+    if not a.name:
+        print(f"engines {a.action} NAME", file=sys.stderr)
+        return 2
+    if a.remote:
+        from .client import Client, ClientError
+        c = Client(a.remote, a.token)
+        try:
+            if a.action == "plan":
+                print(json.dumps(c.get(f"/api/v1/engines/{a.name}/install"), indent=1))
+            elif a.action == "uninstall":
+                print(json.dumps(c._check(c.http.delete(f"/api/v1/engines/{a.name}/install", params={"weights": str(a.weights).lower()})).json(), indent=1))
+            else:
+                j = c.post(f"/api/v1/engines/{a.name}/install?force={str(a.force).lower()}")
+                print(f"install job {j['id']} started; follow it with: firevoice jobs wait {j['id']}")
+            return 0
+        except ClientError as e:
+            print(f"error ({e.code}): {e}", file=sys.stderr)
+            return 1
+    try:
+        if a.action == "plan":
+            p = installer.plan(a.name, sizes=True)
+            if a.json:
+                print(json.dumps(p, indent=1))
+                return 0
+            print(f"{p['engine']}: {'installed' if p['installed'] else 'not installed'}"
+                  + (f", about {p['estimated_gb']} GB to download" if p['estimated_gb'] and not p['installed'] else ""))
+            for st in p["steps"]:
+                print(f"  [{'x' if st['done'] else ' '}] {st['step']:8} {st['what']}" + (f" ({st['gb']} GB)" if st.get("gb") else ""))
+            if p["manual"]:
+                print(f"  manual: {p['manual']}")
+            if p["notes"]:
+                print(f"  note: {p['notes']}")
+            return 0
+        if a.action == "uninstall":
+            r = installer.uninstall(a.name, weights=a.weights)
+            print("removed:", *(r["removed"] or ["nothing"]), sep="\n  ")
+            if r["also_affects"]:
+                print(f"(the same venv served: {', '.join(r['also_affects'])})")
+            return 0
+        import threading
+        cancel = threading.Event()
+        log = Path(installer.paths.home()) / "logs" / f"install-{a.name}.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+
+        def progress(k, n, msg):
+            print(f"\r  [{k}/{n}] {msg}"[:150].ljust(150), end="", file=sys.stderr, flush=True)
+        try:
+            r = installer.install(a.name, progress, cancel, log_file=log, force=a.force)
+        except KeyboardInterrupt:
+            cancel.set()
+            print("\ncancelled", file=sys.stderr)
+            return 1
+        print(file=sys.stderr)
+        print(f"{r['engine']} installed in {r['seconds']:.0f}s (log: {log})")
+        return 0
+    except (KeyError, ValueError) as e:
+        print(str(e).strip("'\""), file=sys.stderr)
+        return 2
+    except installer.InstallError as e:
+        print(f"\ninstall failed: {e}", file=sys.stderr)
+        return 1
+
+
 def cmd_engines(a) -> int:
     from .service import FireVoiceError
+    if a.action in ("plan", "install", "uninstall"):
+        return cmd_engine_install(a)
     if a.remote:
         from .client import Client
         rows = Client(a.remote, a.token).engines()
@@ -894,7 +962,11 @@ def cmd_doctor(a) -> int:
     except Exception as e:
         print("torch   MISSING", e)
         ok = False
-    print(f"ffmpeg  {shutil.which('ffmpeg') or 'MISSING'}")
+    from . import paths
+    rep = paths.report()
+    print(f"ffmpeg  {rep['ffmpeg']['path'] or 'MISSING'}  ({rep['ffmpeg']['source']})")
+    for k in ("home", "engines_dir", "weights_dir"):
+        print(f"{k:8}{rep[k]['path']}  ({rep[k]['source']}{'' if rep[k]['exists'] else ', missing'})")
     try:
         from .asr import cuda_available
         print(f"asr     faster-whisper cuda={cuda_available()}")
@@ -1011,7 +1083,8 @@ def cmd_judge(a) -> int:
 
     # "tournament" (pairwise SpeechJudge) is opt-in: on near-equal clips it mostly measures which clip played second
     stages = a.stages.split(",") if a.stages else ["manifest", "metrics", "listen", "judge", "utmos", "report"]
-    judge_py = str(ROOT / ".envs" / "judge" / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
+    from .paths import venv_python
+    judge_py = str(venv_python("judge"))
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONUNBUFFERED": "1"}
     for st in stages:
         print(f"== judge: {st}", flush=True)
@@ -1220,9 +1293,11 @@ def build_parser() -> argparse.ArgumentParser:
     v.set_defaults(fn=cmd_voices)
 
     e = sub.add_parser("engines", help="list engines (capabilities, licence, status) or show one engine's parameters")
-    e.add_argument("action", nargs="?", default="list", choices=["list", "info"])
+    e.add_argument("action", nargs="?", default="list", choices=["list", "info", "plan", "install", "uninstall"])
     e.add_argument("name", nargs="?")
     e.add_argument("--json", action="store_true")
+    e.add_argument("--force", action="store_true", help="install: rebuild the venv and download the weights again")
+    e.add_argument("--weights", action="store_true", help="uninstall: delete the downloaded weights too")
     e.add_argument("--remote", nargs="?", const=os.environ.get("FIREVOICE_URL", "http://127.0.0.1:8787"), default=None)
     e.add_argument("--token", default=None)
     e.set_defaults(fn=cmd_engines)

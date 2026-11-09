@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...paths import weights_dir
 from .base import Adapter
 
-WEIGHTS = Path(__file__).resolve().parents[4] / ".envs" / "weights"
+WEIGHTS = weights_dir()
 
 
 def _src(local: str, hub: str) -> str:

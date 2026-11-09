@@ -19,6 +19,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
+from .paths import home as _home
+
 BUILTIN_DIR = Path(__file__).resolve().parent / "styles"
 
 
@@ -83,7 +85,7 @@ def all_styles(refresh: bool = False) -> dict[str, Style]:
     if _cache is None or refresh:
         d: dict[str, Style] = {"neutral": Style()}
         _load_dir(BUILTIN_DIR, d)
-        _load_dir(Path(os.environ.get("FIREVOICE_HOME", Path.home() / ".firevoice")) / "styles", d)
+        _load_dir(_home() / "styles", d)
         _cache = d
     return _cache
 

@@ -21,7 +21,11 @@ class KokoroAdapter(Adapter):
         self.m = KPipeline(lang_code=self.extra.get("lang", "a"), device=self.device)
 
     def _prepare_voice(self, ref_path, ref_text, desc):
-        return {"voice": desc or "am_michael"}
+        """Kokoro only has presets. A voice's description may be a preset name ("af_heart"), mention one ("...made with
+        Kokoro am_michael"), or be free text, which Kokoro would read as a missing preset and answer with silence."""
+        import re
+        m = re.search(r"\b([abefhijpz][fm]_[a-z]+)\b", desc or "")
+        return {"voice": m.group(1) if m else "am_michael"}
 
     def _synth(self, text, cond, params, seed):
         voice = (cond or {}).get("voice", "am_michael")

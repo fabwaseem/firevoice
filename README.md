@@ -41,8 +41,32 @@ firevoice doctor --engine-test chatterbox-turbo --workers 2   # timed smoke synt
 
 ### Other engines
 
-Each heavy engine has its own venv under `.envs/<name>/` and weights under `.envs/weights/<name>/`. `firevoice engines`
-shows which are ready. Rough recipe (see `src/firevoice/core/registry.py` for the paths FireVoice expects):
+Each heavy engine has its own venv and its own weights. FireVoice builds both from a pinned manifest:
+
+```bash
+firevoice engines plan voxcpm2        # what it would install and download, and what is already there
+firevoice engines install voxcpm2     # venv + CUDA torch + pinned packages + weights + an import check
+firevoice engines uninstall f5 --weights
+```
+
+The same install runs as a background job from the API (`POST /api/v1/engines/{name}/install`), the playground's
+Engines page and the desktop app. Every venv hardlinks from uv's shared cache, so a torch build is stored once, not once
+per engine. IndexTTS-2 and Breeze run from cloned repositories and stay manual (`engines plan` prints the steps).
+
+### Where things live
+
+FireVoice runs from a checkout, a pip install or the desktop app's bundle. Each location is an environment variable,
+then a setting in `~/.firevoice/settings.json` (also editable from the API, the playground and the desktop app), then
+the checkout's `.envs/` when running from source, then the data folder:
+
+| what | env var | default |
+|---|---|---|
+| voices, renders, projects | `FIREVOICE_HOME` | `~/.firevoice` |
+| engine venvs | `FIREVOICE_ENGINES_DIR` | `<checkout>/.envs`, else `<home>/engines` |
+| model weights | `FIREVOICE_WEIGHTS_DIR` | `<engines>/weights` |
+| ffmpeg | `FIREVOICE_FFMPEG` | `<home>/bin/ffmpeg`, then PATH |
+
+`firevoice doctor` prints what was found and why. Manual recipe, if you prefer:
 
 ```bash
 uv venv --python 3.12 .envs/qwen && uv pip install --python .envs/qwen/Scripts/python.exe torch==2.9.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu128 && uv pip install --python .envs/qwen/Scripts/python.exe qwen-tts

@@ -845,12 +845,67 @@ async function loadEngines() {
       <div class="tags">${["clone", "design", "instruct", "tags"].filter(k => e[k]).map(k => `<span class="tag acc">${k}</span>`).join("")}<span class="tag">${esc(e.license)}</span>${e.commercial ? "" : '<span class="tag warn">non-commercial</span>'}</div>
       <div class="notes">${esc(e.notes || e.description || "")}${e.problems?.length ? `<div style="color:var(--bad)">${esc(e.problems.join("; "))}</div>` : ""}</div>
       <div class="stats"><span>RTF <b>${e.speed_rtf ?? "-"}</b></span><span><b>${e.sample_rate / 1000}</b> kHz</span><span>~<b>${e.vram_gb}</b> GB</span><span><b>${e.languages.includes("*") ? "600+" : e.languages.length}</b> lang</span>${e.loaded ? `<span><b>${e.workers}</b> worker(s)</span>` : ""}</div>
+      <div class="install" id="inst-${e.name}"></div>
       <div class="row">${e.ready ? (e.loaded ? `<button class="btn sm" data-unload="${e.name}">Unload</button>` : `<button class="btn sm primary" data-load="${e.name}">${icon("zap", "sm")}Load now</button>`) : ""}
-        <button class="btn sm ghost" data-use-engine="${e.name}" ${e.ready ? "" : "disabled"}>Use on Speak</button></div></div>`).join("");
+        ${!e.ready && e.installable ? `<button class="btn sm primary" data-install="${e.name}">${icon("download", "sm")}Install</button>` : ""}
+        ${!e.ready && !e.installable ? `<button class="btn sm ghost" data-howto="${e.name}">How to install</button>` : ""}
+        <button class="btn sm ghost" data-use-engine="${e.name}" ${e.ready ? "" : "disabled"}>Use on Speak</button>
+        ${e.ready && e.installable && !e.loaded ? `<button class="btn sm ghost" data-uninstall="${e.name}" title="Delete this engine's venv">Remove</button>` : ""}</div></div>`).join("");
+    $$("#ecards [data-install]").forEach(b => b.onclick = () => installEngine(b.dataset.install, b));
+    $$("#ecards [data-howto]").forEach(b => b.onclick = async () => { try { const p = await API.req(`/api/v1/engines/${b.dataset.howto}/install?sizes=false`); $(`#inst-${b.dataset.howto}`).innerHTML = `<div class="notes">${esc(p.manual || "Not installable from here.")}</div>`; } catch (e) { toast(e.message, "bad"); } });
+    $$("#ecards [data-uninstall]").forEach(b => b.onclick = async () => {
+      const keep = !confirm(`Remove ${b.dataset.uninstall}'s Python environment?\n\nOK also deletes its downloaded weights; Cancel keeps the weights.`);
+      if (!confirm(`Remove ${b.dataset.uninstall} now?`)) return;
+      try { const r = await API.req(`/api/v1/engines/${b.dataset.uninstall}/install?weights=${!keep}`, { method: "DELETE" }); toast(`Removed ${r.removed.length} folder(s)${r.also_affects.length ? "; also used by " + r.also_affects.join(", ") : ""}`, "ok"); } catch (e) { toast(e.message, "bad"); }
+      loadEngines(); });
+    Object.entries(S.installing || {}).forEach(([name, j]) => drawInstall(name, j));
+    loadPaths();
     $$("#ecards [data-load]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Loading…"); try { await API.req(`/api/v1/engines/${b.dataset.load}/load`, { method: "POST", json: {}, timeout: 0 }); toast(`${b.dataset.load} loaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
     $$("#ecards [data-unload]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Unloading…"); try { await API.req(`/api/v1/engines/${b.dataset.unload}/unload`, { method: "POST", timeout: 60000 }); toast(`${b.dataset.unload} unloaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
     $$("#ecards [data-use-engine]").forEach(b => b.onclick = () => { S.engine = b.dataset.useEngine; renderEngineSelect(); renderKnobs(); saveForm(); location.hash = "#speak"; });
   } catch (e) { toast(e.message, "bad"); }
+}
+
+async function installEngine(name, btn) {
+  try {
+    const plan = await API.req(`/api/v1/engines/${name}/install`);
+    const todo = plan.steps.filter(s => !s.done).map(s => "• " + s.what).join("\n");
+    if (!confirm(`Install ${name}?\n\n${todo}\n\nAbout ${plan.estimated_gb ?? "?"} GB to download (less when another engine already fetched the same torch).`)) return;
+    busyBtn(btn, true, "Starting…");
+    const j = await API.req(`/api/v1/engines/${name}/install`, { method: "POST" });
+    S.installing = { ...(S.installing || {}), [name]: j }; drawInstall(name, j);
+    const tick = async () => {
+      let v; try { v = await API.req(`/api/v1/jobs/${j.id}`); } catch { return setTimeout(tick, 3000); }
+      S.installing[name] = v; drawInstall(name, v);
+      if (["queued", "running"].includes(v.status)) return setTimeout(tick, 1500);
+      delete S.installing[name];
+      v.status === "done" ? toast(`${name} installed`, "ok") : toast(`${name}: ${v.error?.message || v.status}`, "bad");
+      refreshEngines(); loadEngines();
+    };
+    setTimeout(tick, 1000);
+  } catch (e) { toast(e.message, "bad"); busyBtn(btn, false); }
+}
+function drawInstall(name, j) {
+  const el = $(`#inst-${name}`); if (!el) return;
+  const live = ["queued", "running"].includes(j.status);
+  el.innerHTML = `<div class="notes">${esc(j.message || j.status)}</div><div class="progress ${j.status === "failed" ? "bad" : j.status === "done" ? "ok" : ""}"><i style="width:${Math.round(100 * (j.progress || 0))}%"></i></div>
+    <div class="row" style="gap:6px">${live ? `<button class="btn sm ghost" data-icancel="${j.id}">Cancel</button>` : ""}<a class="btn sm ghost" href="${API.url(`/api/v1/jobs/${j.id}/files/install.log`)}" target="_blank">Log</a></div>`;
+  el.querySelector("[data-icancel]")?.addEventListener("click", () => API.req(`/api/v1/jobs/${j.id}/cancel`, { method: "POST" }).catch(e => toast(e.message, "bad")));
+}
+async function loadPaths() {
+  try {
+    const p = await API.req("/api/v1/system/paths");
+    const row = (k, label, hint) => `<div class="field"><label class="f">${label} <span class="hint">(${esc(p[k].source)}${p[k].exists ? "" : ", missing"})</span></label>
+      <input class="inp" data-path="${k}" value="${esc(p.settings[k] || "")}" placeholder="${esc(p[k].path || hint)}"></div>`;
+    $("#paths-card").innerHTML = `<div class="field"><label class="f">Data folder <span class="hint">(FIREVOICE_HOME; voices, renders, projects)</span></label><input class="inp" value="${esc(p.home.path)}" disabled></div>
+      ${row("engines_dir", "Engine folder", "venvs")}${row("weights_dir", "Model weights", "weights")}${row("ffmpeg", "ffmpeg", "ffmpeg.exe")}
+      <div class="row"><button class="btn sm primary" id="paths-save">Save</button><span class="hint">Leave a field empty for the default shown in grey.</span></div>`;
+    $("#paths-save").onclick = async () => {
+      const body = {}; $$("[data-path]").forEach(i => { if (i.value.trim() !== (p.settings[i.dataset.path] || "")) body[i.dataset.path] = i.value.trim(); });
+      if (!Object.keys(body).length) return toast("Nothing changed", "");
+      try { const r = await API.req("/api/v1/system/settings", { method: "PUT", json: body }); toast(r.restart_required ? "Saved. Restart the server to use the new engine folders." : "Saved", "ok"); loadPaths(); } catch (e) { toast(e.message, "bad"); }
+    };
+  } catch (e) { $("#paths-card").textContent = e.message; }
 }
 
 // ------------------------------------------------------------------------------------------------ settings + shortcuts

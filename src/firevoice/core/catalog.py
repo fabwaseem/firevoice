@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from ..paths import weights as _weights_path
 from .registry import ENVS
 
 
@@ -96,13 +97,13 @@ class EngineInfo:
         else:
             py = ENVS / self.venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
             venv_ok = py.exists()
-        w = ENVS / "weights" / self.weights if self.weights else None
+        w = _weights_path(self.weights) if self.weights else None
         weights_ok = w is None or (w.exists() and any(w.glob("*")) and not any(w.rglob("*.incomplete")))
         problems = []
         if not venv_ok:
-            problems.append(f"python package {self.requires!r} is not installed" if self.venv is None else f"missing venv .envs/{self.venv}")
+            problems.append(f"python package {self.requires!r} is not installed" if self.venv is None else f"missing venv {ENVS / self.venv}")
         if not weights_ok:
-            problems.append(f"missing or incomplete weights .envs/weights/{self.weights}")
+            problems.append(f"missing or incomplete weights {w}")
         return {"ready": venv_ok and weights_ok, "venv_ok": venv_ok, "weights_ok": weights_ok, "problems": problems}
 
     def to_dict(self) -> dict:

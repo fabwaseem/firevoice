@@ -1,7 +1,7 @@
 """Engine registry: which python (venv) runs which adapter, with how many copies, under which license.
 
-Built-in specs point at the venvs created under firevoice/.envs/<name>/ (one per heavy engine, so their
-conflicting torch/transformers pins never fight). Override or add engines in ~/.firevoice/engines.json:
+Built-in specs point at the venvs in the engines folder (paths.engines_dir(): <checkout>/.envs in a source checkout,
+else FIREVOICE_HOME/engines; one venv per heavy engine, so their conflicting torch/transformers pins never fight). Override or add engines in ~/.firevoice/engines.json:
 
     {"my-engine": {"adapter": "qwen3-tts", "python": "D:/venvs/x/Scripts/python.exe", "default_workers": 1}}
 """
@@ -14,13 +14,15 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
 
-PKG_ROOT = Path(__file__).resolve().parents[3]          # firevoice/
-ENVS = PKG_ROOT / ".envs"
+from ..paths import engines_dir, home
+
+ENVS = engines_dir()          # fixed for the life of the process; changing engines_dir needs a restart
 
 
 def _venv_python(name: str) -> str:
-    cand = ENVS / name / "Scripts" / "python.exe" if os.name == "nt" else ENVS / name / "bin" / "python"
-    return str(cand) if cand.exists() else sys.executable
+    """The venv's interpreter, whether or not it exists yet: an engine installed while the server runs is picked up
+    without a restart, and a missing one fails with a clear "not installed" instead of importing in the wrong venv."""
+    return str(ENVS / name / "Scripts" / "python.exe" if os.name == "nt" else ENVS / name / "bin" / "python")
 
 
 @dataclass
@@ -84,7 +86,7 @@ def builtin_engines() -> dict[str, EngineSpec]:
 
 
 def user_engines() -> dict[str, EngineSpec]:
-    f = Path(os.environ.get("FIREVOICE_HOME", Path.home() / ".firevoice")) / "engines.json"
+    f = home() / "engines.json"
     if not f.exists():
         return {}
     out = {}

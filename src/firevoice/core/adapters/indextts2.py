@@ -13,10 +13,10 @@ import os
 import tempfile
 from pathlib import Path
 
+from ...paths import engines_dir, weights
 from .base import Adapter
 
-ROOT = Path(__file__).resolve().parents[4]
-WEIGHTS = ROOT / ".envs" / "weights" / "indextts-2"
+WEIGHTS = weights("indextts-2")
 
 
 class IndexTTS2Adapter(Adapter):
@@ -29,7 +29,7 @@ class IndexTTS2Adapter(Adapter):
     vram_gb = 6.0
 
     def _load(self) -> None:
-        os.chdir(ROOT / ".envs" / "indextts-repo")
+        os.chdir(engines_dir() / "indextts-repo")
         from indextts.infer_v2 import IndexTTS2
         self.m = IndexTTS2(cfg_path=str(WEIGHTS / "config.yaml"), model_dir=str(WEIGHTS), use_fp16=True, use_cuda_kernel=False, use_deepspeed=False)
         self.tmp = Path(tempfile.mkdtemp(prefix="indextts-"))

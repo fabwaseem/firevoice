@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...paths import weights
 from .base import Adapter
 
-WEIGHTS = Path(__file__).resolve().parents[4] / ".envs" / "weights" / "voxcpm2"
+WEIGHTS = weights("voxcpm2")
 
 
 class VoxCPM2Adapter(Adapter):

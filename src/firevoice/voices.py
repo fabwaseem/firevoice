@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+from .paths import home as _home
 import soundfile as sf
 
 from . import audio as A
@@ -60,7 +62,7 @@ def _resample(a: np.ndarray, sr: int, to: int) -> np.ndarray:
 
 class VoiceLibrary:
     def __init__(self, root: Optional[str | Path] = None):
-        self.root = Path(root or os.environ.get("FIREVOICE_HOME", Path.home() / ".firevoice")) / "voices"
+        self.root = (Path(root) if root else _home()) / "voices"
 
     # -- listing -------------------------------------------------------------------
     def list(self) -> list[dict]:

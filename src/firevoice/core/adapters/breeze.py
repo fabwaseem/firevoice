@@ -25,11 +25,11 @@ from typing import Optional
 
 import numpy as np
 
+from ...paths import engines_dir, weights
 from .base import Adapter
 
-ROOT = Path(__file__).resolve().parents[4]
-REPO = ROOT / ".envs" / "breeze-repo"
-WEIGHTS = ROOT / ".envs" / "weights" / "breeze-tts-2"
+REPO = engines_dir() / "breeze-repo"
+WEIGHTS = weights("breeze-tts-2")
 DEFAULT_INSTRUCT_CFG = 4.0   # README: "Use --cfg-scale 4 to strengthen instruction-following"
 MAX_NEW_TOKENS = 1500
 MAX_SEQ_LEN = 2048

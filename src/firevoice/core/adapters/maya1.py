@@ -7,9 +7,10 @@ from pathlib import Path
 
 import numpy as np
 
+from ...paths import weights
 from .base import Adapter
 
-WEIGHTS = Path(__file__).resolve().parents[4] / ".envs" / "weights" / "maya1"
+WEIGHTS = weights("maya1")
 BOS, EOT, SOH, EOH, SOA, CODE_START, CODE_END, OFFSET = 128000, 128009, 128259, 128260, 128261, 128257, 128258, 128266
 TAGMAP = {"laugh": "<laugh>", "chuckle": "<chuckle>", "sigh": "<sigh>", "gasp": "<gasp>", "cough": "<cough>", "giggle": "<giggle>",
           "clear throat": "<clear_throat>", "sniff": "<sniffle>", "groan": "<groan>", "hmm": "<hmm>"}

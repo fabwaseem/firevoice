@@ -28,6 +28,7 @@ from typing import Optional
 import numpy as np
 
 from . import protocol as P
+from ..paths import home as _home
 from .registry import EngineSpec, get_engine
 from ..types import Cancelled
 
@@ -217,7 +218,7 @@ class EnginePool:
         self.src_dir = Path(__file__).resolve().parents[2]
         self.scratch = Path(scratch) if scratch else Path(tempfile.mkdtemp(prefix="firevoice-"))
         self.scratch.mkdir(parents=True, exist_ok=True)
-        self.log_dir = Path(log_dir) if log_dir else Path(os.environ.get("FIREVOICE_HOME", Path.home() / ".firevoice")) / "logs"
+        self.log_dir = Path(log_dir) if log_dir else _home() / "logs"
         self.n = max(1, int(workers or self.spec.default_workers))
         self.max_retries = max_retries
         self.workers: list[_Worker] = []

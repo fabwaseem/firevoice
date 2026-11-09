@@ -10,9 +10,10 @@ import soundfile as sf
 
 
 def _ffmpeg() -> str:
-    p = shutil.which("ffmpeg")
+    from .paths import ffmpeg
+    p = ffmpeg()
     if not p:
-        raise RuntimeError("ffmpeg not found on PATH")
+        raise RuntimeError("ffmpeg not found: install it on PATH, put it in FIREVOICE_HOME/bin, or set FIREVOICE_FFMPEG")
     return p
 
 

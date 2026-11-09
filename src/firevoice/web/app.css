@@ -499,3 +499,6 @@ details.adv-card > summary::-webkit-details-marker { display: none; }
 .dg-turn:hover { background: var(--surface-2); }
 .dg-turn.on { background: var(--acc-soft); color: var(--fg); }
 select.chip { appearance: none; padding-right: 10px; cursor: pointer; }
+.ecard .install:empty { display: none; }
+.ecard .install { display: flex; flex-direction: column; gap: 6px; }
+.ecard .install .notes { min-height: 0; }

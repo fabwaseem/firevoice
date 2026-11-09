@@ -34,9 +34,7 @@ from .styles import STYLE_FIELDS, Style, all_styles, get_style, style_dict
 from .types import Cancelled, Result
 from .voices import VoiceLibrary
 
-def home() -> Path:
-    """FireVoice data folder (voices, styles, renders, logs): $FIREVOICE_HOME or ~/.firevoice, read at call time."""
-    return Path(os.environ.get("FIREVOICE_HOME", Path.home() / ".firevoice"))
+from .paths import home  # noqa: E402  (re-exported: other modules import home from here)
 
 
 class FireVoiceError(Exception):
@@ -182,6 +180,12 @@ class FireVoice:
     def engines(self) -> list[dict]:
         return [self.engine(n) for n in self.engine_names()]
 
+    @staticmethod
+    def _installable(name: str) -> bool:
+        from .installer import MANIFESTS
+        m = MANIFESTS.get(name)
+        return bool(m and m.auto)
+
     def engine(self, name: str) -> dict:
         try:
             spec = get_engine(name)
@@ -191,7 +195,7 @@ class FireVoice:
         loaded = self._loaded.get(spec.name)
         d = {**inf.to_dict(), "name": spec.name, "license": spec.license, "commercial": spec.commercial, "vram_gb": spec.vram_gb,
              "default_workers": spec.default_workers, "description": spec.description, **inf.status(), "default": spec.name == self._resolve_engine(None),
-             "loaded": loaded is not None}
+             "loaded": loaded is not None, "installable": self._installable(spec.name)}
         if loaded is not None:
             p = loaded.pool
             d.update(workers=len(p.workers), runtime_sample_rate=p.sr, active_requests=loaded.active, loaded_at=loaded.loaded_at, last_used=loaded.last_used,
@@ -204,6 +208,31 @@ class FireVoice:
             return get_engine(name or self.default_engine).name
         except ValueError as e:
             raise FireVoiceError("not_found", str(e))
+
+    def engine_install_plan(self, name: str, sizes: bool = True) -> dict:
+        """What installing an engine would do and download, and what is already there."""
+        from . import installer
+        try:
+            return installer.plan(name, sizes=sizes)
+        except (KeyError, ValueError) as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def engine_uninstall(self, name: str, weights: bool = False) -> dict:
+        """Remove an engine's venv (and its weights when asked). Unloads every engine that shares the venv first."""
+        from . import installer
+        try:
+            m = installer.manifest(name)
+        except (KeyError, ValueError) as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        if m.venv is None:
+            raise FireVoiceError("bad_request", f"{m.engine} runs inside the backend's own environment")
+        for e, x in installer.MANIFESTS.items():
+            if x.venv == m.venv and e in self._loaded:
+                self.unload(e)
+        try:
+            return installer.uninstall(m.engine, weights=weights)
+        except OSError as e:
+            raise FireVoiceError("conflict", f"could not remove every file (is something still using it?): {e}")
 
     def load(self, name: Optional[str] = None, workers: Optional[int] = None) -> dict:
         """Load an engine now (otherwise the first request loads it). Idle engines are unloaded first when the GPU

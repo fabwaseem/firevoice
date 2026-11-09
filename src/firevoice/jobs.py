@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue")
+KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install")
+OWN_THREAD = ("install",)   # long, GPU-free work that must not hold up renders queued behind it
 
 
 @dataclass
@@ -124,13 +125,32 @@ class JobManager:
             if not todo:
                 raise FireVoiceError("conflict", "nothing to render: every paragraph is rendered and up to date (or locked)")
             title = title or f"{p['title']}: {len(todo)} paragraph(s)"
+        elif kind == "install":
+            from . import installer
+            try:
+                m = installer.manifest(str(payload.get("engine") or ""))
+            except (KeyError, ValueError) as e:
+                raise FireVoiceError("not_found", str(e).strip("'\""))
+            if not m.auto:
+                raise FireVoiceError("bad_request", f"{m.engine} cannot be installed automatically: {m.manual}")
+            if not installer.uv():
+                raise FireVoiceError("unavailable", "uv not found: install uv or the backend's server extra, which includes it")
+            busy = [x for x in self.jobs.values() if x.kind == "install" and x.status not in TERMINAL
+                    and installer.MANIFESTS.get(x.payload.get("engine"), m).venv == m.venv]
+            if busy:
+                raise FireVoiceError("conflict", f"{m.venv} is already being installed (job {busy[0].id})")
+            payload = {**payload, "engine": m.engine}
+            title = title or f"install {m.engine}"
         job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload)
         with self.lock:
             self.jobs[job.id] = job
             self.cancels[job.id] = threading.Event()
             self._save(job)
             self._emit(job, "queued")
-        self.q.put(job.id)
+        if kind in OWN_THREAD:
+            threading.Thread(target=self._execute, args=(job.id,), daemon=True, name=f"fv-{kind}-{job.id}").start()
+        else:
+            self.q.put(job.id)
         return job.view()
 
     def list(self, status: Optional[str] = None, kind: Optional[str] = None, limit: int = 100) -> list[dict]:
@@ -269,32 +289,35 @@ class JobManager:
             self._emit(j, status)
 
     def _loop(self) -> None:
-        from .service import FireVoiceError
-        from .types import Cancelled
         while True:
             jid = self.q.get()
             if jid is None:
                 return
-            try:
-                j = self._job(jid)
-            except Exception:
-                continue
-            cancel = self.cancels.get(jid) or threading.Event()
-            if j.status != "queued" or cancel.is_set():
-                continue
-            with self.lock:
-                j.status, j.started = "running", time.time()
-                self._save(j)
-                self._emit(j, "running")
-            try:
-                getattr(self, f"_run_{j.kind}")(j, cancel)
-                self._finish(j, "done", message="finished")
-            except Cancelled:
-                self._finish(j, "cancelled", message="cancelled")
-            except FireVoiceError as e:
-                self._finish(j, "failed", error={"code": e.code, "message": e.message})
-            except Exception as e:  # noqa: BLE001
-                self._finish(j, "failed", error={"code": "internal", "message": f"{type(e).__name__}: {str(e)[:400]}"})
+            self._execute(jid)
+
+    def _execute(self, jid: str) -> None:
+        from .service import FireVoiceError
+        from .types import Cancelled
+        try:
+            j = self._job(jid)
+        except Exception:
+            return
+        cancel = self.cancels.get(jid) or threading.Event()
+        if j.status != "queued" or cancel.is_set():
+            return
+        with self.lock:
+            j.status, j.started = "running", time.time()
+            self._save(j)
+            self._emit(j, "running")
+        try:
+            getattr(self, f"_run_{j.kind}")(j, cancel)
+            self._finish(j, "done", message="finished")
+        except Cancelled:
+            self._finish(j, "cancelled", message="cancelled")
+        except FireVoiceError as e:
+            self._finish(j, "failed", error={"code": e.code, "message": e.message})
+        except Exception as e:  # noqa: BLE001
+            self._finish(j, "failed", error={"code": "internal", "message": f"{type(e).__name__}: {str(e)[:400]}"})
 
     def _run_tts(self, j: Job, cancel: threading.Event) -> None:
         from .service import TTSRequest
@@ -399,6 +422,22 @@ class JobManager:
         (out / "dialogue.srt").write_text(self.svc.dialogue_subtitles(d["turns"], "srt"), encoding="utf-8")
         j.result = {"audio": name, "stems": stems, "words": "words.json", "turns": "turns.json", "subtitles": "dialogue.srt", "format": fmt,
                     "duration": round(len(d["audio"]) / d["sr"], 2), "speakers": list(d["stems"])}
+
+    def _run_install(self, j: Job, cancel: threading.Event) -> None:
+        """Build an engine's venv and fetch its weights (installer.install); the full log is install.log."""
+        from . import installer
+        from .service import FireVoiceError
+        from .types import Cancelled
+        folder = self.root / j.id
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            j.result = installer.install(j.payload["engine"], lambda k, n, msg: self._progress(j, k, n, msg), cancel,
+                                         log_file=folder / "install.log", force=bool(j.payload.get("force")))
+        except installer.InstallCancelled:
+            raise Cancelled("cancelled")
+        except installer.InstallError as e:
+            raise FireVoiceError("internal", f"{e} (full log: install.log)")
+        j.result["files"] = ["install.log"]
 
     def _run_style_refs(self, j: Job, cancel: threading.Event) -> None:
         """Build a voice's own clip for each listed style, one by one."""
