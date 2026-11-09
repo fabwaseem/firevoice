@@ -49,7 +49,7 @@ export interface Engine {
   /** The backend can build this engine's venv and fetch its weights itself (POST /engines/{name}/install). */
   installable?: boolean;
   /** tts (speech), sfx (sound effects and music) or vc (voice changer) */
-  task?: "tts" | "sfx" | "vc";
+  task?: "tts" | "sfx" | "vc" | "tool";
 }
 
 export interface InstallStep {

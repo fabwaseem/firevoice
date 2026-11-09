@@ -9,6 +9,7 @@ import { useStudio } from "@/stores/studio";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { WatermarkCheck } from "@/components/tools/WatermarkCheck";
 import { QualityCheck } from "@/components/tools/QualityReport";
+import { SeparateCard } from "@/components/tools/SeparateCard";
 import { Badge, Button, Card, Label, NativeSelect } from "@/components/ui";
 
 /** Voice changer: keep the words, timing and delivery of a recording, swap the voice. */
@@ -121,6 +122,7 @@ export function VoiceChangerView() {
         </Card>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <SeparateCard />
         <QualityCheck />
         <WatermarkCheck />
       </div>

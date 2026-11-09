@@ -114,7 +114,7 @@ export const api = {
   },
   dubLanguages: () => request<{ languages: string[]; model: string; sizes: Record<string, string> }>("/api/v1/dub/languages"),
   dub: (file: Blob, opts: { target_language: string; source_language?: string; voice?: string; keep_voices?: boolean; consent?: boolean;
-    background?: number; translator?: "fast" | "better"; format?: string; cast?: Record<string, string> }) => {
+    background?: number; translator?: "fast" | "better"; keep_music?: boolean; format?: string; cast?: Record<string, string> }) => {
     const fd = new FormData();
     fd.append("file", file, file instanceof File ? file.name : "recording.wav");
     for (const [k, v] of Object.entries({ format: "mp3", ...opts })) {
@@ -122,6 +122,16 @@ export const api = {
       fd.append(k, typeof v === "object" ? JSON.stringify(v) : String(v));
     }
     return request<Job>("/api/v1/dub", { method: "POST", body: fd });
+  },
+  separate: async (file: Blob, mode: "vocals" | "denoise" | "dereverb", stem: "voice" | "rest") => {
+    const fd = new FormData();
+    fd.append("file", file, file instanceof File ? file.name : "audio");
+    fd.append("mode", mode);
+    fd.append("stem", stem);
+    fd.append("format", "mp3");
+    const res = await fetch(url("/api/v1/audio/separate"), { method: "POST", headers: authHeaders(), body: fd });
+    if (!res.ok) throw await parseError(res);
+    return res.blob();
   },
   renderQuality: (id: string) => request<QualityReport>(`/api/v1/renders/${encodeURIComponent(id)}/quality`),
   detectWatermark: (file: Blob, name = "audio") => {
@@ -257,7 +267,7 @@ export const api = {
     if (!res.ok) throw await parseError(res);
     return { blob: await res.blob(), duration: Number(res.headers.get("X-Duration") ?? 0) };
   },
-  cleanVoice: (id: string, strength: "light" | "medium" | "strong") =>
+  cleanVoice: (id: string, strength: "light" | "medium" | "strong" | "neural") =>
     request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/clean`, { method: "POST", body: json({ strength }) }),
   restoreVoice: (id: string) => request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/restore-original`, { method: "POST" }),
   buildStyleClip: (id: string, style: string) =>

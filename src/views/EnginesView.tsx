@@ -10,6 +10,7 @@ const GROUPS = [
   { task: "tts", title: "Speech" },
   { task: "sfx", title: "Sound effects and music" },
   { task: "vc", title: "Voice changer" },
+  { task: "tool", title: "Audio tools" },
 ] as const;
 
 export function EnginesView() {

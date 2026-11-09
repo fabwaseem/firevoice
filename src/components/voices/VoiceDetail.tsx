@@ -337,7 +337,7 @@ function AvatarButton({ voiceId, hasAvatar }: { voiceId: string; hasAvatar: bool
 function ClipTools({ voice }: { voice: Voice }) {
   const qc = useQueryClient();
   const styles = useStyles();
-  const [strength, setStrength] = useState<"light" | "medium" | "strong">("medium");
+  const [strength, setStrength] = useState<"light" | "medium" | "strong" | "neural">("medium");
   const [busy, setBusy] = useState<string | null>(null);
   const [style, setStyle] = useState("");
   const q = voice.quality_check?.after ?? voice.quality_check?.before;
@@ -366,7 +366,7 @@ function ClipTools({ voice }: { voice: Voice }) {
         {q && <Badge tone={q.verdict === "good" ? "ok" : q.verdict === "poor" ? "bad" : "warn"}>{q.verdict} · SNR {q.snr_db} dB</Badge>}
         {voice.quality_check?.cleaned && <Badge>cleaned ({voice.quality_check.cleaned})</Badge>}
         <div className="flex-1" />
-        <Select value={strength} onChange={(v) => setStrength(v as typeof strength)} options={[{ value: "light", label: "Light" }, { value: "medium", label: "Medium" }, { value: "strong", label: "Strong" }]} />
+        <Select value={strength} onChange={(v) => setStrength(v as typeof strength)} options={[{ value: "light", label: "Light" }, { value: "medium", label: "Medium" }, { value: "strong", label: "Strong" }, { value: "neural", label: "Neural" }]} />
         <Button size="sm" variant="outline" loading={busy === "clean"} onClick={() => act("clean", () => api.cleanVoice(voice.voice_id, strength), "Clip cleaned")}>Clean</Button>
         <Button size="sm" variant="ghost" loading={busy === "restore"} onClick={() => act("restore", () => api.restoreVoice(voice.voice_id), "Original clip restored")}>Restore original</Button>
       </div>

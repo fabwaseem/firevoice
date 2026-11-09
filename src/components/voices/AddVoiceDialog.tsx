@@ -24,7 +24,7 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [transcript, setTranscript] = useState("");
   const [consent, setConsent] = useState(false);
   const [consentBy, setConsentBy] = useState("");
-  const [clean, setClean] = useState<"" | "light" | "medium" | "strong">("medium");
+  const [clean, setClean] = useState<"" | "light" | "medium" | "strong" | "neural">("medium");
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -192,7 +192,7 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           <div>
             <Label htmlFor="av-clean" hint="takes out hiss, hum and room noise">Clean the clip</Label>
             <NativeSelect id="av-clean" value={clean} onChange={(e) => setClean(e.target.value as typeof clean)}>
-              <option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option>
+              <option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option><option value="neural">Neural (best; needs the voice separator)</option>
             </NativeSelect>
           </div>
           <div>

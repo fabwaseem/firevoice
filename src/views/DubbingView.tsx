@@ -30,6 +30,7 @@ export function DubbingView() {
   const [consent, setConsent] = useState(false);
   const [background, setBackground] = useState(0);
   const [better, setBetter] = useState(false);
+  const [music, setMusic] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const job = useJob(jobId).data;
@@ -59,7 +60,7 @@ export function DubbingView() {
     setBusy(true);
     setLines([]);
     try {
-      const j = await api.dub(file, { target_language: to, source_language: from, voice: keep ? "" : voice, keep_voices: keep, consent: keep && consent, background, translator: better ? "better" : "fast" });
+      const j = await api.dub(file, { target_language: to, source_language: from, voice: keep ? "" : voice, keep_voices: keep, consent: keep && consent, background, translator: better ? "better" : "fast", keep_music: music });
       qc.setQueryData(["job", j.id], j);
       setJobId(j.id);
     } catch (e) {
@@ -120,6 +121,7 @@ export function DubbingView() {
               <Label htmlFor="db-bg" hint={`${Math.round(background * 100)}%`}>Original audio underneath</Label>
               <input id="db-bg" type="range" min={0} max={0.5} step={0.05} value={background} onChange={(e) => setBackground(Number(e.target.value))} className="w-full accent-[var(--fire)]" />
             </div>
+            <Switch checked={music} onChange={setMusic} label="Keep the music and effects" description="Separates them from the original voices (needs the voice separator from Engines)" />
             <Switch checked={better} onChange={setBetter} label="Better translation" description="A larger model (5 GB, downloaded once), clearly more accurate" />
             <Button leading={<Languages className="size-4" />} disabled={!file || !!live} loading={busy} onClick={start}>
               Dub it
