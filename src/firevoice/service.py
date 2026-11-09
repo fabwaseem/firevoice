@@ -558,6 +558,50 @@ class FireVoice:
         a, sr = self._read(path)
         return watermark.detect(a, sr)
 
+    # -------------------------------------------------------------------- quality reports
+    def _voice_clip(self, voice: Optional[str], strict: bool = True) -> tuple:
+        """(audio, sample rate) of a voice's reference clip, or (None, None) for voices without one. `strict` raises for
+        an unknown voice; otherwise it too gives (None, None)."""
+        import soundfile as sf
+        if not voice or str(voice).startswith("design:"):
+            return None, None
+        try:
+            v = self.voice(voice)
+            p = Path(self.voices.get(v["voice_id"])["dir"]) / "ref.wav"
+        except FireVoiceError:
+            if strict:
+                raise
+            return None, None
+        except Exception:
+            return None, None
+        if not p.exists():
+            return None, None
+        a, sr = sf.read(str(p), dtype="float32", always_2d=False)
+        return (a.mean(axis=1) if a.ndim > 1 else a), int(sr)
+
+    def quality_report(self, path, voice: Optional[str] = None) -> dict:
+        """Speaker similarity to `voice` (WavLM), DNSMOS scores and a drift check of any audio file."""
+        from . import quality
+        a, sr = self._read(path)
+        ref, rsr = self._voice_clip(voice)
+        try:
+            r = quality.report(a, sr, ref, rsr)
+        except ImportError as e:
+            raise FireVoiceError("unavailable", f"quality checks need {e.name or 'an optional package'} (pip install firevoice[desktop])")
+        return {**r, "voice": self.voices.canonical(voice) if voice and ref is not None else None}
+
+    def render_quality(self, rid: str) -> dict:
+        """The quality report of a kept render's stitched audio against the voice it was rendered with."""
+        from . import quality
+        a, sr, _w = self.render_audio(rid)
+        voice = (self.renders.get(rid).get("request") or {}).get("voice") or "default"
+        ref, rsr = self._voice_clip(voice, strict=False)
+        try:
+            r = quality.report(a, sr, ref, rsr)
+        except ImportError as e:
+            raise FireVoiceError("unavailable", f"quality checks need {e.name or 'an optional package'}")
+        return {**r, "voice": voice if ref is not None else None, "render_id": rid}
+
     def watermark_status(self) -> dict:
         from . import watermark
         return {"policy": watermark.policy(), "available": watermark.available()}

@@ -65,6 +65,34 @@ function setSource(blob, name) {
   };
 })();
 
+// ------------------------------------------------------------------------------------------------ quality report
+window.qualityHTML = function qualityHTML(r) {
+  const m = r.mos, s = r.similarity, d = r.drift || {};
+  const score = (l, v) => `<div class="metric"><div class="l">${l}</div><div class="v">${v}</div></div>`;
+  const bar = d.windows?.length > 1 ? `<div class="drift">${d.windows.map(w => {
+      const bad = (d.flags || []).some(f => f.start === w.start);
+      return `<i class="${bad ? "bad" : ""}" style="height:${Math.max(8, Math.round(100 * Math.max(0, w.similarity - 0.5) / 0.5))}%" title="${w.start}-${w.end}s: similarity ${w.similarity}${w.f0 ? ", " + Math.round(w.f0) + " Hz" : ""}, ${w.level_db} dB"></i>`; }).join("")}</div>` : "";
+  return `<div class="row" style="gap:8px;margin-bottom:8px"><span class="tag ${r.verdict === "good" ? "ok" : "warn"}">${esc(r.verdict)}</span><span class="small dim">${r.duration}s</span></div>
+    <div class="metrics" style="margin-top:0">${m ? score("DNSMOS overall", m.overall) + score("Speech", m.signal) + score("Background", m.background) + score("P.808", m.p808) : ""}
+      ${s ? score("Sounds like the voice", `${s.value}<small> ${s.same_speaker ? "same speaker" : "different"}</small>`) : ""}
+      ${d.windows?.length ? score("Lowest window", `${d.min_similarity}<small> of ${d.windows.length}</small>`) : ""}</div>
+    ${bar}${(d.flags || []).map(f => `<div class="small" style="color:var(--warn)">${Math.round(f.start)}-${Math.round(f.end)}s: ${esc(f.why.join("; "))}</div>`).join("")}
+    ${(r.notes || []).map(n => `<div class="small dim">· ${esc(n)}</div>`).join("")}`;
+};
+(function initQuality() {
+  const go = $("#qr-go"); if (!go) return;
+  const fill = () => { const sel = $("#qr-voice"); if (sel.options.length > 1 || !S.voices?.length) return;
+    sel.insertAdjacentHTML("beforeend", S.voices.map(v => `<option value="${esc(v.voice_id)}">${esc(v.name || v.voice_id)}</option>`).join("")); };
+  $("#qr-voice").onfocus = fill;
+  go.onclick = async () => {
+    const f = $("#qr-file").files[0]; if (!f) return toast("Choose a file first", "bad");
+    busyBtn(go, true, "Listening…");
+    const fd = new FormData(); fd.append("file", f, f.name); fd.append("voice", $("#qr-voice").value);
+    try { $("#qr-out").innerHTML = qualityHTML(await API.req("/api/v1/audio/quality", { method: "POST", form: fd, timeout: 0 })); }
+    catch (e) { toast(e.message, "bad"); } finally { busyBtn(go, false); }
+  };
+})();
+
 // ------------------------------------------------------------------------------------------------ voice editor: clip and style clips
 window.voiceToolsSection = function voiceToolsSection(v) {
   const body = $("#drawer-body"); if (!body || !v.has_ref) return;

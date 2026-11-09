@@ -229,6 +229,8 @@ def cmd_renders(a) -> int:
             ch = next(c for c in m["chunks"] if c["index"] == a.passage)
             t = ch["takes"][-1]
             print(f"passage {a.passage}: new take {t['n']} (score {t['score']}){', now used' if ch['chosen'] == t['n'] else ''}")
+        elif a.action == "quality":
+            _print_quality(svc.render_quality(a.id))
         elif a.action == "edit":
             if a.passage is None or not a.text:
                 print("renders edit ID PASSAGE --text \"new words\"", file=sys.stderr)
@@ -446,10 +448,27 @@ def cmd_convert(a) -> int:
         svc.close()
 
 
+def _print_quality(r: dict) -> None:
+    m, s, d = r.get("mos"), r.get("similarity"), r["drift"]
+    print(f"{r['verdict'].upper()}  {r['duration']}s" + (f"  DNSMOS overall {m['overall']}, signal {m['signal']}, background {m['background']}, P.808 {m['p808']}" if m else ""))
+    if s:
+        print(f"  sounds like {r.get('voice')}: {s['value']} ({s['backend']}; {'same speaker' if s['same_speaker'] else 'NOT the same speaker'})")
+    if d.get("windows"):
+        print(f"  drift over {len(d['windows'])} window(s), compared with {d['compared_with']}: lowest {d['min_similarity']}, spread {d['spread']}"
+              + (f", pitch ~{d['pitch_hz']} Hz" if d.get("pitch_hz") else ""))
+    for f in d.get("flags", []):
+        print(f"  ! {f['start']:.0f}-{f['end']:.0f}s: {'; '.join(f['why'])}")
+    for n in r.get("notes", []):
+        print("  -", n)
+
+
 def cmd_audio(a) -> int:
     from .service import FireVoiceError
     svc = _service(a)
     try:
+        if a.action == "quality":
+            _print_quality(svc.quality_report(a.file, a.voice))
+            return 0
         if a.action == "detect":
             r = svc.audio_detect(a.file)
             verdict = ("made by FireVoice" + (f" ({r['kind']})" if r.get("kind") else "")) if r["firevoice"] else \
@@ -1196,7 +1215,7 @@ def build_parser() -> argparse.ArgumentParser:
     dc.set_defaults(fn=cmd_dict)
 
     rd = sub.add_parser("renders", help="kept renders (say --keep-takes): compare takes, re-take, choose, lock, export")
-    rd.add_argument("action", nargs="?", default="list", choices=["list", "show", "take", "edit", "choose", "lock", "unlock", "regenerate", "export", "subtitles", "delete"])
+    rd.add_argument("action", nargs="?", default="list", choices=["list", "show", "take", "edit", "choose", "lock", "unlock", "regenerate", "export", "subtitles", "quality", "delete"])
     rd.add_argument("id", nargs="?", help="render id (list shows them)")
     rd.add_argument("passage", nargs="?", type=int, help="passage index (show lists them)")
     rd.add_argument("take", nargs="?", type=int, help="choose: take number")
@@ -1237,7 +1256,8 @@ def build_parser() -> argparse.ArgumentParser:
     cv.set_defaults(fn=cmd_convert)
 
     au2 = sub.add_parser("audio", help="check how good a recording is to clone from, clean it, or detect FireVoice's watermark")
-    au2.add_argument("action", choices=["analyze", "clean", "detect"])
+    au2.add_argument("action", choices=["analyze", "clean", "detect", "quality"])
+    au2.add_argument("--voice", default=None, help="quality: compare with this voice's clip")
     au2.add_argument("file")
     au2.add_argument("-o", "--out", default=None)
     au2.add_argument("--strength", choices=["light", "medium", "strong"], default="medium")

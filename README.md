@@ -248,6 +248,8 @@ keeps a consent record: who consented, when, through what, and fingerprints of t
 ```bash
 pip install "firevoice[watermark]"                          # the marker and detector (small, CPU)
 firevoice audio detect clip.mp3                             # made by FireVoice (render); marked share 100%
+firevoice audio quality take.mp3 --voice Ember               # WavLM similarity, DNSMOS, drift over the take
+firevoice renders quality ID                                # the same for a kept render
 firevoice voices add --name Sara --ref sara.wav --consent --consent-by "Sara Khan"
 firevoice voices consent --name Sara                        # the record, and whether the clip changed since
 ```

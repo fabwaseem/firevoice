@@ -155,6 +155,8 @@ optional `audioseal` package (`pip install firevoice[watermark]`) nothing is mar
 
 | | |
 |---|---|
+| `POST /api/v1/audio/quality` | Multipart `file`, `voice?` -> `{duration, mos: {overall, signal, background, p808}, similarity: {value, backend, same_speaker}, drift: {windows: [{start, end, similarity, f0, level_db}], flags: [{start, end, why}], min_similarity, spread, pitch_hz, compared_with}, verdict, notes}`. Similarity uses WavLM (microsoft/wavlm-base-plus-sv; same speaker from about 0.86) and DNSMOS predicts listener scores 1-5. Drift compares 8 s windows with the voice's clip (or the take's own median voice). |
+| `GET /api/v1/renders/{id}/quality` | The same report for a kept render's stitched audio against its voice. |
 | `POST /api/v1/audio/detect` | Multipart `file` -> `{watermarked, probability, firevoice, kind, bits, seconds}`. |
 | `GET /api/v1/voices/{id}/consent` | The voice's consent record `{basis: "consent", given, by, via, statement, time, upload_sha256, ref_sha256, clip_unchanged, clip_note}`, or for voices without one what their use rests on (`basis`: a dataset licence, a synthetic design). |
 

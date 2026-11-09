@@ -257,6 +257,10 @@
       <div class="card" style="margin-top:16px"><div class="card-h"><h3>Is it AI speech?</h3><span class="hint">Every FireVoice output carries an inaudible watermark (AudioSeal). Check any file for it.</span></div>
         <div class="card-b"><div class="row" style="gap:10px"><input type="file" id="wm-file" accept="audio/*,video/*" class="inp" style="flex:1"><button class="btn" id="wm-go"><svg class="i"><use href="#i-search"/></svg>Check</button></div>
         <div id="wm-out" style="margin-top:10px"></div></div></div>
+      <div class="card" style="margin-top:16px"><div class="card-h"><h3>Quality report</h3><span class="hint">Does it sound like the voice (WavLM), how clean is it (DNSMOS), and does the voice wander over a long take?</span></div>
+        <div class="card-b"><div class="row" style="gap:10px;flex-wrap:wrap"><input type="file" id="qr-file" accept="audio/*,video/*" class="inp" style="flex:1;min-width:220px">
+          <select class="inp" id="qr-voice" style="width:auto"><option value="">compare with no voice</option></select><button class="btn" id="qr-go"><svg class="i"><use href="#i-check"/></svg>Check</button></div>
+        <div id="qr-out" style="margin-top:12px"></div></div></div>
     </section>
 
     <!-- ============================================================== PROJECTS -->

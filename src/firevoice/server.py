@@ -950,6 +950,11 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         h = {"Content-Disposition": f'attachment; filename="{rid}.{A.FORMATS[format][2]}"'} if download else {}
         return Response(data, media_type=A.media_type(format), headers=h)
 
+    @app.get("/api/v1/renders/{rid}/quality", dependencies=deps, tags=["takes"])
+    async def render_quality(rid: str):
+        """The quality report of the stitched render against its voice (see POST /api/v1/audio/quality)."""
+        return await run_in_threadpool(svc.render_quality, rid)
+
     @app.get("/api/v1/renders/{rid}/words", dependencies=deps, tags=["takes"])
     def render_words(rid: str):
         """Word times of the stitched audio (they move when a take of a different length is chosen)."""
@@ -1065,6 +1070,18 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return svc.tag_catalog()
 
     # ------------------------------------------------------------------ audio tools
+    @app.post("/api/v1/audio/quality", dependencies=deps, tags=["audio tools"])
+    async def audio_quality(file: UploadFile = File(...), voice: str = Form("", description="compare with this voice's clip")):
+        """A quality report: speaker similarity to `voice` (WavLM; same speaker from about 0.86), DNSMOS listener-score
+        predictions (overall, signal, background, P.808; 1-5), and a drift check (similarity, pitch and level per 8 s
+        window, with flags where they wander). -> {duration, mos, similarity, drift, verdict, notes}"""
+        p = await save_upload(file)
+        try:
+            return await run_in_threadpool(svc.quality_report, to_wav(p), voice or None)
+        finally:
+            for x in (p, p + ".wav"):
+                Path(x).unlink(missing_ok=True)
+
     @app.post("/api/v1/audio/detect", dependencies=deps, tags=["audio tools"])
     async def audio_detect(file: UploadFile = File(...)):
         """Is this audio marked as AI-generated (AudioSeal), and by FireVoice? -> {watermarked, probability (share of the

@@ -497,7 +497,9 @@ async function mountTakes(box, rid, onChanged) {
   let m; try { m = await API.req(`/api/v1/renders/${rid}`); } catch (e) { box.innerHTML = `<span class="small dim">${esc(e.message)}</span>`; return; }
   const flagged = m.chunks.filter(c => c.flagged).length;
   box.innerHTML = `<div class="takes-h"><b>Passages and takes</b><span class="small dim">${m.chunks.length} passage${m.chunks.length === 1 ? "" : "s"}${flagged ? ` · <span class="flag">${flagged} to check</span>` : " · all passed the speech check"}</span>
-      <div class="grow"></div><button class="btn sm ghost" data-regen title="New takes for every unlocked passage">${icon("dice", "sm")}Re-take unlocked</button></div>
+      <div class="grow"></div><button class="btn sm ghost" data-quality title="Similarity to the voice, DNSMOS and drift of the stitched audio">${icon("check", "sm")}Quality</button>
+      <button class="btn sm ghost" data-regen title="New takes for every unlocked passage">${icon("dice", "sm")}Re-take unlocked</button></div>
+    <div class="quality-box"></div>
     ${m.chunks.map(c => { const cur = c.takes.find(t => t.n === c.chosen);
       return `<div class="take-row ${c.flagged ? "flagged" : ""} ${c.locked ? "locked" : ""}" data-i="${c.index}">
         <div class="tx">${qaHTML(c, cur)}</div>
@@ -539,6 +541,11 @@ async function mountTakes(box, rid, onChanged) {
     $("[data-act=lock]", row).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/lock`, { method: "POST", json: { locked: !row.classList.contains("locked") } }));
   });
   $("[data-regen]", box).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/regenerate`, { method: "POST", json: {}, timeout: 0 }), "New takes for every unlocked passage");
+  $("[data-quality]", box).onclick = async e => {
+    const b = e.currentTarget; busyBtn(b, true, "Listening…");
+    try { $(".quality-box", box).innerHTML = `<div class="card" style="padding:12px;margin:8px 0">${qualityHTML(await API.req(`/api/v1/renders/${rid}/quality`, { timeout: 0 }))}</div>`; }
+    catch (err) { toast(err.message, "bad"); } finally { busyBtn(b, false); }
+  };
 }
 
 // ------------------------------------------------------------------------------------------------ dictionary page

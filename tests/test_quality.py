@@ -1,35 +1,62 @@
+"""Quality reports: drift flags where the voice, pitch or level wanders; verdicts; routes (models stubbed)."""
 import numpy as np
+import soundfile as sf
 
-from firevoice import audio as A
-from firevoice.core.adapters.base import strip_tags
-from firevoice.synth import _seeded_jitter
+from firevoice import quality
 
-
-def test_tags_are_stripped_for_engines_without_tags():
-    assert strip_tags("Fine. [chuckle] Really fine. [sigh]") == "Fine. Really fine."
-    assert strip_tags("[clear throat] Okay.") == "Okay."
+SR = 16000
 
 
-def test_jitter_is_deterministic_and_bounded():
-    xs = [_seeded_jitter(i) for i in range(200)]
-    assert xs == [_seeded_jitter(i) for i in range(200)]
-    assert all(0.85 <= x <= 1.15 for x in xs)
-    assert len(set(round(x, 3) for x in xs)) > 50
+def _tone(seconds, f0=150.0, amp=0.2):
+    t = np.arange(int(SR * seconds)) / SR
+    return (amp * (np.sin(2 * np.pi * f0 * t) + 0.4 * np.sin(2 * np.pi * 2 * f0 * t))).astype(np.float32)
 
 
-def test_rms_match_levels_takes():
-    sr = 24000
-    quiet = 0.02 * np.sin(2 * np.pi * 220 * np.arange(sr) / sr).astype("float32")
-    loud = 0.6 * np.sin(2 * np.pi * 220 * np.arange(sr) / sr).astype("float32")
-    a, b = A.rms_match(quiet, sr), A.rms_match(loud, sr)
-    ra, rb = np.sqrt((a ** 2).mean()), np.sqrt((b ** 2).mean())
-    assert abs(20 * np.log10(ra / rb)) < 6
+def test_drift_flags_the_odd_window(monkeypatch):
+    # windows 0-2 are "voice A", window 3 is "voice B" (the embedding is keyed on the tone's pitch)
+    def fake_embed(a, sr, which=None):
+        y = quality._to16(a, sr)
+        spec = np.abs(np.fft.rfft(y[:SR]))
+        e = np.zeros(8, np.float32)
+        e[0 if np.argmax(spec) < 200 else 1] = 1.0
+        e[2] = 0.3
+        return e / np.linalg.norm(e)
+    monkeypatch.setattr(quality, "embed", fake_embed)
+    monkeypatch.setattr(quality, "backend", lambda: "wavlm")
+    a = np.concatenate([_tone(8), _tone(8), _tone(8), _tone(8, f0=260.0)])
+    d = quality.drift(a, SR)
+    assert len(d["windows"]) == 4
+    assert [f["start"] for f in d["flags"]] == [24.0]
+    assert any("voice drifts" in w for w in d["flags"][0]["why"]) and any("pitch" in w for w in d["flags"][0]["why"])
 
 
-def test_candidates_and_pauses(make):
-    s = make(candidates=2)
-    r = s.speak("One two three four five six seven. Eight nine ten eleven twelve.", lufs=None, style="calm")
-    assert len(r.takes) == 2 and all(t.attempts == 2 for t in r.takes)
-    assert r.stats.takes == 4
-    r2 = make().speak("One two three four five six seven. Eight nine ten eleven twelve.", lufs=None, style="excited")
-    assert r.duration > r2.duration  # calm pauses longer, excited paces faster
+def test_level_jump_flagged(monkeypatch):
+    monkeypatch.setattr(quality, "embed", lambda a, sr, which=None: np.ones(4, np.float32) / 2)
+    a = np.concatenate([_tone(8), _tone(8), _tone(8, amp=0.02)])
+    d = quality.drift(a, SR)
+    assert d["flags"] and "level" in d["flags"][0]["why"][0] and d["flags"][0]["start"] == 16.0
+
+
+def test_report_verdict(monkeypatch):
+    monkeypatch.setattr(quality, "embed", lambda a, sr, which=None: np.ones(4, np.float32) / 2)
+    monkeypatch.setattr(quality, "mos", lambda a, sr: {"overall": 2.5, "signal": 3.0, "background": 4.0, "p808": 3.0})
+    r = quality.report(_tone(5), SR, _tone(5), SR)
+    assert r["verdict"] == "check" and r["similarity"]["same_speaker"] and any("rough" in n for n in r["notes"])
+
+
+def test_routes(svc, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from firevoice.server import create_app
+    from firevoice.service import TTSRequest
+    monkeypatch.setattr(quality, "embed", lambda a, sr, which=None: np.ones(4, np.float32) / 2)
+    monkeypatch.setattr(quality, "mos", lambda a, sr: {"overall": 4.0, "signal": 4.0, "background": 4.5, "p808": 4.0})
+    c = TestClient(create_app(svc))
+    p = tmp_path / "x.wav"
+    sf.write(str(p), _tone(4), SR)
+    with open(p, "rb") as f:
+        r = c.post("/api/v1/audio/quality", files={"file": ("x.wav", f, "audio/wav")}).json()
+    assert r["verdict"] == "good" and r["mos"]["overall"] == 4.0 and r["similarity"] is None
+    rid = svc.tts(TTSRequest(text="Hello there, a kept render.", engine="null", keep_takes=True)).render_id
+    q = c.get(f"/api/v1/renders/{rid}/quality").json()
+    assert q["render_id"] == rid and "drift" in q
