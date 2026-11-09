@@ -120,7 +120,20 @@ $("#retry").onclick = poll;
 setInterval(poll, 8000);
 
 // ------------------------------------------------------------------------------------------------ init
+// The pages are read from disk on every load, the routes only when `firevoice serve` starts: a server started before an
+// update serves new pages with old routes. Say so instead of failing with "Not Found".
+const PAGE_API = 3;
+async function checkServerVersion() {
+  try {
+    const h = await API.req("/health");
+    if ((h.api_version || 1) >= PAGE_API || $("#stale-server")) return;
+    document.body.insertAdjacentHTML("afterbegin", `<div id="stale-server" style="position:fixed;top:0;left:0;right:0;z-index:99;padding:10px 16px;background:#5a3a12;color:#ffd9a3;font-size:13px;text-align:center">
+      This page is newer than the running server, so some pages (Dubbing, Sound...) will not work. Restart <code>firevoice serve</code> (or the desktop app's backend) and reload.</div>`);
+  } catch { /* offline banner handles it */ }
+}
+
 async function init() {
+  checkServerVersion();
   const [opt, vs] = await Promise.all([API.req("/api/v1/options"), API.req("/api/v1/voices")]);
   S.opt = opt; S.engines = opt.engines; S.styles = opt.styles; S.voices = vs.voices;
   if (!S.engine || !S.engines.some(e => e.name === S.engine && e.ready)) S.engine = opt.default_engine;
