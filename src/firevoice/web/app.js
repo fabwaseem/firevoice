@@ -190,7 +190,11 @@ function voiceMatches(v, q, quick) {
   return [v.voice_id, v.name, v.tagline, v.description, v.accent, v.language, v.gender, ...(v.tags || []), ...(v.traits || []), ...(v.use_cases || [])].join(" ").toLowerCase().includes(q);
 }
 function voiceSub(v) { return [v.gender || "voice", langName(v.language || "en"), v.accent && v.accent.replace(/ accent$/, "").slice(0, 34), v.kind === "designed" ? "designed" : ""].filter(Boolean).join(" · "); }
-function avatar(v, lg) { return `<div class="avatar ${v.kind === "designed" ? "design" : esc(v.gender || "neutral")} ${lg ? "lg" : ""}">${esc(initials(v.name || v.voice_id))}</div>`; }
+const avatarUrl = v => v.avatar ? API.url(`/api/v1/voices/${encodeURIComponent(v.voice_id)}/avatar?v=${v.avatar}`) : null;
+function avatar(v, lg) {
+  const url = avatarUrl(v);
+  return `<div class="avatar ${url ? "img" : v.kind === "designed" ? "design" : esc(v.gender || "neutral")} ${lg ? "lg" : ""}">${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : esc(initials(v.name || v.voice_id))}</div>`;
+}
 function renderVoiceMini() {
   const q = $("#vsearch").value;
   let list = S.voices.filter(v => voiceMatches(v, q, S.vquick)).sort((a, b) => (a.kind === "designed") - (b.kind === "designed"));   // real voices first
@@ -671,7 +675,16 @@ $("#open-design").onclick = () => {
 };
 async function editVoice(id) {
   let v; try { v = await API.req(`/api/v1/voices/${encodeURIComponent(id)}`); } catch (e) { return toast(e.message, "bad"); }
-  Drawer.open(v.name || v.voice_id, `<div class="row" style="gap:12px;margin-bottom:16px">${avatar(v, true)}<div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(v.name || v.voice_id)} ${tierBadge(v)}</div><div class="small muted">${esc(v.voice_id)} · ${esc(v.source || "")}</div></div>
+  setTimeout(() => {
+    const btn = $("#ed-avatar"), file = $("#ed-avatar-file"); if (!btn || !file) return;
+    btn.onclick = () => file.click();
+    file.onchange = async () => {
+      const f = file.files[0]; if (!f) return; const fd = new FormData(); fd.append("file", f);
+      try { await API.req(`/api/v1/voices/${encodeURIComponent(v.voice_id)}/avatar`, { method: "POST", form: fd }); toast("Avatar updated", "ok"); await reloadVoices(); editVoice(v.voice_id); }
+      catch (e) { toast(e.message, "bad"); }
+    };
+  }, 0);
+  Drawer.open(v.name || v.voice_id, `<div class="row" style="gap:12px;margin-bottom:16px"><button class="avatar-edit" id="ed-avatar" title="Change avatar">${avatar(v, true)}<span>${icon("edit", "sm")}</span></button><input type="file" id="ed-avatar-file" accept="image/*" class="hidden"><div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(v.name || v.voice_id)} ${tierBadge(v)}</div><div class="small muted">${esc(v.voice_id)} · ${esc(v.source || "")}</div></div>
       ${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}" title="Introduction">${icon("play")}</button><button class="playbtn" data-play="${esc(v.voice_id)}" data-orig="1" title="Original recording">${icon("mic")}</button>` : ""}</div>
     <div class="field"><label class="f">Tagline <span class="hint">(shown under the name)</span></label><input class="inp" id="ed-tagline" value="${esc(v.tagline || "")}"></div>
     <div class="grid2"><div class="field"><label class="f">Display name</label><input class="inp" id="ed-name" value="${esc(v.name || "")}"></div>

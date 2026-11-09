@@ -391,6 +391,16 @@ def cmd_voices(a) -> int:
     try:
         if a.action == "list":
             return _print_voices(svc.voice_list(language=a.language, gender=a.gender, tag=a.tag, q=a.q, kind=a.kind), a)
+        if a.action == "avatar":
+            if a.remove:
+                svc.voice_remove_avatar(a.name)
+                print("removed the avatar of", a.name)
+            elif a.image:
+                v = svc.voice_set_avatar(a.name, Path(a.image).read_bytes())
+                print(f"set the avatar of {v['voice_id']}")
+            else:
+                print(svc.voice_avatar_path(a.name))
+            return 0
         if a.action == "pack":
             data, name = svc.voice_pack(a.name)
             out = Path(a.pack or name)
@@ -962,7 +972,9 @@ def build_parser() -> argparse.ArgumentParser:
     b.set_defaults(fn=cmd_batch)
 
     v = sub.add_parser("voices", help="list, add, design, update and remove voices")
-    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import"])
+    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import", "avatar"])
+    v.add_argument("--image", default=None, help="avatar: an image file to use (any size; centre-cropped); --remove to drop it")
+    v.add_argument("--remove", action="store_true", help="avatar: remove the voice's avatar")
     v.add_argument("--pack", default=None, help="pack: output .zip (default <voice>.fvvoice.zip) | import: the voice pack to add")
     v.add_argument("--name")
     v.add_argument("--ref", help="add / style-ref: audio clip (6-20 s of clean speech)")

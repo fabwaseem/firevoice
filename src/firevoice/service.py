@@ -900,6 +900,7 @@ class FireVoice:
             if q and q.lower() not in " ".join(str(x) for x in (v["voice_id"], v.get("name"), v.get("description"), v.get("accent"), v.get("source"))).lower():
                 continue
             v["has_preview"] = (self.voices.root / v["voice_id"] / "preview.mp3").exists()
+            v["avatar"] = _avatar_version(self.voices.root / v["voice_id"])
             out.append(_voice_view(v, default))
         return out
 
@@ -910,7 +911,7 @@ class FireVoice:
         except KeyError:
             raise FireVoiceError("not_found", f"unknown voice {voice_id!r}")
         d = _voice_view({**m, "has_ref": bool(self.voices.ref_path(voice_id)), "styles": self.voices.list_styles(voice_id),
-                         "has_preview": (Path(m["dir"]) / "preview.mp3").exists()}, self.voices.default_id())
+                         "has_preview": (Path(m["dir"]) / "preview.mp3").exists(), "avatar": _avatar_version(Path(m["dir"]))}, self.voices.default_id())
         d["transcript"] = self.voices.ref_text(voice_id)
         return d
 
@@ -1011,6 +1012,40 @@ class FireVoice:
     def voice_collections(self) -> list[dict]:
         from .branding import collections
         return collections(self.voice_list())
+
+    # -------------------------------------------------------------------- avatars
+    def voice_avatar_path(self, voice_id: str) -> Path:
+        v = self.voice(voice_id)
+        p = self.voices.root / v["voice_id"] / "avatar.png"
+        if not p.exists():
+            raise FireVoiceError("not_found", f"voice {v['voice_id']} has no avatar")
+        return p
+
+    def voice_set_avatar(self, voice_id: str, data: bytes) -> dict:
+        """Any image (png, jpg, webp...): centre-cropped to a square and stored as a 512x512 PNG."""
+        import io
+        from PIL import Image, UnidentifiedImageError
+        v = self.voice(voice_id)
+        try:
+            im = Image.open(io.BytesIO(data))
+            im.load()
+        except (UnidentifiedImageError, OSError) as e:
+            raise FireVoiceError("bad_request", f"not an image: {e}")
+        if im.width < 64 or im.height < 64:
+            raise FireVoiceError("bad_request", "the image is too small (at least 64x64)")
+        im = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") else "RGB")
+        side = min(im.size)
+        left, top = (im.width - side) // 2, (im.height - side) // 2
+        im = im.crop((left, top, left + side, top + side)).resize((512, 512), Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, "PNG", optimize=True)
+        _atomic_write(self.voices.root / v["voice_id"] / "avatar.png", buf.getvalue())
+        return self.voice(v["voice_id"])
+
+    def voice_remove_avatar(self, voice_id: str) -> dict:
+        v = self.voice(voice_id)
+        (self.voices.root / v["voice_id"] / "avatar.png").unlink(missing_ok=True)
+        return self.voice(v["voice_id"])
 
     def voice_preview_clip(self, voice_id: str) -> Path:
         """The branded preview ("Hi, I'm Isla...") when rendered, otherwise the original reference clip."""
@@ -1122,7 +1157,7 @@ DESIGN_TEXT = ("Hello there, and welcome; today I want to walk you through somet
 def _voice_view(v: dict, default: Optional[str]) -> dict:
     keep = ("voice_id", "name", "tagline", "traits", "use_cases", "quality", "featured", "category", "description", "gender",
             "language", "accent", "age", "tags", "source", "license", "ref_seconds", "created", "has_ref", "has_preview", "styles", "design_prompt",
-            "favorite", "notes")
+            "favorite", "notes", "avatar")
     d = {k: v.get(k) for k in keep if k in v}
     d.setdefault("language", "en")
     d["kind"] = "designed" if ("designed" in (v.get("tags") or []) or v.get("category") == "designed") else "cloned"
@@ -1184,3 +1219,11 @@ def _adapter_attr(engine: str, name: str, default):
         return getattr(getattr(importlib.import_module(mod), cls), name, default)
     except Exception:
         return default
+
+
+def _avatar_version(voice_dir: Path) -> Optional[int]:
+    """The avatar's modification time (a cache-busting version for its URL), or None when the voice has none."""
+    try:
+        return int((Path(voice_dir) / "avatar.png").stat().st_mtime)
+    except OSError:
+        return None

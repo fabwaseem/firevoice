@@ -408,6 +408,24 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         data = await file.read()
         return await run_in_threadpool(lambda: svc.voice_import(data, consent=consent, voice_id=voice_id or None))
 
+    @app.get("/api/v1/voices/{voice_id}/avatar", dependencies=deps, tags=["voices"])
+    def voice_avatar(voice_id: str):
+        """The voice's mascot avatar (512x512 PNG). Voices list it as `avatar`: a version number to add as ?v= so a new
+        image is fetched at once."""
+        return FileResponse(svc.voice_avatar_path(voice_id), media_type="image/png", headers={"Cache-Control": "public, max-age=604800"})
+
+    @app.post("/api/v1/voices/{voice_id}/avatar", dependencies=deps, tags=["voices"])
+    async def voice_avatar_set(voice_id: str, file: UploadFile = File(...)):
+        """Replace the avatar with any image; it is centre-cropped to a square and stored as 512x512 PNG."""
+        data = await file.read()
+        if len(data) > 20 * 1024 * 1024:
+            raise FireVoiceError("too_large", "the image is larger than 20 MB")
+        return await run_in_threadpool(svc.voice_set_avatar, voice_id, data)
+
+    @app.delete("/api/v1/voices/{voice_id}/avatar", dependencies=deps, tags=["voices"])
+    def voice_avatar_remove(voice_id: str):
+        return svc.voice_remove_avatar(voice_id)
+
     @app.get("/api/v1/voices/{voice_id}/pack", dependencies=deps, tags=["voices"])
     def voice_pack(voice_id: str):
         """The voice as a portable pack: its clip, transcript, per-style clips, metadata, preview and avatar."""

@@ -140,3 +140,23 @@ def test_audiobook_master_meets_the_limits():
     rms = next(x for x in after["checks"] if x["name"] == "Loudness (RMS)")
     assert peak["ok"] and rms["ok"], after
     assert not next(x for x in before["checks"] if x["name"] == "Peak")["ok"]
+
+
+def test_voice_avatars(svc, tmp_path):
+    from PIL import Image
+    c = _client(svc)
+    clip = tmp_path / "c.wav"
+    sf.write(str(clip), (0.2 * np.sin(np.linspace(0, 3000, 24000 * 6))).astype("float32"), 24000)
+    svc.voice_add("face", clip, consent=True, transcript="hello there")
+    assert c.get("/api/v1/voices/face").json().get("avatar") is None
+    assert c.get("/api/v1/voices/face/avatar").status_code == 404
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 600), (255, 106, 61)).save(buf, "JPEG")
+    v = c.post("/api/v1/voices/face/avatar", files={"file": ("a.jpg", buf.getvalue(), "image/jpeg")}).json()
+    assert v["avatar"]
+    img = c.get("/api/v1/voices/face/avatar")
+    assert img.status_code == 200 and Image.open(io.BytesIO(img.content)).size == (512, 512)
+    assert any(x["voice_id"] == "face" and x["avatar"] for x in c.get("/api/v1/voices").json()["voices"])
+    assert c.post("/api/v1/voices/face/avatar", files={"file": ("a.txt", b"not an image")}).status_code == 400
+    assert "avatar.png" in zipfile.ZipFile(io.BytesIO(c.get("/api/v1/voices/face/pack").content)).namelist()
+    assert c.delete("/api/v1/voices/face/avatar").json().get("avatar") is None
