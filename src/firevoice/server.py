@@ -71,6 +71,7 @@ TAGS = [
     {"name": "audio tools", "description": "Check and clean recordings, and the voice changer (speech to speech in any library voice)."},
     {"name": "projects", "description": "Long-form projects: chapters of paragraphs, each rendered with every take kept; render what changed, export WAV/MP3/M4B with chapters, audiobook check, bundles."},
     {"name": "elevenlabs", "description": "ElevenLabs-compatible routes for existing clients."},
+    {"name": "openai", "description": "OpenAI-compatible routes: point an OpenAI client's base URL at this server."},
     {"name": "legacy", "description": "Older studio contract."},
 ]
 
@@ -169,7 +170,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         h = request.headers
         given = (h.get("authorization", "").removeprefix("Bearer ").strip() or h.get("x-api-key") or h.get("xi-api-key")
                  or request.query_params.get("token"))
-        if given != token:
+        if not _same(given, token):
             raise FireVoiceError("unauthorized", "missing or wrong API token")
 
     deps = [Depends(auth)]
@@ -644,14 +645,188 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     # ------------------------------------------------------------------ stt
     @app.post("/api/v1/stt", dependencies=deps, tags=["stt"])
-    async def stt(file: UploadFile = File(...), language: str = Form("auto"), beam_size: int = Form(5)):
+    async def stt(file: UploadFile = File(...), language: str = Form("auto"), beam_size: int = Form(5),
+                  prompt: str = Form("", description="context that steers spelling and style"),
+                  keyterms: str = Form("", description="comma-separated names and terms to spell right"),
+                  diarize: bool = Form(False, description="label who speaks when (Speaker 1, Speaker 2...)"),
+                  speakers: Optional[int] = Form(None, description="how many speakers, when known"),
+                  format: Literal["json", "text", "srt", "vtt"] = Form("json")):
+        """Speech to text: text, language, word times, segments (with speakers when diarize=true), or subtitles."""
         p = await save_upload(file)
         try:
             wav = to_wav(p)
-            return await run_in_threadpool(svc.transcribe, wav, None, language, beam_size)
+            r = await run_in_threadpool(lambda: svc.transcribe(wav, None, language, beam_size, prompt=prompt or None,
+                                                               keyterms=[k for k in keyterms.split(",") if k.strip()], diarize=diarize, speakers=speakers))
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
+        if format == "text":
+            return Response(r["text"], media_type="text/plain; charset=utf-8")
+        if format in ("srt", "vtt"):
+            text, mt = svc.subtitles(_speaker_words(r["words"]), format)
+            return Response(text, media_type=mt)
+        return r
+
+    # ------------------------------------------------------------------ OpenAI-compatible
+    class OAISpeech(BaseModel):
+        model_config = ConfigDict(extra="ignore")
+        model: str = "tts-1"
+        input: str = Field(..., min_length=1, max_length=200_000)
+        voice: str = "alloy"
+        response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = "mp3"
+        speed: float = Field(1.0, ge=0.25, le=4.0)
+        instructions: Optional[str] = None
+
+    @app.post("/v1/audio/speech", dependencies=deps, tags=["openai"])
+    async def oai_speech(request: Request, body: OAISpeech):
+        """OpenAI's speech route. `voice` is an OpenAI name (alloy, nova...: mapped to library voices) or any library
+        voice; `model` is an engine name or any OpenAI model name (then the default engine); `instructions` steer the
+        delivery; `pcm` is 24 kHz 16-bit mono like OpenAI's."""
+        eng = body.model if _is_engine(body.model) else None
+        req = TTSRequest(text=body.input, engine=eng, voice=svc.openai_voice(body.voice), pace=body.speed,
+                         instruct=body.instructions or None)
+        r = await render_until_disconnect(request, req)
+        fmt = {"pcm": "pcm16"}.get(body.response_format, body.response_format)
+        data = svc.encode(r, fmt, 24000 if fmt == "pcm16" else None)
+        return Response(data, media_type=A.media_type(fmt))
+
+    @app.post("/v1/audio/transcriptions", dependencies=deps, tags=["openai"])
+    async def oai_transcriptions(file: UploadFile = File(...), model: str = Form("whisper-1"), language: Optional[str] = Form(None),
+                                 prompt: Optional[str] = Form(None), response_format: str = Form("json"), temperature: float = Form(0.0)):
+        """OpenAI's transcription route: json, text, srt, vtt or verbose_json (with words and segments)."""
+        p = await save_upload(file)
+        try:
+            wav = to_wav(p)
+            r = await run_in_threadpool(lambda: svc.transcribe(wav, None, language or "auto", 5, prompt=prompt or None))
+        finally:
+            for x in (p, p + ".wav"):
+                Path(x).unlink(missing_ok=True)
+        if response_format == "text":
+            return Response(r["text"], media_type="text/plain; charset=utf-8")
+        if response_format in ("srt", "vtt"):
+            text, mt = svc.subtitles(r["words"], response_format)
+            return Response(text, media_type=mt)
+        if response_format == "verbose_json":
+            return {"task": "transcribe", "language": r["language"], "duration": r["duration"], "text": r["text"],
+                    "words": [{"word": w["text"], "start": w["start"], "end": w["end"]} for w in r["words"]],
+                    "segments": [{"id": i, "start": s["start"], "end": s["end"], "text": s["text"]} for i, s in enumerate(r["segments"])]}
+        return {"text": r["text"]}
+
+    # ------------------------------------------------------------------ WebSocket: text in as it arrives, audio out
+    from fastapi import WebSocket, WebSocketDisconnect
+
+    @app.websocket("/api/v1/tts/ws")
+    async def tts_ws(ws: WebSocket):
+        """Text arrives in pieces (an LLM's tokens), audio goes out per sentence as soon as each is complete.
+
+        Client messages (JSON): {"type": "config", ...any TTS request field except text} first (optional);
+        {"type": "text", "text": "..."} (appended); {"type": "flush"} (speak what is buffered now); {"type": "end"}
+        (flush, then close when done); {"type": "cancel"} (drop the buffer and stop speaking).
+        Server messages: {"type": "audio", index, segment, audio_base64, format, sample_rate, words, text, partial?},
+        {"type": "segment_done", segment, text}, {"type": "done"}, {"type": "error", code, message}.
+        Auth: ?token= or the usual headers."""
+        import asyncio
+        import queue as _queue
+        given = (ws.headers.get("authorization", "").removeprefix("Bearer ").strip() or ws.headers.get("x-api-key") or ws.query_params.get("token"))
+        if token and not _same(given, token):
+            await ws.close(code=4401)
+            return
+        await ws.accept()
+        loop = asyncio.get_running_loop()
+        out: asyncio.Queue = asyncio.Queue()
+        segs: _queue.Queue = _queue.Queue()
+        state = {"cfg": {}, "buf": "", "cancel": threading.Event(), "n": 0, "ending": False}
+
+        def worker():
+            while True:
+                item = segs.get()
+                if item is None:
+                    loop.call_soon_threadsafe(out.put_nowait, {"type": "done"})
+                    return
+                k, text, cfg, cancel = item
+                if cancel.is_set():
+                    continue
+                try:
+                    req = TTSRequest.from_dict({**{k: v for k, v in cfg.items() if k not in ("format", "sample_rate")}, "text": text})
+                    fmt = cfg.get("format", "wav") if cfg.get("format") in ("wav", "pcm16", "mp3", "ogg", "opus", "flac") else "wav"
+                    for ev in svc.stream(req, cancel=_Either(cancel)):
+                        if ev["type"] == "chunk":
+                            audio = ev.pop("audio")
+                            ev["audio_base64"] = base64.b64encode(svc.encode(audio, fmt, None, sr=ev["sample_rate"])).decode() if len(audio) else ""
+                            ev.update({"type": "audio", "segment": k, "format": fmt})
+                            loop.call_soon_threadsafe(out.put_nowait, ev)
+                        elif ev["type"] in ("error",):
+                            loop.call_soon_threadsafe(out.put_nowait, {**ev, "segment": k})
+                    loop.call_soon_threadsafe(out.put_nowait, {"type": "segment_done", "segment": k, "text": text})
+                except FireVoiceError as e:
+                    loop.call_soon_threadsafe(out.put_nowait, {"type": "error", "segment": k, "code": e.code, "message": e.message})
+                except Exception as e:  # noqa: BLE001
+                    loop.call_soon_threadsafe(out.put_nowait, {"type": "error", "segment": k, "code": "internal", "message": str(e)[:300]})
+
+        threading.Thread(target=worker, daemon=True, name="fv-ws").start()
+
+        def cut(final: bool):
+            buf = state["buf"]
+            if final:
+                text, state["buf"] = buf.strip(), ""
+            else:
+                ends = [m.end() for m in re.finditer(r"[.!?…]['\")\]]*\s", buf)]
+                ends = [e for e in ends if e >= 30] or ([] if len(buf) < 400 else [len(buf)])
+                if not ends:
+                    return
+                text, state["buf"] = buf[: ends[-1]].strip(), buf[ends[-1]:]
+            if text:
+                segs.put((state["n"], text, dict(state["cfg"]), state["cancel"]))
+                state["n"] += 1
+
+        async def sender():
+            while True:
+                ev = await out.get()
+                await ws.send_json(ev)
+                if ev.get("type") == "done":
+                    return
+
+        send_task = asyncio.ensure_future(sender())
+        try:
+            while not send_task.done():
+                recv = asyncio.ensure_future(ws.receive_json())
+                done, _ = await asyncio.wait({recv, send_task}, return_when=asyncio.FIRST_COMPLETED)
+                if recv not in done:
+                    recv.cancel()
+                    break
+                msg = recv.result()
+                t = msg.get("type")
+                if t == "config":
+                    cfg = {k: v for k, v in msg.items() if k != "type"}
+                    try:
+                        TTSRequest.from_dict({**{k: v for k, v in cfg.items() if k not in ("format", "sample_rate")}, "text": "check"})
+                    except FireVoiceError as e:
+                        await ws.send_json({"type": "error", "code": e.code, "message": e.message})
+                        continue
+                    state["cfg"] = cfg
+                elif t == "text":
+                    state["buf"] += str(msg.get("text") or "")
+                    cut(False)
+                elif t == "flush":
+                    cut(True)
+                elif t == "cancel":
+                    state["cancel"].set()
+                    state["cancel"] = threading.Event()
+                    state["buf"] = ""
+                elif t == "end":
+                    cut(True)
+                    segs.put(None)
+                    state["ending"] = True
+                else:
+                    await ws.send_json({"type": "error", "code": "bad_request", "message": f"unknown message type {t!r}"})
+            await send_task
+        except WebSocketDisconnect:
+            pass
+        finally:
+            state["cancel"].set()
+            if not state["ending"]:
+                segs.put(None)
+            send_task.cancel()
 
     # ------------------------------------------------------------------ jobs
     # ------------------------------------------------------------------ dictionary
@@ -1074,6 +1249,42 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 for e in svc.engines()]
 
     return app
+
+
+class _Either:
+    """A cancel flag for one sentence of a WebSocket session: set when the session is cancelled, and settable on its
+    own (a finished stream sets its flag) without touching the session's."""
+
+    def __init__(self, session: threading.Event):
+        self.session, self.own = session, threading.Event()
+
+    def is_set(self) -> bool:
+        return self.session.is_set() or self.own.is_set()
+
+    def set(self) -> None:
+        self.own.set()
+
+    def wait(self, timeout=None) -> bool:
+        return self.own.wait(timeout) or self.session.is_set()
+
+
+def _same(given: Optional[str], expected: Optional[str]) -> bool:
+    """Token check in constant time."""
+    import hmac
+    return bool(given) and bool(expected) and hmac.compare_digest(str(given).encode(), str(expected).encode())
+
+
+def _speaker_words(words: list) -> list:
+    """Words for subtitles; with speaker labels, a cue starts at each change of speaker and names them."""
+    out, last = [], None
+    for w in words:
+        sp = w.get("speaker")
+        if sp and sp != last:
+            out.append({**w, "text": f"{sp}: {w['text']}", "start": w["start"]})
+            last = sp
+        else:
+            out.append(w)
+    return out
 
 
 def _resume_from(request, since: Optional[int], default: int) -> int:

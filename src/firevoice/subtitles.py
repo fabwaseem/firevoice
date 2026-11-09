@@ -1,7 +1,9 @@
 """Subtitles (SRT and WebVTT) from word timings.
 
 Cues follow the speech: a cue ends at the end of a sentence once it has run at least a second, at a pause of more than
-0.6 s, or when it would pass two lines of 42 characters or 6 seconds. Cue ends never overlap the next cue.
+0.6 s, when the speaker changes (diarized words carry "speaker"), or when it would pass two lines of 42 characters or
+6 seconds. Cue ends never overlap the next cue. Speaker labels show as "Speaker 1: " in SRT (when the speaker changes)
+and as a <v Speaker 1> voice span in WebVTT.
 """
 from __future__ import annotations
 
@@ -13,8 +15,17 @@ MIN_SECONDS = 1.0
 GAP_BREAK = 0.6
 
 
-def _get(w, k):
-    return w[k] if isinstance(w, dict) else getattr(w, k)
+def _get(w, k, default=None):
+    return w.get(k, default) if isinstance(w, dict) else getattr(w, k, default)
+
+
+def _join(tokens) -> str:
+    """Words with spaces, except Whisper's split-off pieces ("As" "-salamu") that belong to the word before."""
+    out = ""
+    for t in tokens:
+        t = str(t).strip()
+        out += t if out and re.match(r"-\w", t) else (" " + t if out else t)
+    return out
 
 
 def cues(words) -> list[dict]:
@@ -23,7 +34,8 @@ def cues(words) -> list[dict]:
 
     def close():
         if cur:
-            out.append({"start": _get(cur[0], "start"), "end": _get(cur[-1], "end"), "text": " ".join(str(_get(w, "text")).strip() for w in cur)})
+            out.append({"start": _get(cur[0], "start"), "end": _get(cur[-1], "end"), "text": _join(_get(w, "text") for w in cur),
+                        "speaker": _get(cur[0], "speaker")})
             cur.clear()
     for i, w in enumerate(words):
         text = str(_get(w, "text")).strip()
@@ -33,7 +45,7 @@ def cues(words) -> list[dict]:
             gap = _get(w, "start") - _get(cur[-1], "end")
             length = len(" ".join(str(_get(x, "text")) for x in cur)) + 1 + len(text)
             dur = _get(w, "end") - _get(cur[0], "start")
-            if gap > GAP_BREAK or length > MAX_CHARS or dur > MAX_SECONDS:
+            if gap > GAP_BREAK or length > MAX_CHARS or dur > MAX_SECONDS or _get(w, "speaker") != _get(cur[-1], "speaker"):
                 close()
         cur.append(w)
         if re.search(r"[.!?]['\")\]]*$", text) and _get(w, "end") - _get(cur[0], "start") >= MIN_SECONDS:
@@ -65,11 +77,20 @@ def _ts(t: float, sep: str) -> str:
 
 
 def srt(words) -> str:
-    return "\n".join(f"{i}\n{_ts(c['start'], ',')} --> {_ts(c['end'], ',')}\n{_wrap(c['text'])}\n" for i, c in enumerate(cues(words), 1))
+    prev, parts = None, []
+    for i, c in enumerate(cues(words), 1):
+        text = _wrap(c["text"])
+        if c.get("speaker") and c["speaker"] != prev:
+            text = f"{c['speaker']}: {text}"
+        prev = c.get("speaker")
+        parts.append(f"{i}\n{_ts(c['start'], ',')} --> {_ts(c['end'], ',')}\n{text}\n")
+    return "\n".join(parts)
 
 
 def vtt(words) -> str:
-    return "WEBVTT\n\n" + "\n".join(f"{_ts(c['start'], '.')} --> {_ts(c['end'], '.')}\n{_wrap(c['text'])}\n" for c in cues(words))
+    def body(c):
+        return f"<v {c['speaker']}>{_wrap(c['text'])}" if c.get("speaker") else _wrap(c["text"])
+    return "WEBVTT\n\n" + "\n".join(f"{_ts(c['start'], '.')} --> {_ts(c['end'], '.')}\n{body(c)}\n" for c in cues(words))
 
 
 def render(words, fmt: str) -> tuple[str, str]:

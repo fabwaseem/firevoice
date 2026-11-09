@@ -892,6 +892,29 @@ class FireVoice:
             return "WEBVTT\n\n" + "\n".join(f"{S._ts(c['start'], '.')} --> {S._ts(c['end'], '.')}\n{S._wrap(c['text'])}\n" for c in cues)
         return "\n".join(f"{i}\n{S._ts(c['start'], ',')} --> {S._ts(c['end'], ',')}\n{S._wrap(c['text'])}\n" for i, c in enumerate(cues, 1))
 
+    # -------------------------------------------------------------------- OpenAI-compatible names
+    OPENAI_VOICES = {"alloy": ("female", 0), "ash": ("male", 0), "ballad": ("male", 1), "coral": ("female", 1), "echo": ("male", 2),
+                     "fable": ("male", 3), "nova": ("female", 2), "onyx": ("male", 4), "sage": ("female", 3), "shimmer": ("female", 4),
+                     "verse": ("male", 5)}
+
+    def openai_voice(self, name: str) -> str:
+        """An OpenAI voice name ("alloy", "nova"...) as a library voice: a library voice of that name or id first, then
+        FIREVOICE_HOME/openai_voices.json ({"alloy": "Isla"}), then a fixed pick among the best English voices."""
+        if name and self.voices.exists(name):
+            return self.voices.canonical(name)
+        f = home() / "openai_voices.json"
+        if f.exists():
+            try:
+                m = json.loads(f.read_text(encoding="utf-8"))
+                if name in m and self.voices.exists(m[name]):
+                    return self.voices.canonical(m[name])
+            except Exception:
+                pass
+        gender, k = self.OPENAI_VOICES.get((name or "").lower(), ("female", 0))
+        ranked = sorted((v for v in self.voice_list() if v.get("gender") == gender and v.get("language", "en") == "en" and v.get("kind") == "cloned"),
+                        key=lambda v: ((v.get("quality") or {}).get("rank") or 999, v["voice_id"]))
+        return ranked[k % len(ranked)]["voice_id"] if ranked else "default"
+
     def tag_catalog(self) -> dict:
         """Sound tags (engines with tag support read them; others drop them) and delivery tags (a style switch)."""
         from .frontend.markup import DELIVERY_TAGS
@@ -955,7 +978,10 @@ class FireVoice:
             raise FireVoiceError("bad_request", str(e))
 
     # -------------------------------------------------------------------- stt
-    def transcribe(self, audio: np.ndarray | str | Path, sr: Optional[int] = None, language: Optional[str] = None, beam_size: int = 5) -> dict:
+    def transcribe(self, audio: np.ndarray | str | Path, sr: Optional[int] = None, language: Optional[str] = None, beam_size: int = 5,
+                   prompt: Optional[str] = None, keyterms: Optional[list] = None, diarize: bool = False, speakers: Optional[int] = None) -> dict:
+        """Speech to text with word times and segments. `keyterms` (names, jargon) and `prompt` steer spellings;
+        `diarize` labels who speaks when (Speaker 1, Speaker 2...; `speakers` fixes how many)."""
         import soundfile as sf
         if isinstance(audio, (str, Path)):
             try:
@@ -970,13 +996,25 @@ class FireVoice:
         asr = self._stt_model()
         t0 = time.perf_counter()
         lang = None if not language or language == "auto" else language
+        hot = ", ".join(str(k).strip() for k in (keyterms or []) if str(k).strip())[:800] or None
         try:
-            r = asr.transcribe_full(audio, int(sr), beam_size=beam_size, language=lang)
+            r = asr.transcribe_full(audio, int(sr), beam_size=beam_size, language=lang, prompt=prompt, hotwords=hot)
         except Exception as e:
             raise FireVoiceError("internal", f"transcription failed: {e}")
+        words = [w.__dict__ for w in r["words"]]
+        segments = r.get("segments") or []
+        if diarize and segments:
+            from .diarize import label_speakers
+            labels = label_speakers(audio, int(sr), segments, speakers)
+            for seg, lab in zip(segments, labels):
+                seg["speaker"] = lab
+                for i in seg["words"]:
+                    words[i]["speaker"] = lab
+        for seg in segments:
+            seg.pop("words", None)
         return {"text": r["text"], "language": r["language"], "language_probability": r["language_probability"],
                 "duration": round(len(audio) / sr, 3), "seconds": round(time.perf_counter() - t0, 3), "model": asr.model_name, "device": asr.device,
-                "words": [w.__dict__ for w in r["words"]]}
+                "words": words, "segments": segments}
 
     def _stt_model(self):
         """STT shares the validation Whisper model (one GPU copy)."""

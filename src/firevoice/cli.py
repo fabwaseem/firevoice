@@ -333,6 +333,55 @@ def cmd_project(a) -> int:
         svc.close()
 
 
+def cmd_jobs(a) -> int:
+    """Jobs run inside the server, so this always talks to one (local by default)."""
+    from .client import DEFAULT_URL, Client, ClientError
+    c = Client(a.remote or DEFAULT_URL, a.token)
+    try:
+        if a.action == "list":
+            r = c.get("/api/v1/jobs", status=a.status, limit=50)
+            for j in r["jobs"]:
+                pct = f"{round(100 * (j.get('progress') or 0))}%" if j["status"] == "running" else ""
+                print(f"{j['id']}  {j['kind']:10} {j['status']:9} {pct:5} {j.get('title', '')[:70]}")
+            return 0
+        if a.action == "submit":
+            raw = a.payload or "{}"
+            payload = json.loads(Path(raw[1:]).read_text(encoding="utf-8") if raw.startswith("@") else raw)
+            j = c.job(a.id, payload)
+            print(j["id"], j["status"], j.get("title", ""))
+            return 0
+        if not a.id:
+            print("which job? (firevoice jobs list)", file=sys.stderr)
+            return 2
+        if a.action == "show":
+            print(json.dumps(c.get(f"/api/v1/jobs/{a.id}"), indent=1, ensure_ascii=False))
+        elif a.action == "wait":
+            while True:
+                j = c.get(f"/api/v1/jobs/{a.id}")
+                print(f"\r  {j['status']} {round(100 * (j.get('progress') or 0))}% {j.get('message') or ''}"[:120].ljust(120), end="", file=sys.stderr, flush=True)
+                if j["status"] in ("done", "failed", "cancelled"):
+                    print(file=sys.stderr)
+                    return 0 if j["status"] == "done" else 1
+                time.sleep(1.5)
+        elif a.action == "cancel":
+            print(c.post(f"/api/v1/jobs/{a.id}/cancel")["status"])
+        elif a.action == "delete":
+            c._check(c.http.delete(f"/api/v1/jobs/{a.id}"))
+            print("deleted", a.id)
+        elif a.action == "download":
+            r = c._check(c.http.get(f"/api/v1/jobs/{a.id}/audio", params={"download": "true"}))
+            name = a.out or (r.headers.get("content-disposition", "").split("filename=")[-1].strip('"') or f"{a.id}.audio")
+            Path(name).write_bytes(r.content)
+            print(f"wrote {name} ({len(r.content) // 1024} KB)")
+        return 0
+    except ClientError as e:
+        print(f"error ({e.code}): {e}", file=sys.stderr)
+        return 1
+    except Exception as e:  # connection refused and the like
+        print(f"cannot reach the server at {a.remote or DEFAULT_URL}: {e}", file=sys.stderr)
+        return 1
+
+
 def cmd_dialogue(a) -> int:
     from .service import FireVoiceError
     svc = _service(a)
@@ -717,11 +766,14 @@ def cmd_transcribe(a) -> int:
     if a.remote:
         from .client import Client
         c = Client(a.remote, a.token)
-        results = [(f, c.stt(f, language=a.language, beam_size=a.beam)) for f in a.files]
+        results = [(f, c.stt(f, language=a.language, beam_size=a.beam, keyterms=a.keyterms, prompt=a.prompt,
+                             diarize=a.diarize, speakers=a.speakers)) for f in a.files]
     else:
         svc = _service(a, asr_model=a.asr_model, asr_device=a.asr_device)
         try:
-            results = [(f, svc.transcribe(f, language=a.language, beam_size=a.beam)) for f in a.files]
+            kt = [t.strip() for t in (a.keyterms or "").split(",") if t.strip()] or None
+            results = [(f, svc.transcribe(f, language=a.language, beam_size=a.beam, prompt=a.prompt, keyterms=kt,
+                                          diarize=a.diarize, speakers=a.speakers)) for f in a.files]
         except FireVoiceError as e:
             return _fail(e)
         finally:
@@ -730,8 +782,19 @@ def cmd_transcribe(a) -> int:
         out = Path(a.out) if a.out and len(a.files) == 1 else Path(f).with_suffix(".transcript.json")
         out.write_text(json.dumps({"file": str(f), **r}, indent=1, ensure_ascii=False), encoding="utf-8")
         print(f"{f}: {len(r['words'])} words, language {r['language']}, {r['seconds']}s ({r['model']} on {r['device']}) -> {out}")
+        if a.srt or a.vtt:
+            from . import subtitles as subs
+            for flag, ext, fn in ((a.srt, ".srt", subs.srt), (a.vtt, ".vtt", subs.vtt)):
+                if flag:
+                    sub_out = Path(flag) if flag is not True else Path(f).with_suffix(ext)
+                    sub_out.write_text(fn(r["words"]), encoding="utf-8")
+                    print(f"  subtitles -> {sub_out}")
         if a.print:
-            print(r["text"])
+            if a.diarize:
+                for s in r.get("segments", []):
+                    print(f"{s.get('speaker', '?')}: {s['text'].strip()}")
+            else:
+                print(r["text"])
     return 0
 
 
@@ -1051,6 +1114,16 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--limit", type=int, default=30)
     rd.set_defaults(fn=cmd_renders)
 
+    jb = sub.add_parser("jobs", help="background jobs on a running server: list, show, wait, cancel, delete, download")
+    jb.add_argument("action", nargs="?", default="list", choices=["list", "show", "wait", "cancel", "delete", "download", "submit"])
+    jb.add_argument("id", nargs="?", help="job id (list shows them) | submit: the kind (tts, batch, dialogue, project, style_refs...)")
+    jb.add_argument("--payload", default=None, help="submit: the job payload as JSON or @file.json")
+    jb.add_argument("--status", default=None, help="list: only jobs with this status (queued, running, done, failed, cancelled)")
+    jb.add_argument("-o", "--out", default=None, help="download: where to write the main file")
+    jb.add_argument("--remote", default=None, help="server URL (default $FIREVOICE_URL or http://127.0.0.1:8787)")
+    jb.add_argument("--token", default=None)
+    jb.set_defaults(fn=cmd_jobs)
+
     dg = sub.add_parser("dialogue", help="multi-speaker script ('Name: line' per turn) -> one mix, stems and subtitles")
     dg.add_argument("script", help="the script file (or @file / - for stdin)")
     dg.add_argument("--cast", default=None, help='who speaks with which voice: "Ayesha=urd-f-cv01,Bilal=Bilal" (missing speakers get one automatically)')
@@ -1172,6 +1245,12 @@ def build_parser() -> argparse.ArgumentParser:
     tr.add_argument("--asr-device", default="auto")
     tr.add_argument("--beam", type=int, default=5)
     tr.add_argument("--print", action="store_true")
+    tr.add_argument("--keyterms", default=None, help="names and jargon to spell right, comma-separated")
+    tr.add_argument("--prompt", default=None, help="text that sets vocabulary and tone (Whisper initial prompt)")
+    tr.add_argument("--diarize", action="store_true", help="label who speaks (Speaker 1, Speaker 2...)")
+    tr.add_argument("--speakers", type=int, default=None, help="with --diarize: the number of speakers, if known")
+    tr.add_argument("--srt", nargs="?", const=True, default=None, help="also write SRT subtitles (optional path)")
+    tr.add_argument("--vtt", nargs="?", const=True, default=None, help="also write WebVTT subtitles (optional path)")
     tr.add_argument("--remote", nargs="?", const=os.environ.get("FIREVOICE_URL", "http://127.0.0.1:8787"), default=None)
     tr.add_argument("--token", default=None)
     tr.set_defaults(fn=cmd_transcribe)

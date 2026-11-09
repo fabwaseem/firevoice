@@ -243,11 +243,39 @@ Every paragraph renders as a kept render (all takes, speech check), so its statu
 
 ### Speech to text
 
-`POST /api/v1/stt` takes multipart `file`, `language` (default `auto`) and `beam_size` (default 5). It returns:
+`POST /api/v1/stt` takes multipart `file`, `language` (default `auto`) and `beam_size` (default 5). Optional fields:
+
+- `keyterms`: comma-separated names and jargon to spell right (`FireVoice, Ayesha, VoxCPM`). They become Whisper hotwords.
+- `prompt`: free text that sets the vocabulary and tone, as with Whisper's initial prompt.
+- `diarize=true`: label who speaks. Every word and segment gains `speaker` (`Speaker 1`, `Speaker 2`...). Pass
+  `speakers=N` when you know the count; otherwise it is estimated (up to 6).
+- `format`: `json` (default), `srt` or `vtt`. Subtitles carry the speaker label when diarizing.
+
+It returns:
 
 ```json
-{"text", "language", "language_probability", "duration", "seconds", "model", "device", "words": [{"text", "start", "end"}]}
+{"text", "language", "language_probability", "duration", "seconds", "model", "device",
+ "words": [{"text", "start", "end", "speaker"?}], "segments": [{"start", "end", "text", "speaker"?}]}
 ```
+
+### WebSocket streaming (text in as it arrives)
+
+`WS /api/v1/tts/ws` is for LLM output and live agents: send text in pieces, get audio back sentence by sentence while
+more text is still arriving. Authenticate with the `Authorization` header, `X-API-Key`, or `?token=`.
+
+Client messages (JSON):
+
+| | |
+|---|---|
+| `{"type": "config", ...}` | Optional, first. Any TTS request field except `text` (`voice`, `style`, `engine`, `params`...), plus `format` (`wav`, `pcm16`, `mp3`, `ogg`, `opus`, `flac`). |
+| `{"type": "text", "text": "..."}` | Appended to the buffer. Each finished sentence is spoken as soon as it is complete. |
+| `{"type": "flush"}` | Speak what is buffered now, even without a full stop. |
+| `{"type": "end"}` | Flush, finish speaking, then send `done`. |
+| `{"type": "cancel"}` | Drop the buffer and stop the sentence being spoken. |
+
+Server messages: `{"type": "audio", "segment", "index", "audio_base64", "format", "sample_rate", "words", "text", "partial"?}`,
+`{"type": "segment_done", "segment", "text"}`, `{"type": "done"}` and `{"type": "error", "segment"?, "code", "message"}`.
+With a warm VoxCPM2 the first audio arrives about 0.5 s after the first sentence ends.
 
 ### Jobs
 
@@ -255,7 +283,7 @@ Use jobs for long scripts, batches and voice design: anything the app should tra
 
 | | |
 |---|---|
-| `POST /api/v1/jobs` | Body `{"kind": "tts" \| "batch" \| "design", "payload": {...}, "title": ""}`. Returns `202` and the job. |
+| `POST /api/v1/jobs` | Body `{"kind": "tts" \| "batch" \| "design" \| "previews" \| "project" \| "style_refs" \| "dialogue", "payload": {...}, "title": ""}`. Returns `202` and the job. |
 | `GET /api/v1/jobs` | Filters `?status=&kind=&limit=`. Returns `{jobs, counts}`. |
 | `GET /api/v1/jobs/{id}` | `{id, kind, title, status, progress (0-1), step, steps, message, error, result, created, started, finished, elapsed}` |
 | `GET /api/v1/jobs/{id}/events` | SSE for one job. Ends with that job's terminal event. |
@@ -272,6 +300,23 @@ Payloads:
 - **`design`:** `{"name", "description", "engine", "text", "gender", "language"}`
 
 Status moves through `queued`, then `running`, then one of `done`, `failed` or `cancelled`. Events carry `{seq, type, time, job}`. Each job lives in `~/.firevoice/renders/<id>/` and survives restarts. A job that was running when the server stopped is marked `failed` with the code `interrupted`.
+
+### OpenAI-compatible
+
+Point the official OpenAI SDK (or anything built on it) at `http://127.0.0.1:8787/v1` with any API key:
+
+- `POST /v1/audio/speech`: `{"model", "input", "voice", "response_format", "speed", "instructions"}`. `voice` may be an
+  OpenAI name (`alloy`, `nova`, `onyx`...), which maps to a fixed pick among the best English library voices, or any
+  library voice name or id. Map names yourself in `~/.firevoice/openai_voices.json` (`{"nova": "Isla"}`). `model` may
+  name an engine; OpenAI model names use the default engine. `pcm` is 24 kHz 16-bit mono, like OpenAI's.
+- `POST /v1/audio/transcriptions`: multipart `file`, `model`, `language`, `prompt`, `response_format` (`json`, `text`,
+  `srt`, `vtt`, `verbose_json` with words and segments).
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="local")
+client.audio.speech.create(model="tts-1", voice="nova", input="Hello from FireVoice.").write_to_file("hello.mp3")
+```
 
 ### ElevenLabs-compatible
 

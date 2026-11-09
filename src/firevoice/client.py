@@ -92,10 +92,15 @@ class Client:
                     yield ev
                     event, data = None, []
 
-    def stt(self, path: str | Path, language: str = "auto", beam_size: int = 5) -> dict:
+    def stt(self, path: str | Path, language: str = "auto", beam_size: int = 5, keyterms: str | None = None,
+            prompt: str | None = None, diarize: bool = False, speakers: int | None = None) -> dict:
         p = Path(path)
+        data = {"language": language, "beam_size": str(beam_size)}
+        data.update({k: v for k, v in {"keyterms": keyterms, "prompt": prompt, "speakers": speakers and str(speakers)}.items() if v})
+        if diarize:
+            data["diarize"] = "true"
         with p.open("rb") as f:
-            return self._check(self.http.post("/api/v1/stt", files={"file": (p.name, f)}, data={"language": language, "beam_size": str(beam_size)})).json()
+            return self._check(self.http.post("/api/v1/stt", files={"file": (p.name, f)}, data=data)).json()
 
     def job(self, kind: str, payload: dict, title: str = "") -> dict:
         return self.post("/api/v1/jobs", {"kind": kind, "payload": payload, "title": title})

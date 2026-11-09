@@ -147,6 +147,22 @@ Two pages ship with the server for testing by hand:
 curl -s localhost:8787/api/v1/tts -H "Content-Type: application/json" -o hello.mp3   -d '{"text": "Hello there.", "voice": "lib-f-4992", "style": "storyteller", "params": {"inference_timesteps": 12}}'
 ```
 
+### Drop-in for other clients
+
+- **OpenAI SDK:** set `base_url="http://127.0.0.1:8787/v1"` and any API key. `audio.speech.create` and
+  `audio.transcriptions.create` work unchanged; OpenAI voice names (`nova`, `onyx`...) map to library voices.
+- **ElevenLabs clients:** the `/v1/text-to-speech/{voice_id}` routes.
+- **Live agents:** `ws://127.0.0.1:8787/api/v1/tts/ws` takes text as an LLM writes it and returns audio sentence by
+  sentence (about 0.5 s to first audio on a warm GPU).
+
+Speech to text takes key terms (`--keyterms "FireVoice, Ayesha"`) and labels speakers (`diarize=true`).
+Background jobs can be driven from the shell too:
+
+```bash
+firevoice jobs list ; firevoice jobs wait <id> ; firevoice jobs download <id> -o out.mp3
+firevoice jobs submit dialogue --payload @show.json
+```
+
 ## Takes, QA, subtitles and the dictionary
 
 ```bash

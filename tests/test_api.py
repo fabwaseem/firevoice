@@ -144,7 +144,7 @@ def test_tts_stream_sse_and_pcm(c):
 
 
 def test_stt_route(c, svc, monkeypatch):
-    monkeypatch.setattr(svc, "transcribe", lambda path, sr=None, language=None, beam_size=5: {"text": "hello", "language": language or "auto", "words": []})
+    monkeypatch.setattr(svc, "transcribe", lambda path, sr=None, language=None, beam_size=5, **kw: {"text": "hello", "language": language or "auto", "words": []})
     r = c.post("/api/v1/stt", files={"file": ("a.wav", wav_bytes(), "audio/wav")}, data={"language": "en"})
     assert r.status_code == 200 and r.json() == {"text": "hello", "language": "en", "words": []}
     assert c.post("/api/v1/stt", files={"file": ("a.wav", b"", "audio/wav")}).status_code == 400

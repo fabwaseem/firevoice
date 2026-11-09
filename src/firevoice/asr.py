@@ -113,19 +113,34 @@ class FasterWhisperAligner:
         r = self.transcribe_full(audio, sr, beam_size=beam_size)
         return r["text"], r["words"]
 
-    def transcribe_full(self, audio: np.ndarray, sr: int, beam_size: int = 5, language: Optional[str] = "__self__") -> dict:
-        """-> {"text", "words": [Word], "language", "language_probability"}; language=None detects it."""
+    def transcribe_full(self, audio: np.ndarray, sr: int, beam_size: int = 5, language: Optional[str] = "__self__",
+                        prompt: Optional[str] = None, hotwords: Optional[str] = None) -> dict:
+        """-> {"text", "words": [Word], "segments": [{start, end, text, words: [i...]}], "language", "language_probability"};
+        language=None detects it. `prompt` (context text) and `hotwords` (names and terms) steer the spelling."""
         a = _resample16k(audio, sr)
         lang = self.language if language == "__self__" else language
+        kw = {}
+        if prompt:
+            kw["initial_prompt"] = prompt
+        if hotwords:
+            kw["hotwords"] = hotwords
         with self._sem:
-            segs, info = self.m.transcribe(a, word_timestamps=True, language=lang, beam_size=beam_size, vad_filter=True)
+            try:
+                segs, info = self.m.transcribe(a, word_timestamps=True, language=lang, beam_size=beam_size, vad_filter=True, **kw)
+            except TypeError:                    # an older faster-whisper without hotwords
+                kw.pop("hotwords", None)
+                segs, info = self.m.transcribe(a, word_timestamps=True, language=lang, beam_size=beam_size, vad_filter=True, **kw)
             words: list[Word] = []
             parts: list[str] = []
+            segments: list[dict] = []
             for s in segs:
                 parts.append(s.text.strip())
+                first = len(words)
                 for w in (s.words or []):
                     words.append(Word(w.word.strip(), float(w.start), float(w.end)))
-        return {"text": " ".join(parts), "words": words, "language": getattr(info, "language", lang),
+                segments.append({"start": round(float(s.start), 3), "end": round(float(s.end), 3), "text": s.text.strip(),
+                                 "words": list(range(first, len(words)))})
+        return {"text": " ".join(parts), "words": words, "segments": segments, "language": getattr(info, "language", lang),
                 "language_probability": round(float(getattr(info, "language_probability", 0.0) or 0.0), 3)}
 
 

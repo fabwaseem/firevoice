@@ -218,6 +218,7 @@ FORMATS = {   # name -> (ffmpeg codec args, media type, file extension)
     "opus": (["-c:a", "libopus", "-b:a", "{bitrate}", "-f", "ogg"], "audio/ogg; codecs=opus", "opus"),
     "m4a": (["-c:a", "aac", "-b:a", "{bitrate}", "-f", "ipod", "-movflags", "+faststart"], "audio/mp4", "m4a"),   # real MP4 (written via a temp file)
     "pcm16": (["-c:a", "pcm_s16le", "-f", "s16le"], "audio/L16", "pcm"),
+    "aac": (["-c:a", "aac", "-b:a", "{bitrate}", "-f", "adts"], "audio/aac", "aac"),   # raw ADTS (OpenAI's "aac")
 }
 
 

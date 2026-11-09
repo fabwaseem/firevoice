@@ -755,11 +755,13 @@ $("#rec").onclick = async () => {
 })();
 async function transcribe(blob, name) {
   const fd = new FormData(); fd.append("file", blob, name); fd.append("language", $("#slang").value || "auto"); fd.append("beam_size", $("#sbeam").value);
+  if ($("#skeys")?.value.trim()) fd.append("keyterms", $("#skeys").value.trim());
+  if ($("#sdiar")?.checked) fd.append("diarize", "true");
   $("#stt-out").innerHTML = `<div class="skeleton" style="height:22px;width:70%"></div><div class="skeleton" style="height:22px;margin-top:10px"></div><div class="skeleton" style="height:22px;width:55%;margin-top:10px"></div>`;
   try {
     const j = await API.req("/api/v1/stt", { method: "POST", form: fd, timeout: 600000 }); const url = URL.createObjectURL(blob);
     $("#stt-out").innerHTML = `<audio id="stt-audio" controls src="${url}" style="width:100%"></audio>
-      <div class="words" id="stt-words" style="font-size:17px;max-height:none">${j.words.map(w => `<span data-s="${w.start}" data-e="${w.end}">${esc(w.text)}</span>`).join(" ") || esc(j.text)}</div>
+      <div class="words" id="stt-words" style="font-size:17px;max-height:none">${j.words.map((w, i) => `${w.speaker && w.speaker !== j.words[i - 1]?.speaker ? `${i ? "<br>" : ""}<b class="tag acc" style="margin-right:6px">${esc(w.speaker)}</b>` : ""}<span data-s="${w.start}" data-e="${w.end}">${esc(w.text)}</span>`).join(" ") || esc(j.text)}</div>
       <div class="metrics"><div class="metric"><div class="l">Language</div><div class="v">${esc(LANGS[j.language] || j.language)}<small> ${Math.round((j.language_probability || 0) * 100)}%</small></div></div>
       <div class="metric"><div class="l">Audio</div><div class="v">${j.duration.toFixed(1)}<small>s</small></div></div><div class="metric"><div class="l">Took</div><div class="v">${j.seconds.toFixed(2)}<small>s</small></div></div>
       <div class="metric"><div class="l">Words</div><div class="v">${j.words.length}</div></div></div><p class="small dim">${esc(j.model)} on ${esc(j.device)} · click a word to jump to it</p>`;
@@ -767,6 +769,8 @@ async function transcribe(blob, name) {
     ws.forEach(s => s.onclick = () => { a.currentTime = +s.dataset.s; a.play(); });
     a.ontimeupdate = () => ws.forEach(s => s.classList.toggle("hl", a.currentTime >= +s.dataset.s && a.currentTime < +s.dataset.e));
     $("#stt-copy").classList.remove("hidden"); $("#stt-copy").onclick = () => navigator.clipboard.writeText(j.text).then(() => toast("Transcript copied", "ok"));
+    $("#stt-out").insertAdjacentHTML("beforeend", `<div class="row" style="gap:8px"><button class="btn sm ghost" data-stsub="srt">${icon("cc", "sm")}SRT</button><button class="btn sm ghost" data-stsub="vtt">${icon("cc", "sm")}VTT</button></div>`);
+    $$("[data-stsub]").forEach(b => b.onclick = () => downloadSubtitles({ id: "transcript", info: { words: j.words } }, b.dataset.stsub));
   } catch (e) { $("#stt-out").innerHTML = `<div class="empty"><svg class="i"><use href="#i-alert"/></svg><b>${esc(e.code)}</b><span class="small">${esc(e.message)}</span></div>`; }
 }
 
