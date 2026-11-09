@@ -664,6 +664,7 @@ $("#open-add").onclick = () => {
     <div class="field"><label class="f">Tags <span class="hint">(comma-separated)</span></label><input class="inp" id="ad-tags"></div>
     <div class="field"><label class="f">Clean the clip <span class="hint">(takes out hiss, hum and room noise before cloning)</span></label>
       <select class="inp" id="ad-clean"><option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium" selected>Medium</option><option value="strong">Strong</option></select></div>
+    <div class="field"><label class="f">Who gave consent <span class="hint">(the speaker's name, kept in the voice's consent record)</span></label><input class="inp" id="ad-consent-by" placeholder="e.g. Sara Khan"></div>
     <label class="toggle"><input type="checkbox" id="ad-consent"><span class="sw"></span>I own this voice or have permission to use it</label>`,
     `<button class="btn ghost" onclick="Drawer.close()">Cancel</button><button class="btn primary" id="ad-go">${icon("plus")}Add voice</button>`);
   bindDrop("ad-file");
@@ -671,7 +672,7 @@ $("#open-add").onclick = () => {
     const f = $("#ad-file").files[0]; if (!f) return toast("Choose a clip first", "bad"); if (!$("#ad-name").value.trim()) return toast("Give the voice a name", "bad");
     if (!$("#ad-consent").checked) return toast("Confirm you have permission to use this voice", "bad");
     const fd = new FormData(); fd.append("file", f); fd.append("name", $("#ad-name").value.trim()); fd.append("consent", "true");
-    [["gender", "ad-gender"], ["language", "ad-lang"], ["accent", "ad-accent"], ["description", "ad-desc"], ["transcript", "ad-tr"], ["tags", "ad-tags"], ["clean", "ad-clean"]].forEach(([k, id]) => fd.append(k, $("#" + id).value));
+    [["gender", "ad-gender"], ["language", "ad-lang"], ["accent", "ad-accent"], ["description", "ad-desc"], ["transcript", "ad-tr"], ["tags", "ad-tags"], ["clean", "ad-clean"], ["consent_by", "ad-consent-by"]].forEach(([k, id]) => fd.append(k, $("#" + id).value));
     busyBtn($("#ad-go"), true, "Adding…");
     try {
       const v = await API.req("/api/v1/voices", { method: "POST", form: fd, timeout: 180000 });
@@ -716,7 +717,14 @@ async function editVoice(id) {
       catch (e) { toast(e.message, "bad"); }
     };
   }, 0);
-  Drawer.open(v.name || v.voice_id, `<div class="row" style="gap:12px;margin-bottom:16px"><button class="avatar-edit" id="ed-avatar" title="Change avatar">${avatar(v, true)}<span>${icon("edit", "sm")}</span></button><input type="file" id="ed-avatar-file" accept="image/*" class="hidden"><div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(v.name || v.voice_id)} ${tierBadge(v)}</div><div class="small muted">${esc(v.voice_id)} · ${esc(v.source || "")}</div></div>
+  setTimeout(async () => {
+    try {
+      const c = await API.req(`/api/v1/voices/${encodeURIComponent(v.voice_id)}/consent`);
+      const el = $("#ed-consent"); if (!el) return;
+      el.textContent = c.basis === "consent" ? `Consent: ${c.by || "given"} · ${c.via} · ${(c.time || "").slice(0, 10)}${c.clip_note ? " · " + c.clip_note : ""}` : `Use rests on: ${c.basis}`;
+    } catch { /* older server */ }
+  }, 0);
+  Drawer.open(v.name || v.voice_id, `<div class="row" style="gap:12px;margin-bottom:16px"><button class="avatar-edit" id="ed-avatar" title="Change avatar">${avatar(v, true)}<span>${icon("edit", "sm")}</span></button><input type="file" id="ed-avatar-file" accept="image/*" class="hidden"><div style="flex:1"><div style="font-weight:800;font-size:17px">${esc(v.name || v.voice_id)} ${tierBadge(v)}</div><div class="small muted">${esc(v.voice_id)} · ${esc(v.source || "")}</div><div class="small dim" id="ed-consent"></div></div>
       ${v.has_ref ? `<button class="playbtn" data-play="${esc(v.voice_id)}" title="Introduction">${icon("play")}</button><button class="playbtn" data-play="${esc(v.voice_id)}" data-orig="1" title="Original recording">${icon("mic")}</button>` : ""}</div>
     <div class="field"><label class="f">Tagline <span class="hint">(shown under the name)</span></label><input class="inp" id="ed-tagline" value="${esc(v.tagline || "")}"></div>
     <div class="grid2"><div class="field"><label class="f">Display name</label><input class="inp" id="ed-name" value="${esc(v.name || "")}"></div>
@@ -918,9 +926,12 @@ async function loadPaths() {
       <input class="inp" data-path="${k}" value="${esc(p.settings[k] || "")}" placeholder="${esc(p[k].path || hint)}"></div>`;
     $("#paths-card").innerHTML = `<div class="field"><label class="f">Data folder <span class="hint">(FIREVOICE_HOME; voices, renders, projects)</span></label><input class="inp" value="${esc(p.home.path)}" disabled></div>
       ${row("engines_dir", "Engine folder", "venvs")}${row("weights_dir", "Model weights", "weights")}${row("ffmpeg", "ffmpeg", "ffmpeg.exe")}
+      <label class="toggle" style="margin:4px 0 12px"><input type="checkbox" id="wm-policy" ${p.watermark?.policy !== "off" ? "checked" : ""} ${p.watermark?.available ? "" : "disabled"}><span class="sw"></span>
+        Mark every output as AI speech (inaudible watermark)${p.watermark?.available ? "" : " · needs the audioseal package"}</label>
       <div class="row"><button class="btn sm primary" id="paths-save">Save</button><span class="hint">Leave a field empty for the default shown in grey.</span></div>`;
     $("#paths-save").onclick = async () => {
       const body = {}; $$("[data-path]").forEach(i => { if (i.value.trim() !== (p.settings[i.dataset.path] || "")) body[i.dataset.path] = i.value.trim(); });
+      const wm = $("#wm-policy").checked ? "all" : "off"; if (wm !== (p.watermark?.policy || "all")) body.watermark = wm;
       if (!Object.keys(body).length) return toast("Nothing changed", "");
       try { const r = await API.req("/api/v1/system/settings", { method: "PUT", json: body }); toast(r.restart_required ? "Saved. Restart the server to use the new engine folders." : "Saved", "ok"); loadPaths(); } catch (e) { toast(e.message, "bad"); }
     };

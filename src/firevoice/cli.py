@@ -450,6 +450,12 @@ def cmd_audio(a) -> int:
     from .service import FireVoiceError
     svc = _service(a)
     try:
+        if a.action == "detect":
+            r = svc.audio_detect(a.file)
+            verdict = ("made by FireVoice" + (f" ({r['kind']})" if r.get("kind") else "")) if r["firevoice"] else \
+                ("marked as AI audio (not FireVoice's mark)" if r["watermarked"] else "no AI-audio watermark found")
+            print(f"{a.file}: {verdict}; marked share {r['probability']:.0%} of {r['seconds']}s")
+            return 0 if r["watermarked"] else 1
         if a.action == "analyze":
             r = svc.audio_analyze(a.file)
             print(f"{r['verdict'].upper()}  {r['duration']}s, SNR {r.get('snr_db')} dB, peak {r.get('peak_db')} dBFS, clipped {r.get('clipped_pct')}%")
@@ -596,9 +602,11 @@ def cmd_voices(a) -> int:
             return 2
         if a.action == "info":
             print(json.dumps(svc.voice(a.name), indent=1, ensure_ascii=False))
+        elif a.action == "consent":
+            print(json.dumps(svc.voice_consent(a.name), indent=1, ensure_ascii=False))
         elif a.action == "add":
             if a.ref:
-                v = svc.voice_add(a.name, a.ref, consent=a.consent, description=a.description or "", gender=a.gender or "", language=a.language or "",
+                v = svc.voice_add(a.name, a.ref, consent=a.consent, consent_by=a.consent_by, via="cli", description=a.description or "", gender=a.gender or "", language=a.language or "",
                                   accent=a.accent or "", tags=a.tags.split(",") if a.tags else None, transcript=a.transcript, source=a.source or "",
                                   license=a.license or "")
             elif a.description:   # description only: design it now with a design-capable engine and lock the take
@@ -1228,8 +1236,8 @@ def build_parser() -> argparse.ArgumentParser:
     cv.add_argument("--lufs", type=float, default=-16.0)
     cv.set_defaults(fn=cmd_convert)
 
-    au2 = sub.add_parser("audio", help="check how good a recording is to clone from, or clean it")
-    au2.add_argument("action", choices=["analyze", "clean"])
+    au2 = sub.add_parser("audio", help="check how good a recording is to clone from, clean it, or detect FireVoice's watermark")
+    au2.add_argument("action", choices=["analyze", "clean", "detect"])
     au2.add_argument("file")
     au2.add_argument("-o", "--out", default=None)
     au2.add_argument("--strength", choices=["light", "medium", "strong"], default="medium")
@@ -1258,7 +1266,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.set_defaults(fn=cmd_batch)
 
     v = sub.add_parser("voices", help="list, add, design, update and remove voices")
-    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import", "avatar", "clean", "restore", "build-styles", "candidates"])
+    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import", "avatar", "clean", "restore", "build-styles", "candidates", "consent"])
     v.add_argument("--strength", choices=["light", "medium", "strong"], default="medium", help="clean: how hard to denoise")
     v.add_argument("-n", type=int, default=3, help="candidates: how many takes of the described voice")
     v.add_argument("--image", default=None, help="avatar: an image file to use (any size; centre-cropped); --remove to drop it")
@@ -1267,6 +1275,7 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--name")
     v.add_argument("--ref", help="add / style-ref: audio clip (6-20 s of clean speech)")
     v.add_argument("--consent", action="store_true", help="confirm you own or have permission to use this voice")
+    v.add_argument("--consent-by", default=None, help="add: who gave consent (the speaker's name), kept in the consent record")
     v.add_argument("--description")
     v.add_argument("--gender", choices=["male", "female", "neutral"], default=None)
     v.add_argument("--language", default=None, help="list: filter; add/update: the voice's language (ISO code)")

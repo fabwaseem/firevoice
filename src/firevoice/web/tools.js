@@ -49,6 +49,22 @@ function setSource(blob, name) {
   };
 })();
 
+// ------------------------------------------------------------------------------------------------ watermark check
+(function initWatermarkCheck() {
+  const go = $("#wm-go"); if (!go) return;
+  go.onclick = async () => {
+    const f = $("#wm-file").files[0]; if (!f) return toast("Choose a file first", "bad");
+    busyBtn(go, true, "Listening…");
+    const fd = new FormData(); fd.append("file", f, f.name);
+    try {
+      const r = await API.req("/api/v1/audio/detect", { method: "POST", form: fd, timeout: 0 });
+      const tag = r.firevoice ? `<span class="tag ok">made by FireVoice${r.kind ? " · " + esc(r.kind) : ""}</span>`
+        : r.watermarked ? `<span class="tag warn">AI watermark, not FireVoice's</span>` : `<span class="tag">no watermark found</span>`;
+      $("#wm-out").innerHTML = `${tag} <span class="small dim">${Math.round(r.probability * 100)}% of ${r.seconds}s carries a mark</span>`;
+    } catch (e) { toast(e.message, "bad"); } finally { busyBtn(go, false); }
+  };
+})();
+
 // ------------------------------------------------------------------------------------------------ voice editor: clip and style clips
 window.voiceToolsSection = function voiceToolsSection(v) {
   const body = $("#drawer-body"); if (!body || !v.has_ref) return;

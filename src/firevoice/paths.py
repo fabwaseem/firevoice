@@ -24,7 +24,7 @@ from typing import Optional
 
 PACKAGE = Path(__file__).resolve().parent            # .../firevoice (the package)
 _CHECKOUT = PACKAGE.parents[1]                         # the repo root when running from src/ (firevoice/)
-SETTINGS_KEYS = ("engines_dir", "weights_dir", "ffmpeg")
+SETTINGS_KEYS = ("engines_dir", "weights_dir", "ffmpeg", "watermark")
 EXE = ".exe" if os.name == "nt" else ""
 
 

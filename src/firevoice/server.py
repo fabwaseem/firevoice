@@ -135,7 +135,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     app.state.svc = svc
     app.add_middleware(CORSMiddleware, allow_origins=cors_origins or [], allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
                        allow_origin_regex=None if cors_origins else r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost|https?://tauri\.localhost|app://.*)$",
-                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "X-Render-Id", "X-Quality-Before", "X-Quality-After", "Content-Disposition"])
+                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "X-Watermarked", "X-Render-Id", "X-Quality-Before", "X-Quality-After", "Content-Disposition"])
 
     # ------------------------------------------------------------------ errors + auth
     def err(code: str, message: str, status: Optional[int] = None):
@@ -201,6 +201,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
             None, description='extra pronunciation rules for this request: [{"match": "SQL", "say": "sequel"}] or {"SQL": "sequel"}')
         keep_takes: bool = Field(False, description="keep every take of every passage; the response names the kept render "
                                                      "(X-Render-Id, render_id) for /api/v1/renders")
+        watermark: Optional[bool] = Field(None, description="inaudible 'made by FireVoice' mark (AudioSeal); null = the server's policy, on by default")
 
         def request(self) -> TTSRequest:
             d = self.model_dump(by_alias=True, exclude={"format", "sample_rate", "response"})
@@ -343,7 +344,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return {"X-Duration": str(i["duration"]), "X-Sample-Rate": str(r.sr), "X-Engine": i["engine"], "X-RTF": str(i["rtf"]),
                 # the warnings themselves (";"-separated, ASCII-safe for a header), and how many there were
                 "X-Warnings": "; ".join(w.replace(";", ",") for w in i["warnings"]).encode("ascii", "replace").decode()[:900],
-                "X-Warning-Count": str(len(i["warnings"])), **({"X-Render-Id": i["render_id"]} if i.get("render_id") else {})}
+                "X-Warning-Count": str(len(i["warnings"])), "X-Watermarked": "1" if i.get("watermarked") else "0",
+                **({"X-Render-Id": i["render_id"]} if i.get("render_id") else {})}
 
     async def save_upload(f: UploadFile) -> str:
         data = await f.read()
@@ -423,12 +425,13 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         """Where the data folder, engine venvs, model weights and ffmpeg were found, and why (env var, settings.json,
         source checkout or default)."""
         from . import paths
-        return paths.report()
+        return {**paths.report(), "watermark": svc.watermark_status()}
 
     class SettingsBody(BaseModel):
         engines_dir: Optional[str] = None
         weights_dir: Optional[str] = None
         ffmpeg: Optional[str] = None
+        watermark: Optional[Literal["all", "off", ""]] = Field(None, description="all (default): mark every output; off")
 
     @app.put("/api/v1/system/settings", dependencies=deps, tags=["system"])
     def system_settings(body: SettingsBody):
@@ -439,6 +442,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         changes = body.model_dump(exclude_unset=True)
         for k, v in changes.items():
             if not v:
+                continue
+            if k == "watermark":
                 continue
             p = Path(v)
             if k == "ffmpeg" and not p.is_file():
@@ -485,17 +490,25 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     @app.post("/api/v1/voices", dependencies=deps, tags=["voices"], status_code=201)
     async def voice_add(file: UploadFile = File(...), name: str = Form(...), consent: bool = Form(False), description: str = Form(""),
                         gender: str = Form(""), language: str = Form(""), accent: str = Form(""), tags: str = Form(""), transcript: str = Form(""),
-                        clean: str = Form("", description="clean the clip first: light, medium or strong (empty = as recorded)")):
-        """Add a cloned voice (with consent). The response includes `quality_check` of the clip (noise, clipping, length)."""
+                        clean: str = Form("", description="clean the clip first: light, medium or strong (empty = as recorded)"),
+                        consent_by: str = Form("", description="who gave consent (the speaker's name), kept in the voice's consent record")):
+        """Add a cloned voice (with consent). The response includes `quality_check` of the clip (noise, clipping, length).
+        A consent record is kept with the voice: who, when, through what, and fingerprints of the clip (GET .../consent)."""
         p = await save_upload(file)
         try:
             wav = to_wav(p)
             return await run_in_threadpool(lambda: svc.voice_add(name, wav, consent=consent, description=description, gender=gender, language=language,
                                                                  accent=accent, tags=[t for t in tags.split(",") if t.strip()], transcript=transcript or None,
-                                                                 clean=clean or None))
+                                                                 clean=clean or None, consent_by=consent_by or None, via="api"))
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
+
+    @app.get("/api/v1/voices/{voice_id}/consent", dependencies=deps, tags=["voices"])
+    def voice_consent(voice_id: str):
+        """The voice's consent record ({given, by, via, statement, time, upload_sha256, ref_sha256, clip_unchanged}), or for
+        voices without one what their use rests on (`basis`: a dataset licence, a synthetic design)."""
+        return svc.voice_consent(voice_id)
 
     @app.post("/api/v1/voices/design/candidates", dependencies=deps, tags=["voices"])
     async def design_candidates(body: DesignCands):
@@ -1052,6 +1065,17 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return svc.tag_catalog()
 
     # ------------------------------------------------------------------ audio tools
+    @app.post("/api/v1/audio/detect", dependencies=deps, tags=["audio tools"])
+    async def audio_detect(file: UploadFile = File(...)):
+        """Is this audio marked as AI-generated (AudioSeal), and by FireVoice? -> {watermarked, probability (share of the
+        audio carrying a mark), firevoice, kind (render | convert), bits, seconds}. Survives MP3, cuts and level changes."""
+        p = await save_upload(file)
+        try:
+            return await run_in_threadpool(svc.audio_detect, to_wav(p))
+        finally:
+            for x in (p, p + ".wav"):
+                Path(x).unlink(missing_ok=True)
+
     @app.post("/api/v1/audio/analyze", dependencies=deps, tags=["audio tools"])
     async def audio_analyze(file: UploadFile = File(...)):
         """How good a recording is to clone from: SNR estimate, clipping, length, silence, a verdict and notes."""

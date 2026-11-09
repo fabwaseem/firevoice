@@ -33,3 +33,9 @@ def svc(tmp_path, monkeypatch):
     s._aligner = NullAligner()
     yield s
     s.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_watermark_by_default(monkeypatch):
+    """Tests check exact audio; the watermark tests turn it back on."""
+    monkeypatch.setenv("FIREVOICE_WATERMARK", "off")

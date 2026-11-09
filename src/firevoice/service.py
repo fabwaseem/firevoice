@@ -68,6 +68,7 @@ class TTSRequest:
     tail_ms: int = 280
     dictionary: Optional[object] = None      # extra pronunciation rules for this request: [{match, say, ...}] or {written: spoken}
     keep_takes: bool = False                # store every take of every passage (see /api/v1/renders) to compare, swap, re-take
+    watermark: Optional[bool] = None        # inaudible "made by FireVoice" mark; None = the server's policy (default: on)
 
     @classmethod
     def from_dict(cls, d: dict) -> "TTSRequest":
@@ -80,7 +81,7 @@ class TTSRequest:
         vals = {k: v for k, v in d.items() if v is not None or k in ("lufs", "instruct", "language")}
         # jobs and the CLI build requests from plain JSON: check types here the way pydantic does for /tts
         kinds = {"text": str, "engine": str, "voice": str, "style": str, "language": str, "instruct": str, "pace": float, "seed": int,
-                 "lufs": float, "candidates": int, "accept": float, "validate": bool, "lead_ms": int, "tail_ms": int, "keep_takes": bool,
+                 "lufs": float, "candidates": int, "accept": float, "validate": bool, "lead_ms": int, "tail_ms": int, "keep_takes": bool, "watermark": bool,
                  "params": dict, "style_overrides": dict}
         for k, v in list(vals.items()):
             want = kinds.get(k)
@@ -110,6 +111,7 @@ class Render:
     seconds: float
     warnings: list = field(default_factory=list)
     render_id: Optional[str] = None          # set when the render was kept (keep_takes)
+    watermarked: bool = False
 
     @property
     def audio(self) -> np.ndarray:
@@ -128,7 +130,7 @@ class Render:
         return {"engine": self.engine, "voice": self.request.voice, "style": self.request.style, "duration": round(self.duration, 3),
                 "sample_rate": self.sr, "seconds": round(self.seconds, 3), "rtf": getattr(st, "rtf", None), "chunks": getattr(st, "chunks", None),
                 "takes": getattr(st, "takes", None), "retries": getattr(st, "retries", None), "cache_hits": getattr(st, "cache_hits", None),
-                "warnings": self.warnings + list(self.result.warnings), "render_id": self.render_id,
+                "warnings": self.warnings + list(self.result.warnings), "render_id": self.render_id, "watermarked": self.watermarked,
                 "words": [w.__dict__ for w in self.result.words]}
 
 
@@ -416,6 +418,14 @@ class FireVoice:
         """Render `req`. `cancel` (an Event) stops it within a fraction of a second and drops its queued generations;
         `priority` 1 marks background work that yields the GPU to interactive renders."""
         eng, style, _params, warn = self.prepare(req)
+        mark = self._mark_wanted(req.watermark, warn)
+        if mark and on_chunk is not None:
+            user_cb = on_chunk
+
+            def on_chunk(c, _cb=user_cb):
+                if c.get("audio") is not None and len(c["audio"]):
+                    c = {**c, "audio": self._mark(c["audio"], c["sr"])}
+                _cb(c)
         ld = self._pool(eng, hold=True)
         t0 = time.perf_counter()
         try:
@@ -437,7 +447,9 @@ class FireVoice:
             with self._lock:
                 ld.active -= 1
                 ld.last_used = time.time()
-        r = Render(res, req, eng, time.perf_counter() - t0, warn)
+        if mark:
+            res.audio = self._mark(res.audio, res.sr)
+        r = Render(res, req, eng, time.perf_counter() - t0, warn, watermarked=mark)
         if req.keep_takes and res.chunks:
             r.render_id = self.renders.save(res, req.to_dict(), eng, lufs=req.lufs, lead_ms=req.lead_ms, tail_ms=req.tail_ms)
         return r
@@ -508,10 +520,47 @@ class FireVoice:
             raise FireVoiceError("not_found", str(e).strip("'\""))
 
     def render_audio(self, rid: str) -> tuple:
+        """The stitched chosen takes (marked like any render, unless the render asked not to be)."""
         try:
-            return self.renders.stitch(rid)
+            a, sr, words = self.renders.stitch(rid)
+            flag = (self.renders.get(rid).get("request") or {}).get("watermark")
         except KeyError as e:
             raise FireVoiceError("not_found", str(e).strip("'\""))
+        if self._mark_wanted(flag, None):
+            a = self._mark(a, sr)
+        return a, sr, words
+
+    # -------------------------------------------------------------------- watermark
+    def _mark_wanted(self, flag: Optional[bool], warn: Optional[list]) -> bool:
+        from . import watermark
+        if not watermark.wanted(flag):
+            return False
+        if not watermark.available():
+            if warn is not None and flag:
+                warn.append("not watermarked: the backend has no audioseal (pip install firevoice[watermark])")
+            return False
+        return True
+
+    def _mark(self, audio: np.ndarray, sr: int, kind: str = "render") -> np.ndarray:
+        from . import watermark
+        try:
+            return watermark.embed(audio, sr, kind)
+        except Exception as e:  # a failed mark must never cost the user their render
+            import logging
+            logging.getLogger("firevoice").warning("watermark failed: %s", e)
+            return audio
+
+    def audio_detect(self, path) -> dict:
+        """Is there an AI-audio watermark in this file, and is it FireVoice's?"""
+        from . import watermark
+        if not watermark.available():
+            raise FireVoiceError("unavailable", "the watermark detector needs the audioseal package (pip install firevoice[watermark])")
+        a, sr = self._read(path)
+        return watermark.detect(a, sr)
+
+    def watermark_status(self) -> dict:
+        from . import watermark
+        return {"policy": watermark.policy(), "available": watermark.available()}
 
     def render_take_path(self, rid: str, index: int, n: int) -> Path:
         try:
@@ -869,7 +918,9 @@ class FireVoice:
             import_voice_pack(data, self.voices.root, vid)
         except (ValueError, FileExistsError) as e:
             raise FireVoiceError("bad_request", str(e))
-        self.voices.update(vid, consent=True, imported=time.time())
+        prior = self.voices.get(vid).get("consent_record")
+        self.voices.update(vid, consent=True, imported=time.time(),
+                           consent_record=self._consent_record(vid, None, "import", extra={"original": prior} if prior else None))
         name = (self.voices.get(vid).get("name") or "")
         if name and any(str(v.get("name", "")).lower() == name.lower() and v["voice_id"] != vid for v in self.voices.list()):
             self.voices.update(vid, name=f"{name} ({vid})")
@@ -1135,7 +1186,7 @@ class FireVoice:
 
     def voice_add(self, name: str, audio_path: str | Path, *, consent: bool, description: str = "", gender: str = "", language: str = "",
                   accent: str = "", tags: Optional[list] = None, transcript: Optional[str] = None, source: str = "", license: str = "",
-                  clean: Optional[str] = None) -> dict:
+                  clean: Optional[str] = None, consent_by: Optional[str] = None, via: str = "api") -> dict:
         """Add a cloned voice. `clean` ("light", "medium", "strong") cleans the clip first. The result carries the clip's
         quality check (`quality_check`) so a client can warn about noise, clipping or length."""
         if not consent:
@@ -1168,8 +1219,53 @@ class FireVoice:
         except (ValueError, PermissionError) as e:
             raise FireVoiceError("bad_request", str(e))
         check = {"before": before, "after": analyze(a, sr) if clean else None, "cleaned": clean or None}
-        self.voices.update(meta["voice_id"], quality_check=check)
+        self.voices.update(meta["voice_id"], quality_check=check,
+                           consent_record=self._consent_record(meta["voice_id"], consent_by, via, original_clip=str(audio_path)))
         return {**self.voice(meta["voice_id"]), "quality_check": check}
+
+    # -------------------------------------------------------------------- consent records
+    CONSENT_STATEMENT = ("The person adding this voice confirmed that they are the speaker, or have the speaker's permission "
+                         "to clone this voice and generate speech with it.")
+
+    def _consent_record(self, vid: str, by: Optional[str], via: str, original_clip: Optional[str] = None, extra: Optional[dict] = None) -> dict:
+        """What was agreed, by whom, when, through what, and fingerprints of the clip it covers (the upload as received,
+        and the reference as stored), so a later change to the clip is visible."""
+        import datetime
+        import hashlib
+
+        def sha(p) -> Optional[str]:
+            try:
+                return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+            except OSError:
+                return None
+        ref = self.voices.root / vid / "ref.wav"
+        rec = {"given": True, "by": (by or "").strip()[:120] or None, "via": via, "statement": self.CONSENT_STATEMENT,
+               "time": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+               "upload_sha256": sha(original_clip) if original_clip else None, "ref_sha256": sha(ref)}
+        return {**rec, **(extra or {})}
+
+    def voice_consent(self, voice_id: str) -> dict:
+        """The voice's consent record, or what its permission rests on when it has none (a dataset licence, a design)."""
+        import hashlib
+        v = self.voice(voice_id)
+        meta = self.voices.get(v["voice_id"])
+        rec = meta.get("consent_record")
+        ref = self.voices.root / v["voice_id"] / "ref.wav"
+        now = hashlib.sha256(ref.read_bytes()).hexdigest() if ref.exists() else None
+        if rec:
+            return {"voice_id": v["voice_id"], "basis": "consent", **rec,
+                    "clip_unchanged": (rec.get("ref_sha256") == now) if rec.get("ref_sha256") and now else None,
+                    "clip_note": None if not rec.get("ref_sha256") or rec.get("ref_sha256") == now
+                    else "the reference clip changed after consent was recorded (cleaned or replaced)"}
+        lic, src = meta.get("license") or "", meta.get("source") or ""
+        if lic == "synthetic" or meta.get("category") == "designed" or src.startswith("designed"):
+            basis = "synthetic: a designed voice, not a recording of a real person"
+        elif lic:
+            basis = f"dataset licence {lic}: recorded by contributors who released their voices for this use"
+        else:
+            basis = "unknown: added before consent records were kept"
+        return {"voice_id": v["voice_id"], "basis": basis, "given": None, "source": src or None, "license": lic or None,
+                "added": meta.get("created")}
 
     # -------------------------------------------------------------------- audio tools: check, clean, voice changer
     @staticmethod
@@ -1272,6 +1368,8 @@ class FireVoice:
                 ld.last_used = time.time()
         out_sr = ld.pool.sr or 24000
         out = np.asarray(out, dtype=np.float32)
+        if self._mark_wanted(None, None):
+            out = self._mark(out, out_sr, "convert")
         if lufs is not None and len(out) > out_sr // 10:
             out = A.studio_chain(out, out_sr, lufs)
         return out, out_sr

@@ -145,11 +145,27 @@ The style fields:
 | `sample` | showcase paragraph |
 | `extra` | raw engine settings |
 
+### Watermark and consent
+
+Every output is marked as AI speech with an inaudible AudioSeal watermark (16 bits: "FireVoice", then `render` or
+`convert`). It survives MP3, cuts and level changes. This covers renders, streamed chunks, kept renders, projects and the
+voice changer. Policy: `FIREVOICE_WATERMARK` or the `watermark` setting (`all`, the default, or `off`). A request
+can pass `watermark: false`. `/tts` responses carry `X-Watermarked: 1|0`, and render info has `watermarked`. Without the
+optional `audioseal` package (`pip install firevoice[watermark]`) nothing is marked.
+
+| | |
+|---|---|
+| `POST /api/v1/audio/detect` | Multipart `file` -> `{watermarked, probability, firevoice, kind, bits, seconds}`. |
+| `GET /api/v1/voices/{id}/consent` | The voice's consent record `{basis: "consent", given, by, via, statement, time, upload_sha256, ref_sha256, clip_unchanged, clip_note}`, or for voices without one what their use rests on (`basis`: a dataset licence, a synthetic design). |
+
+Adding a voice (`POST /api/v1/voices`) takes `consent_by` (the speaker's name) for the record. Importing a voice pack
+keeps the pack's record under `original`.
+
 ### System paths and settings
 
 - `GET /health` adds `api_version` (the HTTP contract, now 2) and `min_client_api`, so clients can check compatibility.
 - `GET /api/v1/system/paths`: the data folder, engine venvs, weights and ffmpeg, each with where it came from.
-- `PUT /api/v1/system/settings`: `{"engines_dir", "weights_dir", "ffmpeg"}` stored in `settings.json`. An empty string
+- `PUT /api/v1/system/settings`: `{"engines_dir", "weights_dir", "ffmpeg", "watermark"}` stored in `settings.json`. An empty string
   removes a key. Folders must exist. `restart_required` is true when engine folders changed.
 
 ### Text to speech

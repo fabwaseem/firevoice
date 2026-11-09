@@ -239,6 +239,21 @@ firevoice voices build-styles --name Ember --styles calm,serious   # the voice's
 firevoice voices avatar --name Ember --image face.png
 ```
 
+## Watermark and consent
+
+Everything FireVoice makes carries an inaudible AudioSeal watermark that says so, the machine-readable marking EU AI
+Act Article 50 asks of synthetic audio from 2026-08-02. It survives MP3, edits and level changes. Every cloned voice
+keeps a consent record: who consented, when, through what, and fingerprints of the clip it covers.
+
+```bash
+pip install "firevoice[watermark]"                          # the marker and detector (small, CPU)
+firevoice audio detect clip.mp3                             # made by FireVoice (render); marked share 100%
+firevoice voices add --name Sara --ref sara.wav --consent --consent-by "Sara Khan"
+firevoice voices consent --name Sara                        # the record, and whether the clip changed since
+```
+
+Turn marking off with `FIREVOICE_WATERMARK=off`, the `watermark` setting, or `"watermark": false` on one request.
+
 ## Markup, styles and voices
 
 ### Markup
