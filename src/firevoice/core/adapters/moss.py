@@ -26,8 +26,17 @@ class MossAdapter(Adapter):
     vram_gb = 14.0
 
     def _load(self) -> None:
+        import soundfile as sf
         import torch
+        import torchaudio
         from transformers import AutoModel, AutoProcessor
+
+        # torchaudio 2.9 reads files only through TorchCodec (which needs FFmpeg DLLs on Windows); the processor just
+        # needs the reference clip as a tensor, so read it with soundfile instead
+        def _load_wav(path, *a, **k):
+            d, sr = sf.read(str(path), dtype="float32", always_2d=True)
+            return torch.from_numpy(d.T.copy()), sr
+        torchaudio.load = _load_wav
         try:
             torch.backends.cuda.enable_cudnn_sdp(False)
         except Exception:

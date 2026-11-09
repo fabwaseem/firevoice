@@ -92,7 +92,7 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
              weights=[("cvssp/audioldm2", "audioldm2")], check="diffusers", notes="sound effects; shares the sfx venv with musicgen"),
     Manifest("musicgen", "sfx", _T211, packages=["diffusers==0.35.2", "transformers==4.57.3", "accelerate==1.12.0", "scipy", "soundfile"],
              weights=[("facebook/musicgen-small", "musicgen-small")], check="transformers", notes="music beds; shares the sfx venv with audioldm2"),
-    Manifest("separator", "separator", _T211, packages=["audio-separator[cpu]==0.48.0", "soundfile"], check="audio_separator",
+    Manifest("separator", "separator", _T211, packages=["audio-separator[cpu]==0.48.0", "audioread", "soundfile"], check="audio_separator",
              warmup=("import logging; from audio_separator.separator import Separator; "
                      "s = Separator(model_file_dir='{weights}', output_dir='{weights}', log_level=logging.WARNING); "
                      "[s.load_model(model_filename=m) for m in " + repr(list(SEPARATOR_MODELS.values())) + "]; print('ready')"),
