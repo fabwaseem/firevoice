@@ -184,6 +184,19 @@ export interface DesignBatch {
   candidates: { n: number; seed: number; duration: number }[];
 }
 
+// ---------------------------------------------------------------- dialogue
+export interface DialogueTurn { speaker: string; voice?: string; text: string; start: number; end: number }
+export interface DialogueParse { turns: { speaker: string; text: string }[]; speakers: string[]; cast: Record<string, { voice?: string; style?: string }> }
+export interface DialogueResult {
+  audio_base64: string;
+  format: string;
+  duration: number;
+  sample_rate: number;
+  turns: DialogueTurn[];
+  words: (WordTime & { speaker: string })[];
+  cast: Record<string, { voice?: string; style?: string }>;
+}
+
 // ---------------------------------------------------------------- projects
 export type ParagraphStatus = "draft" | "rendered" | "stale" | "locked";
 export interface Paragraph {

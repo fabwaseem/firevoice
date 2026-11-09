@@ -13,6 +13,9 @@ const MARKUP: { label: string; insert: string; hint: string; needsTags?: boolean
   { label: "[sigh]", insert: "[sigh]", hint: "Paralinguistic tag", needsTags: true },
   { label: "[gasp]", insert: "[gasp]", hint: "Paralinguistic tag", needsTags: true },
   { label: "[chuckle]", insert: "[chuckle]", hint: "Paralinguistic tag", needsTags: true },
+  { label: "[cough]", insert: "[cough]", hint: "Paralinguistic tag", needsTags: true },
+  { label: "[clear throat]", insert: "[clear throat]", hint: "Paralinguistic tag", needsTags: true },
+  { label: "[groan]", insert: "[groan]", hint: "Paralinguistic tag", needsTags: true },
 ];
 
 export function ScriptEditor({ supportsTags, disabled, className }: { supportsTags: boolean; disabled?: boolean; className?: string }) {
@@ -59,6 +62,18 @@ export function ScriptEditor({ supportsTags, disabled, className }: { supportsTa
             </button>
           </Tooltip>
         ))}
+        <Tooltip content="Switch the delivery from here until [normal]; works with every engine">
+          <select
+            aria-label="Insert a delivery tag"
+            disabled={disabled}
+            value=""
+            onChange={(e) => { if (e.target.value) insert(e.target.value); }}
+            className="h-7 rounded-[8px] border border-line bg-surface px-2 font-mono text-[11.5px] text-ink-2 hover:border-line-strong disabled:opacity-50"
+          >
+            <option value="">delivery…</option>
+            {["whisper", "excited", "calm", "sad", "angry", "serious", "dramatic", "curious", "normal"].map((t) => <option key={t} value={`[${t}]`}>[{t}]</option>)}
+          </select>
+        </Tooltip>
         {!supportsTags && (
           <Tooltip content="This engine ignores [laugh] and [sigh]. Chatterbox Turbo reads them.">
             <span className="ml-1 inline-flex items-center gap-1 text-[11.5px] text-faint">

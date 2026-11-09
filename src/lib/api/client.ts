@@ -2,7 +2,7 @@ import { useSettings } from "@/stores/settings";
 import type {
   ApiErrorBody, Engine, Health, Job, JobEvent, JobKind, Options, Style, STTResult, SystemInfo, TTSJson, TTSRequest,
   Voice, VoiceCollection, StreamEvent, DictRule, DictRuleInput, DictView, KeptRender, WordTime,
-  Project, ProjectSummary, ChapterEdit, AudiobookCheck, ClipCheck, DesignBatch,
+  Project, ProjectSummary, ChapterEdit, AudiobookCheck, ClipCheck, DesignBatch, DialogueParse, DialogueResult,
 } from "./types";
 
 export class ApiError extends Error {
@@ -191,6 +191,15 @@ export const api = {
   replaceRules: (rules: DictRuleInput[]) => request<{ rules: DictRule[] }>("/api/v1/dictionary", { method: "PUT", body: json({ rules }) }),
   testDictionary: (text: string, engine?: string | null) =>
     request<{ text: string; spoken: string; engine: string }>("/api/v1/dictionary/test", { method: "POST", body: json({ text, engine: engine ?? undefined }) }),
+
+  // ---- dialogue
+  dialogueParse: (script: string, cast?: Record<string, unknown>) => request<DialogueParse>("/api/v1/dialogue/parse", { method: "POST", body: json({ script, cast }) }),
+  dialogue: (body: Record<string, unknown>) => request<DialogueResult>("/api/v1/dialogue", { method: "POST", body: json(body) }),
+  dialogueZip: async (body: Record<string, unknown>) => {
+    const res = await fetch(url("/api/v1/dialogue"), { method: "POST", body: json({ ...body, response: "zip" }), headers: { "Content-Type": "application/json", ...authHeaders() } });
+    if (!res.ok) throw await parseError(res);
+    return res.blob();
+  },
 
   // ---- audio tools
   analyzeAudio: (file: Blob, name = "audio.wav") => {
