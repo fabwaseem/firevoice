@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -73,7 +74,27 @@ class TTSRequest:
         unknown = set(d) - known
         if unknown:
             raise FireVoiceError("bad_request", f"unknown request field(s): {', '.join(sorted(unknown))}")
-        return cls(**{k: v for k, v in d.items() if v is not None or k in ("lufs", "instruct", "language")})
+        if not isinstance(d, dict):
+            raise FireVoiceError("bad_request", "a request must be a JSON object")
+        vals = {k: v for k, v in d.items() if v is not None or k in ("lufs", "instruct", "language")}
+        # jobs and the CLI build requests from plain JSON: check types here the way pydantic does for /tts
+        kinds = {"text": str, "engine": str, "voice": str, "style": str, "language": str, "instruct": str, "pace": float, "seed": int,
+                 "lufs": float, "candidates": int, "accept": float, "validate": bool, "lead_ms": int, "tail_ms": int,
+                 "params": dict, "style_overrides": dict}
+        for k, v in list(vals.items()):
+            want = kinds.get(k)
+            if v is None or want is None:
+                continue
+            ok = isinstance(v, want) and not (want in (int, float) and isinstance(v, bool))
+            if not ok and want is float and isinstance(v, int) and not isinstance(v, bool):
+                vals[k], ok = float(v), True
+            if not ok and want is int and isinstance(v, float) and v.is_integer():
+                vals[k], ok = int(v), True
+            if not ok:
+                raise FireVoiceError("bad_request", f"field {k!r} must be {want.__name__}, got {type(v).__name__} {v!r}"[:200])
+        if "text" not in vals or not str(vals["text"]).strip():
+            raise FireVoiceError("bad_request", "field 'text' is required")
+        return cls(**vals)
 
     def to_dict(self) -> dict:
         return dataclasses.asdict(self)
@@ -132,6 +153,7 @@ class FireVoice:
         self.vram_reserve_gb = vram_reserve_gb
         self.max_text_chars = max_text_chars
         self.voices = voices or VoiceLibrary()
+        self.voices.transcriber = lambda a, sr: self.aligner().transcribe_text(a, sr)[0]
         self._loaded: dict[str, _Loaded] = {}
         self._lock = threading.RLock()
         self._engine_locks: dict[str, threading.Lock] = {}
@@ -161,7 +183,8 @@ class FireVoice:
         if loaded is not None:
             p = loaded.pool
             d.update(workers=len(p.workers), runtime_sample_rate=p.sr, active_requests=loaded.active, loaded_at=loaded.loaded_at, last_used=loaded.last_used,
-                     boot_seconds=getattr(p, "boot_seconds", None), pool_stats=dict(p.stats), runtime_caps=p.caps)
+                     boot_seconds=getattr(p, "boot_seconds", None), pool_stats=dict(p.stats), runtime_caps=p.caps,
+                     broken=getattr(p, "broken", None))
         return d
 
     def _resolve_engine(self, name: Optional[str]) -> str:
@@ -201,17 +224,31 @@ class FireVoice:
             pass
         _free_cuda_cache()
 
-    def _pool(self, name: str, workers: Optional[int] = None):
+    def _pool(self, name: str, workers: Optional[int] = None, hold: bool = False):
+        """The loaded engine `name`, booting it if needed. `hold=True` also counts the caller as an active request in
+        the same locked step, so no other request can unload the engine between finding it and using it (the caller
+        must decrement `active` when done)."""
         from .core.pool import EnginePool
+
+        def take(ld):
+            if hold:
+                ld.active += 1
+                ld.last_used = time.time()
+            return ld
+        stale = None
         with self._lock:
             ld = self._loaded.get(name)
-            if ld is not None:
-                return ld
+            if ld is not None and getattr(ld.pool, "broken", None) and ld.active == 0:
+                stale = self._loaded.pop(name)      # every worker died: boot it again rather than fail forever
+            elif ld is not None:
+                return take(ld)
             elock = self._engine_locks.setdefault(name, threading.Lock())
+        if stale is not None:
+            self._stop(stale)
         with elock:   # one boot per engine even if many requests arrive at once
             with self._lock:
                 if name in self._loaded:
-                    return self._loaded[name]
+                    return take(self._loaded[name])
             inf = catalog.info(name)
             st = inf.status()
             if not st["ready"]:
@@ -232,7 +269,7 @@ class FireVoice:
             ld = _Loaded(name, pool, now, now)
             with self._lock:
                 self._loaded[name] = ld
-            return ld
+                return take(ld)
 
     def _make_room(self, need_gb: float, keep: str) -> None:
         free = _free_vram_gb()
@@ -328,17 +365,18 @@ class FireVoice:
         style = dataclasses.replace(base, extra=extra, **fields)
         return eng, style, params, warn
 
-    def tts(self, req: TTSRequest, on_chunk: Optional[Callable[[dict], None]] = None, cancel: Optional[threading.Event] = None) -> Render:
+    def tts(self, req: TTSRequest, on_chunk: Optional[Callable[[dict], None]] = None, cancel: Optional[threading.Event] = None,
+            priority: int = 0) -> Render:
+        """Render `req`. `cancel` (an Event) stops it within a fraction of a second and drops its queued generations;
+        `priority` 1 marks background work that yields the GPU to interactive renders."""
         eng, style, _params, warn = self.prepare(req)
-        ld = self._pool(eng)
-        with self._lock:
-            ld.active += 1
-            ld.last_used = time.time()
+        ld = self._pool(eng, hold=True)
         t0 = time.perf_counter()
         try:
             s = self._synth(ld, req.validate, req.candidates, req.accept)
             res = s.speak(req.text, voice=req.voice or "default", custom_style=style, pace=req.pace, seed=req.seed,
-                          lufs=req.lufs, lead_ms=req.lead_ms, tail_ms=req.tail_ms, lang=req.language, on_chunk=on_chunk, cancel=cancel)
+                          lufs=req.lufs, lead_ms=req.lead_ms, tail_ms=req.tail_ms, lang=req.language, on_chunk=on_chunk, cancel=cancel,
+                          priority=priority)
         except Cancelled:
             raise
         except FireVoiceError:
@@ -499,6 +537,8 @@ class FireVoice:
 
     def voice_set_transcript(self, voice_id: str, transcript: str) -> dict:
         self.voice(voice_id)
+        if not (transcript or "").strip():
+            raise FireVoiceError("bad_request", "the transcript is empty; it must be the exact words spoken in the reference clip")
         (Path(self.voices.get(voice_id)["dir"]) / "ref.txt").write_text(transcript.strip(), encoding="utf-8")
         self._forget_voice(voice_id)
         return self.voice(voice_id)
@@ -516,6 +556,8 @@ class FireVoice:
 
     def voice_add_style_ref(self, voice_id: str, style: str, audio_path: str | Path, transcript: Optional[str] = None) -> dict:
         self.voice(voice_id)
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", style or ""):
+            raise FireVoiceError("bad_request", f"invalid style name {style!r}")
         try:
             get_style(style)
         except KeyError as e:
@@ -562,13 +604,13 @@ class FireVoice:
         p = self.voices.root / v["voice_id"] / "preview.mp3"
         return p if p.exists() else self.voice_preview_path(v["voice_id"])
 
-    def voice_render_preview(self, voice_id: str, engine: Optional[str] = None, seed: int = 1234) -> dict:
+    def voice_render_preview(self, voice_id: str, engine: Optional[str] = None, seed: int = 1234, priority: int = 0) -> dict:
         from .branding import preview_text
         v = self.voice(voice_id)
         text, lang = preview_text(v)
         r = self.tts(TTSRequest(text=text, engine=engine, voice=v["voice_id"], style="conversational", instruct="", language=lang, seed=seed,
-                                validate=lang == "en"))
-        (self.voices.root / v["voice_id"] / "preview.mp3").write_bytes(self.encode(r, "mp3"))
+                                validate=lang == "en"), priority=priority)
+        _atomic_write(self.voices.root / v["voice_id"] / "preview.mp3", self.encode(r, "mp3"))
         return {**self.voice(v["voice_id"]), "preview_text": text, "preview_seconds": round(r.duration, 2)}
 
     def voice_brand(self, report: Optional[str] = None, force: bool = False, log=None, only: Optional[list[str]] = None,
@@ -580,7 +622,7 @@ class FireVoice:
         report = report or os.environ.get("FIREVOICE_REPORT") or str(Path(__file__).resolve().parents[2] / "samples" / "voxcpm2" / "judge" / "report.json")
         for k in list(only or []) + list(names or {}):
             if not self.voices.exists(k):
-                raise FireVoiceError("voice_not_found", f"no voice {k!r}")
+                raise FireVoiceError("not_found", f"no voice {k!r}")
         return brand(self.voices, load_report(report), force=force, only=only, names=names, log=log or (lambda *_: None))
 
     def _forget_voice(self, voice_id: str) -> None:
@@ -630,6 +672,8 @@ class FireVoice:
         return self.style(name)
 
     def style_remove(self, name: str) -> dict:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", name or ""):
+            raise FireVoiceError("bad_request", f"invalid style name {name!r}: lowercase letters, digits, - and _ only")
         f = _user_style_dir() / f"{name}.json"
         if not f.exists():
             raise FireVoiceError("bad_request" if name in all_styles() else "not_found",
@@ -706,3 +750,11 @@ def _free_cuda_cache() -> None:
 def _null_aligner():
     from .asr import NullAligner
     return NullAligner()
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Write via a temp file and rename, so a crash never leaves a half-written file behind."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)

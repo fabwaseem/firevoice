@@ -11,6 +11,7 @@ Robustness rules
 from __future__ import annotations
 
 import json
+import itertools
 import os
 import queue
 import subprocess
@@ -28,6 +29,7 @@ import numpy as np
 
 from . import protocol as P
 from .registry import EngineSpec, get_engine
+from ..types import Cancelled
 
 
 def _kill_tree(proc: subprocess.Popen) -> None:
@@ -71,6 +73,10 @@ class Job:
     future: Future = field(default_factory=Future)
     attempts: int = 0
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
+    priority: int = 0                         # 0 = someone is waiting (playground, API render), 1 = background job
+    on_part: Optional[object] = None          # callable(np.ndarray): stream pieces of this generation as they decode
+    parts_sent: int = 0
+    group: Optional[threading.Event] = None   # set = the render this belongs to was cancelled: drop, do not run
 
 
 class _Worker:
@@ -152,7 +158,7 @@ class _Worker:
             return None
         return box[0] if box else None
 
-    def request(self, req: dict, timeout: float) -> dict:
+    def request(self, req: dict, timeout: float, on_event=None) -> dict:
         if not self.alive():
             return {"ok": False, "error": "worker not running", "kind": "crash"}
         req.setdefault("id", uuid.uuid4().hex[:12])
@@ -164,6 +170,10 @@ class _Worker:
             r = self._read(timeout)
             if r is None:
                 return {"ok": False, "error": f"timeout after {timeout}s", "kind": "hang"}
+            if r.get("event") == "part" and r.get("id") == req["id"]:
+                if on_event is not None:
+                    on_event(r)
+                continue
             if r.get("id") == req["id"] or r.get("id") is None:
                 return r
 
@@ -181,7 +191,22 @@ class _Worker:
             r = self.ensure_voice(job.voice)
             if not r.get("ok"):
                 return r
-        return self.request({"op": "synth", "text": job.text, "voice_id": job.voice.voice_id if job.voice else None, "params": job.params, "seed": job.seed}, timeout=self.pool.spec.synth_timeout)
+        req = {"op": "synth", "text": job.text, "voice_id": job.voice.voice_id if job.voice else None, "params": job.params, "seed": job.seed}
+        if job.on_part is None or not self.caps.get("streaming"):
+            return self.request(req, timeout=self.pool.spec.synth_timeout)
+
+        def part(r):
+            try:
+                a = np.load(r["path"])
+                os.remove(r["path"])
+            except Exception:
+                return
+            job.parts_sent += 1
+            try:
+                job.on_part(a)
+            except Exception:
+                pass
+        return self.request({**req, "op": "synth_stream"}, timeout=self.pool.spec.synth_timeout, on_event=part)
 
 
 class EnginePool:
@@ -196,7 +221,10 @@ class EnginePool:
         self.n = max(1, int(workers or self.spec.default_workers))
         self.max_retries = max_retries
         self.workers: list[_Worker] = []
-        self.q: "queue.Queue[Job | None]" = queue.Queue()
+        # (priority, order, job): interactive renders go ahead of background jobs, otherwise first come first served
+        self.q: "queue.PriorityQueue" = queue.PriorityQueue()
+        self._order = itertools.count()
+        self._stopping = False
         self.threads: list[threading.Thread] = []
         self.started = False
         self.lock = threading.Lock()
@@ -267,12 +295,24 @@ class EnginePool:
         self.boot_seconds = round(time.perf_counter() - t0, 2)
         return self
 
+    def _put(self, job: Optional[Job]) -> None:
+        self.q.put((-1 if job is None else job.priority, next(self._order), job))
+
     def stop(self) -> None:
+        """Stop the workers. Requests still queued fail at once with "engine stopped" instead of waiting forever."""
+        self._stopping = True
+        self.started = False
+        while True:
+            try:
+                _, _, job = self.q.get_nowait()
+            except queue.Empty:
+                break
+            if job is not None and not job.future.done():
+                job.future.set_exception(RuntimeError(f"{self.spec.name}: engine stopped"))
         for _ in self.workers:
-            self.q.put(None)
+            self._put(None)
         for w in self.workers:
             w.stop()
-        self.started = False
 
     def __enter__(self):
         return self.start()
@@ -285,12 +325,20 @@ class EnginePool:
         return self.workers[0].caps if self.workers else {}
 
     # -- scheduling ------------------------------------------------------------------
-    def submit(self, text: str, voice: Optional[Voice], params: Optional[dict] = None, seed: int = 0) -> Future:
+    def submit(self, text: str, voice: Optional[Voice], params: Optional[dict] = None, seed: int = 0, *, priority: int = 0,
+               group: Optional[threading.Event] = None, on_part=None) -> Future:
+        """Queue one generation. `priority` 0 runs before 1 (background jobs). `group`: an Event shared by every request
+        of one render; once it is set, requests of that render still in the queue are dropped without touching the GPU."""
         if not self.started:
             self.start()
-        job = Job(text=text, voice=voice, params=params or {}, seed=seed)
-        self.stats["jobs"] += 1
-        self.q.put(job)
+        if getattr(self, "broken", None):
+            f: Future = Future()
+            f.set_exception(RuntimeError(self.broken))
+            return f
+        job = Job(text=text, voice=voice, params=params or {}, seed=seed, priority=priority, group=group, on_part=on_part)
+        with self.lock:
+            self.stats["jobs"] += 1
+        self._put(job)
         return job.future
 
     def synth(self, text: str, voice: Optional[Voice], params: Optional[dict] = None, seed: int = 0, timeout: Optional[float] = None) -> np.ndarray:
@@ -306,10 +354,16 @@ class EnginePool:
 
     def _loop(self, w: _Worker) -> None:
         while True:
-            job = self.q.get()
+            _, _, job = self.q.get()
             if job is None:
                 return
-            if job.future.cancelled():
+            if job.attempts == 0 and not job.future.set_running_or_notify_cancel():
+                continue                  # Future.cancel() was called while it waited
+            if job.group is not None and job.group.is_set():
+                job.future.set_exception(Cancelled("render cancelled"))
+                continue
+            if self._stopping:
+                job.future.set_exception(RuntimeError(f"{self.spec.name}: engine stopped"))
                 continue
             while time.time() < self.oom_until and w.index > 0:
                 time.sleep(0.2)       # backoff: only worker 0 keeps going after an OOM
@@ -334,15 +388,29 @@ class EnginePool:
             # restart only a worker that is actually gone or hung; a healthy worker that raised keeps serving
             if not w.alive() or kind == "hang":
                 self.stats["restarts"] += 1
-                self._restart(w)
+                if not self._restart(w):
+                    # it will not come back: stop serving from this slot so it cannot burn other requests' retries
+                    w.dead = True
+                    if any(not getattr(x, "dead", False) for x in self.workers):
+                        self._put(job)            # another worker takes it, without spending a retry
+                    else:
+                        self.broken = f"{self.spec.name}: every worker failed to restart ({str(r.get('error'))[:160]})"
+                        job.future.set_exception(RuntimeError(self.broken))
+                        self._fail_queued(self.broken)
+                    return
             job.attempts += 1
-            if kind != "bad_input" and job.attempts <= self.max_retries:
-                self.stats["retries"] += 1
-                self.q.put(job)
+            if job.parts_sent:
+                # part of this take was already played to someone: a fresh take would not match it, so fail instead
+                job.future.set_exception(RuntimeError(f"{self.spec.name}: {r.get('error')} (after streaming had started)"))
+                continue
+            if kind != "bad_input" and job.attempts <= self.max_retries and not self._stopping and not (job.group and job.group.is_set()):
+                with self.lock:
+                    self.stats["retries"] += 1
+                self._put(job)
             else:
                 job.future.set_exception(RuntimeError(f"{self.spec.name}: {r.get('error')}"))
 
-    def _restart(self, w: _Worker) -> None:
+    def _restart(self, w: _Worker) -> bool:
         try:
             w.stop()
         except Exception:
@@ -350,10 +418,20 @@ class EnginePool:
         for attempt in range(3):
             try:
                 w.start()
-                return
+                return True
             except Exception as e:
                 sys.stderr.write(f"[firevoice] restart of {self.spec.name}-{w.index} failed ({attempt + 1}/3): {str(e)[:200]}\n")
                 time.sleep(2 * (attempt + 1))
+        return False
+
+    def _fail_queued(self, message: str) -> None:
+        while True:
+            try:
+                _, _, job = self.q.get_nowait()
+            except queue.Empty:
+                return
+            if job is not None and not job.future.done():
+                job.future.set_exception(RuntimeError(message))
 
     def worker_stats(self) -> list[dict]:
         out = []

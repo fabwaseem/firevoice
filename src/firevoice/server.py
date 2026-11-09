@@ -48,11 +48,13 @@ import base64
 import json
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 from . import audio as A
 from .service import FireVoice, FireVoiceError, TTSRequest
+from .types import Cancelled
 
 TAGS = [
     {"name": "system", "description": "Health, GPU and everything a UI needs in one call (`/api/v1/options`)."},
@@ -126,7 +128,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     app.state.svc = svc
     app.add_middleware(CORSMiddleware, allow_origins=cors_origins or [], allow_credentials=False, allow_methods=["*"], allow_headers=["*"],
                        allow_origin_regex=None if cors_origins else r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost|https?://tauri\.localhost|app://.*)$",
-                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "Content-Disposition"])
+                       expose_headers=["X-Duration", "X-Sample-Rate", "X-Engine", "X-RTF", "X-Warnings", "X-Warning-Count", "Content-Disposition"])
 
     # ------------------------------------------------------------------ errors + auth
     def err(code: str, message: str, status: Optional[int] = None):
@@ -135,6 +137,17 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     @app.exception_handler(FireVoiceError)
     async def _fv(_req, e: FireVoiceError):
         return err(e.code, e.message)
+
+    @app.exception_handler(Cancelled)
+    async def _cancelled(_req, e: Cancelled):
+        return err("cancelled", "the render was cancelled", 499)
+
+    @app.exception_handler(Exception)
+    async def _any(_req, e: Exception):
+        # every failure keeps the documented {"error": {code, message}} shape, never a plain-text 500
+        import logging
+        logging.getLogger("firevoice").exception("unhandled error")
+        return err("internal", f"{type(e).__name__}: {str(e)[:300]}", 500)
 
     @app.exception_handler(RequestValidationError)
     async def _val(_req, e: RequestValidationError):
@@ -218,7 +231,9 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     def info_headers(r) -> dict:
         i = r.info()
         return {"X-Duration": str(i["duration"]), "X-Sample-Rate": str(r.sr), "X-Engine": i["engine"], "X-RTF": str(i["rtf"]),
-                "X-Warnings": str(len(i["warnings"]))}
+                # the warnings themselves (";"-separated, ASCII-safe for a header), and how many there were
+                "X-Warnings": "; ".join(w.replace(";", ",") for w in i["warnings"]).encode("ascii", "replace").decode()[:900],
+                "X-Warning-Count": str(len(i["warnings"]))}
 
     async def save_upload(f: UploadFile) -> str:
         data = await f.read()
@@ -244,8 +259,10 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     def sse(gen):
         def body():
+            yield "retry: 3000\n\n"
             for ev in gen:
-                yield f"event: {ev.get('type', 'message')}\ndata: {json.dumps(ev, default=str, ensure_ascii=False)}\n\n"
+                eid = f"id: {ev['seq']}\n" if ev.get("seq") is not None and ev.get("type") != "ping" else ""
+                yield f"{eid}event: {ev.get('type', 'message')}\ndata: {json.dumps(ev, default=str, ensure_ascii=False)}\n\n"
         return StreamingResponse(body(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     # ------------------------------------------------------------------ pages
@@ -392,12 +409,23 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return svc.style_remove(name)
 
     # ------------------------------------------------------------------ tts
+    async def render_until_disconnect(request, req):
+        """Render in the thread pool, and cancel the render (dropping its queued GPU work) if the client goes away."""
+        import asyncio
+        cancel = threading.Event()
+        task = asyncio.ensure_future(run_in_threadpool(lambda: svc.tts(req, cancel=cancel)))
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done and await request.is_disconnected():
+                cancel.set()
+        return task.result()
+
     @app.post("/api/v1/tts", dependencies=deps, tags=["tts"], responses={200: {
         "description": "audio in the requested format (or JSON when response=json)",
         "content": {"audio/mpeg": {}, "audio/wav": {}, "application/json": {}}}})
-    async def tts(body: TTSBody = Body(openapi_examples=TTS_EXAMPLES)):
+    async def tts(request: Request, body: TTSBody = Body(openapi_examples=TTS_EXAMPLES)):
         req = body.request()
-        r = await run_in_threadpool(svc.tts, req)
+        r = await render_until_disconnect(request, req)
         data = await run_in_threadpool(svc.encode, r, body.format, body.sample_rate)
         if body.response == "json":
             return {"audio_base64": base64.b64encode(data).decode(), "format": body.format, **r.info()}
@@ -412,6 +440,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         fmt = body.format if body.format in ("wav", "pcm16", "mp3", "ogg", "opus", "flac") else "wav"
 
         def events():
+            # svc.stream cancels the render (and its queued GPU work) when this generator is closed on disconnect
             for ev in svc.stream(req):
                 if ev["type"] == "chunk":
                     audio = ev.pop("audio")
@@ -464,7 +493,10 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return {"jobs": svc.jobs.list(status=status, kind=kind, limit=limit), "counts": svc.jobs.counts()}
 
     @app.get("/api/v1/jobs/events", dependencies=deps, tags=["jobs"])
-    def job_events_all(since: int = 0):
+    def job_events_all(request: Request, since: Optional[int] = None):
+        """Every job event. Resume with ?since=<id> or the browser's automatic Last-Event-ID header; with neither,
+        only new events are sent (no replay of history: list the jobs for that)."""
+        since = _resume_from(request, since, svc.jobs.seq)
         return sse(svc.jobs.events(since=since))
 
     @app.get("/api/v1/jobs/{job_id}", dependencies=deps, tags=["jobs"])
@@ -472,9 +504,9 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return svc.jobs.get(job_id)
 
     @app.get("/api/v1/jobs/{job_id}/events", dependencies=deps, tags=["jobs"])
-    def job_events(job_id: str, since: int = 0):
+    def job_events(job_id: str, request: Request, since: Optional[int] = None):
         svc.jobs.get(job_id)
-        return sse(svc.jobs.events(since=since, job_id=job_id))
+        return sse(svc.jobs.events(since=_resume_from(request, since, 0), job_id=job_id))
 
     @app.post("/api/v1/jobs/{job_id}/cancel", dependencies=deps, tags=["jobs"])
     def job_cancel(job_id: str):
@@ -513,15 +545,15 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                           seed=body.seed or 1234, style_overrides=over)
 
     @app.post("/v1/text-to-speech/{voice_id}", dependencies=deps, tags=["elevenlabs"])
-    async def xi_tts(voice_id: str, body: XITTS, output_format: str = "mp3_44100_128"):
-        r = await run_in_threadpool(svc.tts, xi_request(voice_id, body))
+    async def xi_tts(request: Request, voice_id: str, body: XITTS, output_format: str = "mp3_44100_128"):
+        r = await render_until_disconnect(request, xi_request(voice_id, body))
         fmt = "wav" if output_format.startswith(("pcm", "wav")) else "mp3"
         data = await run_in_threadpool(svc.encode, r, fmt)
         return Response(data, media_type=A.media_type(fmt), headers=info_headers(r))
 
     @app.post("/v1/text-to-speech/{voice_id}/with-timestamps", dependencies=deps, tags=["elevenlabs"])
-    async def xi_tts_ts(voice_id: str, body: XITTS):
-        r = await run_in_threadpool(svc.tts, xi_request(voice_id, body))
+    async def xi_tts_ts(request: Request, voice_id: str, body: XITTS):
+        r = await render_until_disconnect(request, xi_request(voice_id, body))
         data = await run_in_threadpool(svc.encode, r, "mp3")
         chars, starts, ends = [], [], []
         for w in r.result.words:   # character times are interpolated inside each word
@@ -566,6 +598,18 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         import time as _t
 
         from .batch import run_batch
+        from .service import home
+        # this route writes files: keep it inside FIREVOICE_HOME/exports (a relative out_dir lands there)
+        base = (home() / "exports").resolve()
+        out = Path(body.out_dir)
+        out = (out if out.is_absolute() else base / out).resolve()
+        roots = [home().resolve()] + [Path(x).resolve() for x in os.environ.get("FIREVOICE_EXPORT_ROOTS", "").split(os.pathsep) if x.strip()]
+        if not any(out == r or r in out.parents for r in roots):
+            raise FireVoiceError("bad_request", f"out_dir must be inside {base} (a relative path is resolved there) or a folder "
+                                               "listed in FIREVOICE_EXPORT_ROOTS")
+        if any("id" not in ln or "text" not in ln for ln in body.lines):
+            raise FireVoiceError("bad_request", "every line needs an 'id' and a 'text'")
+        body.out_dir = str(out)
         eng = svc._resolve_engine(body.engine)
         ld = await run_in_threadpool(svc._pool, eng)
         s = svc._synth(ld, True, 1, 0.9)
@@ -582,9 +626,19 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     return app
 
 
+def _resume_from(request, since: Optional[int], default: int) -> int:
+    """Where an event stream starts: ?since=, else the Last-Event-ID header an EventSource sends on reconnect."""
+    if since is not None:
+        return since
+    h = request.headers.get("last-event-id")
+    if h and h.strip().isdigit():
+        return int(h.strip())
+    return default
+
+
 def _media(p: Path) -> str:
     ext = p.suffix.lower().lstrip(".")
-    return {"json": "application/json", "pcm": "audio/L16", "m4a": "audio/aac", "opus": "audio/ogg"}.get(ext) or next(
+    return {"json": "application/json", "pcm": "audio/L16", "m4a": "audio/mp4", "opus": "audio/ogg"}.get(ext) or next(
         (v[1] for k, v in A.FORMATS.items() if v[2] == ext), "application/octet-stream")
 
 

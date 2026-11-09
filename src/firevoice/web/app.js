@@ -19,7 +19,7 @@ const TIER = { S: "Top pick", A: "Excellent", B: "Great", C: "Good" };
 const tierBadge = v => v.quality?.tier ? `<span class="tier ${v.quality.tier}" title="Listening test: #${v.quality.rank} of ${v.quality.of}">${v.quality.tier === "S" ? "★ " : ""}${TIER[v.quality.tier]}</span>` : "";
 const vName = id => { if (!id || id === "default") { const d = (window.S?.voices || []).find(v => v.default); return d ? (d.name || d.voice_id) : "Default voice"; }
   if (id.startsWith("design:")) return "Designed: " + id.slice(7); const v = (window.S?.voices || []).find(x => x.voice_id === id); return v ? (v.name || id) : id; };
-const MIME = { mp3: "audio/mpeg", wav: "audio/wav", flac: "audio/flac", ogg: "audio/ogg", opus: "audio/ogg", m4a: "audio/aac" };
+const MIME = { mp3: "audio/mpeg", wav: "audio/wav", flac: "audio/flac", ogg: "audio/ogg", opus: "audio/ogg", m4a: "audio/mp4" };
 const b64ToBytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
 
 // ------------------------------------------------------------------------------------------------ API

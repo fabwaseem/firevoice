@@ -36,6 +36,8 @@ class VoxCPM2Adapter(Adapter):
     passage_chars = 360
     # VoxCPM2 reads "GPU" and "API" as letters on its own; spaced letters ("G P U") make it stop after each one
     spell_acronyms = False
+    # generate_streaming decodes audio step by step: the first sound is ready long before the passage is finished
+    supports_streaming = True
 
     def _load(self) -> None:
         from voxcpm import VoxCPM
@@ -54,6 +56,22 @@ class VoxCPM2Adapter(Adapter):
 
     def _prepare_voice(self, ref_path, ref_text, desc):
         return {"ref": ref_path, "ref_text": ref_text, "desc": desc}
+
+    def _generate_kwargs(self, text, cond, params) -> dict:
+        """The same voice modes as _synth, as keyword arguments for generate / generate_streaming."""
+        cond = cond or {}
+        cfg = float(params.get("cfg_value", 2.0))
+        steps = int(params.get("inference_timesteps", 10))
+        instruct = params.get("instruct")
+        if cond.get("ref"):
+            if params.get("ultimate", True) and cond.get("ref_text"):
+                return dict(text=text, prompt_wav_path=cond["ref"], prompt_text=cond["ref_text"], reference_wav_path=cond["ref"], cfg_value=cfg, inference_timesteps=steps)
+            return dict(text=f"({instruct}) {text}" if instruct else text, reference_wav_path=cond["ref"], cfg_value=cfg, inference_timesteps=steps)
+        desc = " ".join(x for x in [cond.get("desc") or "A clear natural adult voice.", instruct] if x)
+        return dict(text=f"({desc}) {text}", cfg_value=cfg, inference_timesteps=steps)
+
+    def _synth_stream(self, text, cond, params, seed):
+        yield from self.m.generate_streaming(**self._generate_kwargs(text, cond, params))
 
     def _synth(self, text, cond, params, seed):
         cond = cond or {}

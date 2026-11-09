@@ -19,6 +19,7 @@ import re
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Optional
@@ -42,6 +43,17 @@ WORD_RE = re.compile(r"[a-z0-9']+")
 
 # bump when a change makes earlier cached takes wrong (2: VoxCPM2 clones from clip + transcript by default)
 CACHE_REV = 2
+
+
+def _speech_level_db(a: np.ndarray, sr: int) -> Optional[float]:
+    """Speech level in dB as A.rms_match measures it (RMS of the louder 60% of 20 ms frames)."""
+    frame = max(1, int(sr * 0.02))
+    n = len(a) // frame
+    if n < 3:
+        return None
+    rms = np.sqrt((a[: n * frame].reshape(n, frame) ** 2).mean(axis=1) + 1e-12)
+    loud = np.sort(rms)[int(n * 0.4):]
+    return float(20 * np.log10(max(float(np.sqrt(np.mean(loud ** 2))), 1e-6)))
 
 
 def _seeded_jitter(seed: int, spread: float = 0.15) -> float:
@@ -75,6 +87,10 @@ class _Chunk:
     asr: bool = True          # validate takes with ASR (only meaningful for English text)
     # [pause]s generated through and cut in afterwards: (words of the chunk before the pause, milliseconds)
     cuts: list = field(default_factory=list)
+    group: Optional[threading.Event] = None   # the render's cancel group (see EnginePool.submit)
+    priority: int = 0
+    streamed: bool = False    # pieces go to the listener while it renders (first passage of a stream); never retried
+    parts: Optional[object] = None             # queue.Queue of streamed pieces
 
 
 @dataclass
@@ -248,16 +264,21 @@ class Synthesizer:
     # ------------------------------------------------------------------ scheduling
     def _launch(self, ch: _Chunk, voice: Optional[Voice], style: Style, seed: int, stats: Stats) -> None:
         """Submit one take for a chunk; when it lands, score it off-thread and decide whether more are needed."""
+        if ch.group is not None and ch.group.is_set():
+            if ch.pending == 0 and not ch.done.done():
+                ch.done.set_exception(Cancelled("render cancelled"))
+            return
         ch.pending += 1
         ch.attempts += 1
         stats.takes += 1
-        fut = self.pool.submit(ch.text, voice, style.params(), seed)
+        fut = self.pool.submit(ch.text, voice, style.params(), seed, priority=ch.priority, group=ch.group,
+                               on_part=ch.parts.put if ch.streamed and ch.attempts == 1 else None)
 
         def on_done(f: Future):
             def work():
                 try:
                     raw = f.result()
-                    a = A.trim_silence(raw, self.sr)
+                    a = raw if ch.streamed else A.trim_silence(raw, self.sr)
                     t0 = time.perf_counter()
                     score, said, words, reasons = self._score(a, ch.text, ch.asr)
                     stats.asr_seconds += time.perf_counter() - t0
@@ -279,6 +300,9 @@ class Synthesizer:
         """Called under the lock each time a take lands."""
         if ch.done.done() or ch.pending > 0:
             return  # wait until every in-flight take for this chunk is scored
+        if ch.streamed and ch.takes:
+            ch.done.set_result(ch.takes[0])   # already heard: no second take could replace it
+            return
         good = [c for c in ch.takes if self._good(c)]
         if good and ch.attempts >= self.candidates:
             ch.done.set_result(max(good, key=lambda c: c.score))
@@ -297,7 +321,8 @@ class Synthesizer:
         ch.done.set_result(best)
 
     # ------------------------------------------------------------------ planning
-    def _plan(self, items: list, base_style: Style, custom_style: Optional[Style], lang: Optional[str], seed: int, caps: dict) -> tuple[list, list]:
+    def _plan(self, items: list, base_style: Style, custom_style: Optional[Style], lang: Optional[str], seed: int, caps: dict,
+              stream_first: bool = False) -> tuple[list, list]:
         """-> (chunks, plan): plan is Pause | [chunk, gap_ms] in order.
 
         Every separate generation re-imagines the delivery a little, so each seam is a place where the voice can change.
@@ -338,7 +363,8 @@ class Synthesizer:
 
         for u in units:
             if isinstance(u, Pause):
-                if cur is not None and bridge and cur["english"] and u.ms <= 3000:
+                # a streamed first passage is heard as it renders, so a pause cannot be cut into it afterwards
+                if cur is not None and bridge and cur["english"] and u.ms <= 3000 and not (stream_first and not chunks):
                     held.append(u)
                 else:
                     close()
@@ -461,6 +487,7 @@ class Synthesizer:
         lang: Optional[str] = None,
         on_chunk: Optional[Callable[[dict], None]] = None,
         cancel: Optional[threading.Event] = None,
+        priority: int = 0,
     ) -> Result:
         """`lang` (e.g. "en", "ur", "hi") picks text normalisation and whether takes are ASR-validated; when omitted
         it is guessed from the script (non-Latin text is read as-is and checked only for signal problems).
@@ -468,7 +495,8 @@ class Synthesizer:
         `on_chunk` (streaming / progress): called in order as soon as each sentence chunk and everything before it is
         final, with {"index", "total", "audio", "sr", "start", "words", "text"}; the audio covers the timeline since the
         previous call (pauses included), loudness-matched but before the final studio chain. `cancel`: an Event; when
-        set, the render stops at the next chunk boundary with `Cancelled`."""
+        set, the render stops within a fraction of a second with `Cancelled`, and its generations still waiting for the
+        GPU are dropped. `priority`: 0 for renders someone is waiting on, 1 for background jobs (they yield the GPU)."""
         if not self.pool.started:
             self.pool.start()          # boot is not part of the request's wall time
         t_start = time.perf_counter()
@@ -490,8 +518,112 @@ class Synthesizer:
         self.pool.prepare_voice(pool_voice)
 
         # 1) plan every chunk
-        chunks, plan = self._plan(items, base_style, custom_style, lang, seed, caps)
+        stream_first = on_chunk is not None and bool(caps.get("streaming"))
+        chunks, plan = self._plan(items, base_style, custom_style, lang, seed, caps, stream_first=stream_first)
         stats.chunks = len(chunks)
+        if stream_first and chunks:
+            import queue as _q
+            chunks[0].streamed, chunks[0].parts = True, _q.Queue()
+        group = threading.Event()
+        for ch in chunks:
+            ch.group, ch.priority = group, priority
+        try:
+            return self._render(chunks, plan, res, stats, voice_key, pool_voice, sr, lead_ms, tail_ms, lufs, on_chunk, cancel, t_start)
+        finally:
+            group.set()      # finished, failed or abandoned: whatever is still queued for this render is dropped
+
+    def _play_stream(self, ch, parts, t, emitted, emit_t, sr, total, on_chunk, cancel, res, stats):
+        """Hand the pieces of a streamed passage to `on_chunk` as they decode, then record its words and take.
+        One gain is set from the first half second (so the level does not pump) and kept for the whole passage."""
+        import queue as _q
+        ch.stream_t0 = t
+        got: list = []
+        gain = None
+        pending: list = []
+        rate = ch.pace * ch.style.pace
+        tempo = A.StreamTempo(sr, rate) if abs(rate - 1.0) >= 0.01 else None
+        raw_n = 0
+        finished = False
+        try:
+            while not finished:
+                try:
+                    piece = ch.parts.get(timeout=0.05)
+                except _q.Empty:
+                    if not (ch.done.done() and ch.parts.empty()):
+                        if cancel is not None and cancel.is_set():
+                            raise Cancelled("render cancelled")
+                        continue
+                    finished = True
+                    piece = None
+                if piece is not None:
+                    raw_n += len(piece)
+                if tempo is not None:
+                    if piece is not None:
+                        tempo.push(piece)
+                    piece = tempo.close() if finished else tempo.pull()
+                if piece is None or not len(piece):
+                    if not finished:
+                        continue
+                    piece = np.zeros(0, np.float32)
+                pending.append(piece)
+                if gain is None:
+                    if sum(len(x) for x in pending) < int(sr * 0.5) and not finished:
+                        continue
+                    probe = np.concatenate(pending)
+                    lvl = _speech_level_db(probe, sr)
+                    gain = float(min(2.5, max(0.25, 10 ** ((-20.0 - lvl) / 20)))) if lvl is not None else 1.0
+                for x in pending:
+                    if not len(x):
+                        continue
+                    y = A.soft_limit(x * gain)
+                    got.append(y)
+                    parts.append(y)
+                    t += len(y) / sr
+                pending = []
+                if on_chunk is not None and len(parts) > emitted:
+                    on_chunk({"index": ch.index, "total": total, "audio": np.concatenate(parts[emitted:]).astype(np.float32), "sr": sr,
+                              "start": round(emit_t, 3), "words": [], "text": "", "partial": True})
+                    emitted, emit_t = len(parts), t
+        finally:
+            if tempo is not None and not finished:
+                tempo.kill()
+        if pending:      # a very short passage: everything arrived before the gain was set
+            probe = np.concatenate(pending)
+            lvl = _speech_level_db(probe, sr)
+            gain = float(min(2.5, max(0.25, 10 ** ((-20.0 - lvl) / 20)))) if lvl is not None else 1.0
+            for x in pending:
+                y = A.soft_limit(x * gain)
+                got.append(y)
+                parts.append(y)
+                t += len(y) / sr
+            if on_chunk is not None:
+                on_chunk({"index": ch.index, "total": total, "audio": np.concatenate(parts[emitted:]).astype(np.float32), "sr": sr,
+                          "start": round(emit_t, 3), "words": [], "text": "", "partial": True})
+                emitted, emit_t = len(parts), t
+        best: _Cand = self._wait(ch.done, cancel)
+        a = np.concatenate(got) if got else np.zeros(0, np.float32)
+        factor = len(a) / max(1, raw_n) if raw_n else 1.0       # word times were measured on the take before the tempo change
+        for w in best.words:
+            res.words.append(Word(w.text, ch.stream_t0 + w.start * factor, ch.stream_t0 + w.end * factor))
+        take = Take(text=ch.text, spoken=best.said, seed=best.seed, score=round(best.score, 3), attempts=1, duration=len(a) / sr,
+                    validated=self.validating and best.score >= self.accept)
+        res.takes.append(take)
+        if not take.validated and self.validating:
+            res.warnings.append(f"low-confidence take ({take.score}), streamed so it was not retried: {ch.text[:60]!r}")
+        if not len(a):
+            res.warnings.append(f"no audio for: {ch.text[:60]!r}")
+        return t, emitted, emit_t, _speech_level_db(a, sr) if len(a) else None
+
+    def _wait(self, fut: Future, cancel: Optional[threading.Event]):
+        """Future.result() that notices a cancel request within 0.2 s instead of waiting for the GPU."""
+        while True:
+            try:
+                return fut.result(timeout=0.2)
+            except FutureTimeout:
+                if cancel is not None and cancel.is_set():
+                    raise Cancelled("render cancelled")
+
+    def _render(self, chunks, plan, res, stats, voice_key, pool_voice, sr, lead_ms, tail_ms, lufs, on_chunk, cancel, t_start) -> Result:
 
         # 2) fan out: cache first, then `candidates` takes per chunk, all at once
         with self._lock:
@@ -507,10 +639,11 @@ class Synthesizer:
                         continue
                     self.cache_misses += 1
                 ch._key = key  # type: ignore[attr-defined]
-                for k in range(self.candidates):
+                for k in range(1 if ch.streamed else self.candidates):
                     self._launch(ch, pool_voice, ch.style, ch.seed + k * 7919, stats)
 
         # 3) gather in order, finish each take, stitch
+        stream_level: Optional[float] = None    # later passages match the level of a streamed first passage
         parts: list[np.ndarray] = [A.silence(lead_ms, sr)]
         t = lead_ms / 1000.0
         emitted = 0          # parts already handed to on_chunk
@@ -524,13 +657,28 @@ class Synthesizer:
                 t += item.ms / 1000.0
                 continue
             ch, gap = item
-            ch.done.result()
+            if ch.streamed and ch.cached is None:
+                t, emitted, emit_t, level = self._play_stream(ch, parts, t, emitted, emit_t, sr, len(chunks), on_chunk, cancel, res, stats)
+                # later passages match the streamed one, within a sane band (a quiet opening can leave it a bit hot)
+                stream_level = None if level is None else min(-18.0, max(-26.0, level))
+                if gap:
+                    parts.append(A.silence(gap, sr))
+                    t += gap / 1000.0
+                done_chunks += 1
+                if on_chunk is not None:
+                    seg = np.concatenate(parts[emitted:]).astype(np.float32) if len(parts) > emitted else np.zeros(0, np.float32)
+                    on_chunk({"index": ch.index, "total": len(chunks), "audio": seg, "sr": sr, "start": round(emit_t, 3),
+                              "words": [w for w in res.words if w.start >= ch.stream_t0 - 1e-6], "text": ch.text})
+                    emitted = len(parts)
+                    emit_t = t
+                continue
+            self._wait(ch.done, cancel)
             if ch.cached is not None:
                 a, words, take = ch.cached
             else:
                 best: _Cand = ch.done.result()
                 a = A.change_tempo(best.audio, sr, ch.pace * ch.style.pace) if len(best.audio) else best.audio
-                a = A.rms_match(a, sr)
+                a = A.rms_match(a, sr, target_db=stream_level) if stream_level is not None else A.rms_match(a, sr)
                 a = A.fade(a, sr)
                 factor = len(a) / max(1, len(best.audio))
                 words = [Word(w.text, w.start * factor, w.end * factor) for w in best.words]

@@ -75,6 +75,7 @@ class Adapter:
     supports_tags = False       # inline [laugh] etc.
     supports_design = False     # voice from a text description instead of a clip
     supports_instruct = False   # free-text delivery instruction per utterance
+    supports_streaming = False  # can hand out audio while one generation is still running (synth_stream)
     spell_acronyms = True       # the text pass writes "GPU" as "G P U" for models that would read it as a word
     passage_chars = 0           # >0: whole sentences are packed into one generation up to this many characters (one
                                 # delivery for the passage, no seams); 0: one generation per sentence
@@ -144,6 +145,30 @@ class Adapter:
         if cond is None and self.needs_reference:
             raise ValueError(f"voice {voice_id!r} not prepared on this worker")
         return to_mono_f32(self._synth(text, cond, params or {}, seed))
+
+    def synth_stream(self, text: str, voice_id: Optional[str], params: dict, seed: int):
+        """Yield mono float32 pieces of one generation as they are decoded. Engines without real streaming yield the
+        whole take once."""
+        if not self.supports_streaming:
+            yield self.synth(text, voice_id, params, seed)
+            return
+        self.load()
+        if not self.supports_tags:
+            text = strip_tags(text)
+        try:
+            seed_torch(seed)
+        except Exception:
+            pass
+        cond = self.voices.get(voice_id) if voice_id else None
+        if cond is None and self.needs_reference:
+            raise ValueError(f"voice {voice_id!r} not prepared on this worker")
+        for piece in self._synth_stream(text, cond, params or {}, seed):
+            piece = to_mono_f32(piece)
+            if len(piece):
+                yield piece
+
+    def _synth_stream(self, text: str, cond, params: dict, seed: int):
+        raise NotImplementedError
 
     def stats(self) -> dict:
         d = {"name": self.name, "sr": self.sr, "voices": list(self.voices), "device": self.device}

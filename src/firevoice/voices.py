@@ -16,6 +16,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -27,6 +28,23 @@ from . import audio as A
 
 DEFAULT = "default"
 REF_SR = 24000
+
+
+_META_LOCK = threading.RLock()      # read-modify-write of meta.json from several request threads
+STYLE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,40}")
+
+
+def _style_ok(style: Optional[str]) -> Optional[str]:
+    """A style name used to build a file path: only plain names (no '..', slashes or drive letters) get through."""
+    return style if style and STYLE_NAME.fullmatch(style) else None
+
+
+def write_json_atomic(path: Path, obj, ensure_ascii: bool = False) -> None:
+    """Write JSON via a temp file and rename: a crash or a concurrent writer never leaves half a file behind."""
+    path = Path(path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(obj, indent=1, ensure_ascii=ensure_ascii), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def _slug(s: str) -> str:
@@ -100,6 +118,7 @@ class VoiceLibrary:
         d = self.root / _slug(voice_id)
         if not (d / "meta.json").exists():
             raise KeyError(f"unknown voice {voice_id!r}")
+        style = _style_ok(style)
         if style and (d / "refs" / f"{style}.wav").exists():
             return str(d / "refs" / f"{style}.wav")
         p = d / "ref.wav"
@@ -109,6 +128,7 @@ class VoiceLibrary:
         voice_id = self.canonical(voice_id)
         d = self.root / _slug(voice_id)
         cands = []
+        style = _style_ok(style)
         if style:
             cands.append(d / "refs" / f"{style}.txt")
         cands.append(d / "ref.txt")
@@ -176,7 +196,7 @@ class VoiceLibrary:
             d.mkdir(parents=True, exist_ok=True)
             meta = {"voice_id": vid, "name": name, "category": "designed", "description": description, "gender": gender, "tags": tags or [],
                     "source": source or "designed", "license": license, "consent": True, "created": int(time.time()), **extra}
-            (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+            write_json_atomic(d / "meta.json", meta)
             return meta
         if not consent:
             raise PermissionError("Refusing to add a voice without consent=True. Only clone voices you own or have written permission to use.")
@@ -198,7 +218,7 @@ class VoiceLibrary:
             (d / "ref.txt").write_text(transcript.strip(), encoding="utf-8")
         meta = {"voice_id": vid, "name": name, "category": "cloned", "description": description, "gender": gender, "tags": tags or [], "source": source,
                 "license": license, "consent": True, "created": int(time.time()), "ref_seconds": round(len(data) / REF_SR, 2), **extra}
-        (d / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        write_json_atomic(d / "meta.json", meta)
         return meta
 
     def add_style_ref(self, voice_id: str, style: str, ref_wav: str | Path, transcript: Optional[str] = None, transcribe: bool = True) -> str:
@@ -222,10 +242,11 @@ class VoiceLibrary:
     def update(self, voice_id: str, **fields) -> dict:
         voice_id = self.canonical(voice_id)
         d = self.root / _slug(voice_id)
-        meta = self.get(voice_id)
-        meta.pop("dir", None)
-        meta.update({k: v for k, v in fields.items() if v is not None})
-        (d / "meta.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False), encoding="utf-8")
+        with _META_LOCK:
+            meta = self.get(voice_id)
+            meta.pop("dir", None)
+            meta.update({k: v for k, v in fields.items() if v is not None})
+            write_json_atomic(d / "meta.json", meta)
         return meta
 
     def remove(self, voice_id: str) -> None:
@@ -236,12 +257,19 @@ class VoiceLibrary:
     # -- helpers ----------------------------------------------------------------------
     _asr = None
 
+    # set by the service so adding a voice reuses the Whisper model it already has, instead of loading a second one
+    transcriber = None
+
     def _transcribe(self, data: np.ndarray, sr: int) -> str:
         try:
+            if self.transcriber is not None:
+                return str(self.transcriber(data, sr) or "")
             if VoiceLibrary._asr is None:
                 from .asr import FasterWhisperAligner
                 VoiceLibrary._asr = FasterWhisperAligner()
             text, _ = VoiceLibrary._asr.transcribe_text(data, sr)
             return text
-        except Exception:
+        except Exception as e:
+            import sys
+            sys.stderr.write(f"[firevoice] could not transcribe the reference clip ({type(e).__name__}: {e}); add a transcript by hand\n")
             return ""

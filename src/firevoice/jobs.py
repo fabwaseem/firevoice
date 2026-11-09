@@ -64,7 +64,9 @@ class JobManager:
         self.lock = threading.RLock()
         self.cond = threading.Condition(self.lock)
         self.events_log: deque = deque(maxlen=keep_events)
-        self.seq = 0
+        # Event numbers start at the current time in milliseconds, so they keep growing across server restarts: a
+        # client resuming with an old `since` (or Last-Event-ID) gets every event of the new run, never silence.
+        self.seq = int(time.time() * 1000)
         self._load_history()
         self.threads = [threading.Thread(target=self._loop, daemon=True, name=f"fv-job-{i}") for i in range(max(1, concurrency))]
         for t in self.threads:
@@ -76,6 +78,8 @@ class JobManager:
         if kind not in KINDS:
             raise FireVoiceError("bad_request", f"unknown job kind {kind!r}; use one of {', '.join(KINDS)}")
         # validate up front so a bad request fails at submit time, not minutes later
+        if not isinstance(payload, dict):
+            raise FireVoiceError("bad_request", "payload must be an object")
         if kind == "tts":
             req = TTSRequest.from_dict(payload.get("request") or {})
             self.svc.prepare(req)
@@ -83,6 +87,10 @@ class JobManager:
             title = title or _title(req.text)
         elif kind == "batch":
             lines = payload.get("lines") or []
+            if not isinstance(lines, list) or not all(isinstance(l, dict) for l in lines):
+                raise FireVoiceError("bad_request", "batch lines must be a list of objects like {\"id\": ..., \"text\": ...}")
+            if not isinstance(payload.get("defaults") or {}, dict):
+                raise FireVoiceError("bad_request", "batch defaults must be an object")
             if not lines:
                 raise FireVoiceError("bad_request", "batch needs at least one line")
             ids = [str(l.get("id") or i + 1) for i, l in enumerate(lines)]
@@ -133,6 +141,7 @@ class JobManager:
         with self.lock:
             self.jobs.pop(job_id, None)
             self.cancels.pop(job_id, None)
+            self._emit(j, "deleted")        # other open clients drop it from their lists too
         shutil.rmtree(self.root / job_id, ignore_errors=True)
         return {"id": job_id, "deleted": True}
 
@@ -212,7 +221,9 @@ class JobManager:
                 d = json.loads(f.read_text(encoding="utf-8"))
                 d.pop("elapsed", None)
                 j = Job(**d)
-            except Exception:
+            except Exception as e:
+                import sys
+                sys.stderr.write(f"[firevoice] skipped unreadable job record {f}: {e}\n")
                 continue
             if j.status not in TERMINAL:
                 j.status, j.finished = "failed", time.time()
@@ -273,7 +284,7 @@ class JobManager:
         req = TTSRequest.from_dict(p.get("request") or {})
         fmt = p.get("format", "mp3")
         r = self.svc.tts(req, on_chunk=lambda c: self._progress(j, c["index"] + (0 if c.get("final") else 1), max(1, c["total"]),
-                                                               message=f"sentence {min(c['index'] + 1, c['total'])} of {c['total']}"), cancel=cancel)
+                                                               message=f"sentence {min(c['index'] + 1, c['total'])} of {c['total']}"), cancel=cancel, priority=1)
         d = self.root / j.id
         name = f"audio.{_ext(fmt)}"
         (d / name).write_bytes(self.svc.encode(r, fmt, p.get("sample_rate")))
@@ -296,7 +307,7 @@ class JobManager:
             self._progress(j, i, len(lines), message=f"line {i + 1} of {len(lines)}")
             req = TTSRequest.from_dict({**(p.get("defaults") or {}), **{k: v for k, v in line.items() if k != "id"}})
             try:
-                r = self.svc.tts(req, cancel=cancel)
+                r = self.svc.tts(req, cancel=cancel, priority=1)
             except FireVoiceError as e:
                 failed += 1
                 manifest.append({"id": lid, "text": req.text, "error": {"code": e.code, "message": e.message}})
@@ -322,7 +333,7 @@ class JobManager:
                 raise Cancelled("cancelled")
             self._progress(j, k, len(todo), message=f"{vid} ({k + 1} of {len(todo)})")
             try:
-                self.svc.voice_render_preview(vid, engine=p.get("engine"))
+                self.svc.voice_render_preview(vid, engine=p.get("engine"), priority=1)
                 done.append(vid)
             except Exception as e:  # noqa: BLE001  one bad voice never stops the batch
                 failed.append({"voice": vid, "error": str(getattr(e, "message", e))[:200]})

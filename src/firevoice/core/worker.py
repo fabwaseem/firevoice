@@ -141,7 +141,7 @@ def main(argv=None) -> int:
                 adapter.load()
                 P.send({"id": rid, "ok": True, "sr": adapter.sr, "seconds": round(time.perf_counter() - t0, 2),
                         "caps": {"needs_reference": adapter.needs_reference, "needs_ref_text": adapter.needs_ref_text, "supports_tags": adapter.supports_tags,
-                                 "supports_design": adapter.supports_design, "supports_instruct": adapter.supports_instruct, "passage_chars": adapter.passage_chars, "spell_acronyms": adapter.spell_acronyms, "license": adapter.license,
+                                 "supports_design": adapter.supports_design, "supports_instruct": adapter.supports_instruct, "passage_chars": adapter.passage_chars, "spell_acronyms": adapter.spell_acronyms, "streaming": adapter.supports_streaming, "license": adapter.license,
                                  "commercial": adapter.commercial, "vram_gb": adapter.vram_gb}, **adapter.stats()}, out)
             elif op == "voice":
                 adapter.prepare_voice(req["voice_id"], req.get("ref"), req.get("ref_text"), req.get("desc"))
@@ -162,6 +162,40 @@ def main(argv=None) -> int:
                 counters["audio_seconds"] += len(audio) / adapter.sr
                 counters["busy_seconds"] += dt
                 P.send({"id": rid, "ok": True, "path": str(dst), "sr": adapter.sr, "n": int(len(audio)), "seconds": round(dt, 3)}, out)
+            elif op == "synth_stream":
+                # pieces go out as {"event": "part", path} as soon as ~0.25 s is ready; the reply carries the whole take
+                pieces, pending, k = [], [], 0
+                min_n = int(adapter.sr * 0.25)
+
+                def flush():
+                    nonlocal pending, k
+                    if not pending:
+                        return
+                    part = np.concatenate(pending)
+                    pending = []
+                    p = scratch / f"{rid}.part{k}.npy"
+                    tmp = p.with_suffix(".tmp.npy")
+                    np.save(tmp, part)
+                    os.replace(tmp, p)
+                    k += 1
+                    P.send({"id": rid, "ok": True, "event": "part", "path": str(p), "n": int(len(part))}, out)
+                for piece in adapter.synth_stream(req["text"], req.get("voice_id"), req.get("params") or {}, int(req.get("seed", 0))):
+                    pieces.append(piece)
+                    pending.append(piece)
+                    if sum(len(x) for x in pending) >= min_n:
+                        flush()
+                flush()
+                audio = np.concatenate(pieces) if pieces else np.zeros(0, np.float32)
+                _trim_cuda_cache()
+                dst = scratch / f"{rid}.npy"
+                tmp = dst.with_suffix(".tmp.npy")
+                np.save(tmp, audio)
+                os.replace(tmp, dst)
+                dt = time.perf_counter() - t0
+                counters["synth"] += 1
+                counters["audio_seconds"] += len(audio) / adapter.sr
+                counters["busy_seconds"] += dt
+                P.send({"id": rid, "ok": True, "path": str(dst), "sr": adapter.sr, "n": int(len(audio)), "seconds": round(dt, 3), "parts": k}, out)
             elif op == "stats":
                 P.send({"id": rid, "ok": True, **adapter.stats(), **counters}, out)
             else:

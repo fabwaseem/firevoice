@@ -244,9 +244,21 @@ def cmd_voices(a) -> int:
             if not desc:
                 print("voices design needs --description", file=sys.stderr)
                 return 2
-            if meta:   # an old description-only entry: replace it with a locked, designed voice
-                svc.voices.remove(a.name)
-            print(json.dumps(svc.voice_design(a.name, desc, engine=a.engine, text=a.text, gender=a.gender or "", language=a.language or ""), indent=1))
+            backup = None
+            if meta:   # an old description-only entry: replace it with a locked, designed voice, but keep it until that works
+                import shutil
+                old_dir = Path(meta["dir"])
+                backup = old_dir.with_name(old_dir.name + ".replacing")
+                shutil.move(str(old_dir), str(backup))
+            try:
+                v = svc.voice_design(a.name, desc, engine=a.engine, text=a.text, gender=a.gender or "", language=a.language or "")
+            except Exception:
+                if backup is not None:
+                    shutil.move(str(backup), str(old_dir))     # put the old entry back
+                raise
+            if backup is not None:
+                shutil.rmtree(backup, ignore_errors=True)
+            print(json.dumps(v, indent=1))
         elif a.action == "update":
             fields = {k: getattr(a, k) for k in ("description", "gender", "language", "accent", "tagline") if getattr(a, k)}
             if a.tags:

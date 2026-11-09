@@ -23,8 +23,9 @@ def test_run_batch_writes_files_and_manifest(make, tmp_path):
     assert forced[0]["cached_takes"] == forced[0]["takes"] > 0
 
 
-def test_server_batch_route(svc, tmp_path):
+def test_server_batch_route(svc, tmp_path, monkeypatch):
     pytest.importorskip("fastapi")
+    monkeypatch.setenv("FIREVOICE_EXPORT_ROOTS", str(tmp_path))
     pytest.importorskip("httpx")
     from fastapi.testclient import TestClient
 
@@ -42,3 +43,13 @@ def test_server_batch_route(svc, tmp_path):
     assert (out / "s01.wav").exists() and (out / "manifest.json").exists()
     r2 = c.post("/v1/batch", json={"lines": lines, "out_dir": str(out), "force": True, "lufs": None}).json()
     assert all(e["cached_takes"] == e["takes"] for e in r2["entries"])
+
+
+def test_server_batch_refuses_folders_outside_its_roots(svc, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from firevoice.server import create_app
+    c = TestClient(create_app(svc))
+    r = c.post("/v1/batch", json={"lines": [{"id": "a", "text": "Hi."}], "out_dir": str(tmp_path / "elsewhere")})
+    assert r.status_code == 400 and "FIREVOICE_EXPORT_ROOTS" in r.json()["error"]["message"]
+    assert c.post("/v1/batch", json={"lines": [{"text": "no id"}], "out_dir": "x"}).status_code == 400

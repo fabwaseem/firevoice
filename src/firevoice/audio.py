@@ -80,6 +80,54 @@ def filter_audio(a: np.ndarray, sr: int, af: str) -> np.ndarray:
     return np.frombuffer(raw, dtype="<f4").copy()
 
 
+def soft_limit(a: np.ndarray, knee: float = 0.8, ceiling: float = 0.98) -> np.ndarray:
+    """Leave everything under `knee` alone and bend louder samples smoothly toward `ceiling` (no hard clipping)."""
+    a = np.asarray(a, dtype=np.float32)
+    m = np.abs(a)
+    over = m > knee
+    if not over.any():
+        return a
+    out = a.copy()
+    room = ceiling - knee
+    out[over] = np.sign(a[over]) * (knee + room * np.tanh((m[over] - knee) / room))
+    return out
+
+
+class StreamTempo:
+    """The same `atempo` change as change_tempo(), for audio that arrives in pieces. Audio is buffered and cut at the
+    quietest 10 ms once at least `min_s` has built up; each cut segment is time-stretched on its own. Cutting in near
+    silence keeps the joins inaudible. (Piping one long-lived ffmpeg instead glitched: its raw-PCM reader can split
+    samples on a pipe that delivers partial reads.)"""
+
+    def __init__(self, sr: int, rate: float, min_s: float = 0.4):
+        self.sr, self.rate = sr, rate
+        self.min_n = int(sr * min_s)
+        self.buf = np.zeros(0, np.float32)
+
+    def push(self, a: np.ndarray) -> None:
+        self.buf = np.concatenate([self.buf, np.asarray(a, dtype=np.float32)])
+
+    def pull(self) -> np.ndarray:
+        if len(self.buf) < self.min_n:
+            return np.zeros(0, np.float32)
+        frame = max(1, int(self.sr * 0.01))
+        lo = int(len(self.buf) * 0.5) // frame        # cut in the second half, so segments stay a decent length
+        n = len(self.buf) // frame
+        if n - lo < 2:
+            return np.zeros(0, np.float32)
+        rms = np.sqrt((self.buf[: n * frame].reshape(n, frame) ** 2).mean(axis=1))
+        cut = (lo + int(np.argmin(rms[lo:n]))) * frame + frame // 2
+        seg, self.buf = self.buf[:cut], self.buf[cut:]
+        return change_tempo(seg, self.sr, self.rate)
+
+    def close(self) -> np.ndarray:
+        seg, self.buf = self.buf, np.zeros(0, np.float32)
+        return change_tempo(seg, self.sr, self.rate) if len(seg) else seg
+
+    def kill(self) -> None:
+        self.buf = np.zeros(0, np.float32)
+
+
 def rms_match(a: np.ndarray, sr: int, target_db: float = -20.0, max_gain: float = 4.0) -> np.ndarray:
     """Bring a take to a common speech level (RMS of the louder 60% of frames) so consecutive takes do not jump."""
     if len(a) < sr // 20:
@@ -90,7 +138,7 @@ def rms_match(a: np.ndarray, sr: int, target_db: float = -20.0, max_gain: float 
     loud = np.sort(rms)[int(n * 0.4):]
     level = float(np.sqrt(np.mean(loud ** 2))) if len(loud) else float(np.sqrt(np.mean(a ** 2)) + 1e-9)
     g = min(max_gain, 10 ** (target_db / 20) / max(level, 1e-6))
-    return np.clip(a * g, -0.98, 0.98).astype(np.float32)
+    return soft_limit(a * g)          # loud peaks bend smoothly under 0.98 instead of clipping
 
 
 def change_tempo(a: np.ndarray, sr: int, rate: float) -> np.ndarray:
@@ -160,7 +208,7 @@ FORMATS = {   # name -> (ffmpeg codec args, media type, file extension)
     "flac": (["-c:a", "flac", "-f", "flac"], "audio/flac", "flac"),
     "ogg": (["-c:a", "libvorbis", "-q:a", "5", "-f", "ogg"], "audio/ogg", "ogg"),
     "opus": (["-c:a", "libopus", "-b:a", "{bitrate}", "-f", "ogg"], "audio/ogg; codecs=opus", "opus"),
-    "m4a": (["-c:a", "aac", "-b:a", "{bitrate}", "-f", "adts"], "audio/aac", "m4a"),
+    "m4a": (["-c:a", "aac", "-b:a", "{bitrate}", "-f", "ipod", "-movflags", "+faststart"], "audio/mp4", "m4a"),   # real MP4 (written via a temp file)
     "pcm16": (["-c:a", "pcm_s16le", "-f", "s16le"], "audio/L16", "pcm"),
 }
 
@@ -181,4 +229,15 @@ def encode_bytes(a: np.ndarray, sr: int, fmt: str = "mp3", bitrate: str = "192k"
         return buf.getvalue()
     codec = [x.replace("{bitrate}", bitrate) for x in FORMATS[fmt][0]]
     rate = ["-ar", str(int(out_sr))] if out_sr else []
+    if fmt == "m4a":
+        # an MP4 container needs a seekable output (the index goes at the front), so it cannot be piped
+        import os
+        import tempfile
+        fd, tmp = tempfile.mkstemp(suffix=".m4a")
+        os.close(fd)
+        try:
+            _run([_ffmpeg(), "-y", "-v", "error", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0", *rate, *codec, tmp], a.astype("<f4").tobytes())
+            return Path(tmp).read_bytes()
+        finally:
+            os.remove(tmp)
     return _run([_ffmpeg(), "-v", "error", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0", *rate, *codec, "pipe:1"], a.astype("<f4").tobytes())

@@ -18,10 +18,18 @@ class NullAdapter(Adapter):
     commercial = True
     vram_gb = 0.0
 
-    def __init__(self, delay: float = 0.0, fail_on: str = "", **kw):
+    def __init__(self, delay: float = 0.0, fail_on: str = "", stream: str = "", **kw):
         super().__init__(**kw)
         self.delay = float(delay)
         self.fail_on = fail_on
+        self.supports_streaming = str(stream).lower() in ("1", "true", "yes")   # tests of the streaming path
+
+    def _synth_stream(self, text, cond, params, seed):
+        a = self._synth(text, cond, params, seed)
+        step = self.sr // 10                    # 100 ms pieces, as a streaming decoder would hand them out
+        for i in range(0, len(a), step):
+            time.sleep(self.delay / 10 if self.delay else 0.005)
+            yield a[i: i + step]
 
     def _load(self) -> None:
         self.device = "cpu"

@@ -7,6 +7,8 @@ on the request itself and apply to every engine.
 """
 from __future__ import annotations
 
+import os
+
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -79,17 +81,25 @@ class EngineInfo:
     speed_rtf: Optional[float] = None   # measured real-time factor on an RTX 5080 (lower is faster)
     notes: str = ""
     params: list = field(default_factory=list)
+    requires: Optional[str] = None  # python package that must import (engines that run in the main venv)
 
     def param(self, name: str) -> Optional[Param]:
         return next((p for p in self.params if p.name == name), None)
 
     def status(self) -> dict:
-        venv_ok = self.venv is None or (ENVS / self.venv).exists()
+        """Ready means it can start: its venv has a Python (or, for engines in the main venv, its package imports)
+        and its weights are complete. Engines without pinned weights download them on first load."""
+        if self.venv is None:
+            import importlib.util
+            venv_ok = self.requires is None or importlib.util.find_spec(self.requires) is not None
+        else:
+            py = ENVS / self.venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            venv_ok = py.exists()
         w = ENVS / "weights" / self.weights if self.weights else None
         weights_ok = w is None or (w.exists() and any(w.glob("*")) and not any(w.rglob("*.incomplete")))
         problems = []
         if not venv_ok:
-            problems.append(f"missing venv .envs/{self.venv}")
+            problems.append(f"python package {self.requires!r} is not installed" if self.venv is None else f"missing venv .envs/{self.venv}")
         if not weights_ok:
             problems.append(f"missing or incomplete weights .envs/weights/{self.weights}")
         return {"ready": venv_ok and weights_ok, "venv_ok": venv_ok, "weights_ok": weights_ok, "problems": problems}
@@ -114,11 +124,11 @@ T_TOPP = Param("top_p", "float", 0.95, 0.1, 1.0, 0.01, label="Top-p")
 
 CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
     EngineInfo("null", "Null (test)", clone=True, needs_reference=False, design=True, tags=True, languages=["*"], notes="silence, for tests"),
-    EngineInfo("chatterbox-turbo", "Chatterbox Turbo 350M", tags=True, languages=["en"], speed_rtf=0.22,
+    EngineInfo("chatterbox-turbo", "Chatterbox Turbo 350M", tags=True, languages=["en"], speed_rtf=0.22, requires="chatterbox",
                notes="fastest cloner; [laugh] [sigh] tags; PerTh watermark",
                params=[T_TEMP, T_TOPP, Param("top_k", "int", 1000, 1, 4000, 1, label="Top-k"),
                        Param("repetition_penalty", "float", 1.2, 1.0, 2.0, 0.05, label="Repetition penalty")]),
-    EngineInfo("chatterbox", "Chatterbox 500M", needs_reference=False, languages=["en"],
+    EngineInfo("chatterbox", "Chatterbox 500M", needs_reference=False, languages=["en"], requires="chatterbox",
                notes="built-in voice when no reference; exaggeration knob",
                params=[T_TEMP, Param("exaggeration", "float", 0.5, 0.25, 2.0, 0.05, label="Exaggeration", help="emotional intensity"),
                        Param("cfg", "float", 0.5, 0.0, 1.0, 0.05, label="CFG weight", help="lower = slower, more deliberate")]),
