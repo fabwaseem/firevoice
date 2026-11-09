@@ -81,3 +81,24 @@ def test_api_errors_stay_json(svc):
     assert r.status_code in (400, 404) and "error" in r.json()
     r = c.post("/api/v1/voices/brand", params={"only": "no-such-voice"})
     assert r.status_code == 404
+
+
+def test_stop_a_generation_mid_take():
+    """A step-by-step engine stops inside a take once its render is cancelled, and keeps serving afterwards."""
+    import dataclasses
+    spec = dataclasses.replace(get_engine("null"), adapter_kwargs={"stream": "1", "delay": 0.4})
+    pool = EnginePool(spec, workers=1).start()
+    try:
+        group = threading.Event()
+        long_text = " ".join(["word"] * 120)          # ~38 s of audio: ~15 s to generate at this pace
+        t0 = time.time()
+        fut = pool.submit(long_text, None, {}, 1, group=group)
+        time.sleep(1.5)
+        group.set()
+        with pytest.raises(Cancelled):
+            fut.result(timeout=10)
+        assert time.time() - t0 < 5, "the take should stop within moments, not run to the end"
+        ok = pool.submit("short and sweet", None, {}, 2).result(timeout=20)
+        assert len(ok) > 0
+    finally:
+        pool.stop()

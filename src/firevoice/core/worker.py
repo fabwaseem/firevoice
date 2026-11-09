@@ -86,6 +86,10 @@ def _redirect_stdout():
     return real
 
 
+class _Stopped(Exception):
+    """The supervisor asked to stop this generation (its render was cancelled)."""
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--engine", required=True)
@@ -148,6 +152,24 @@ def main(argv=None) -> int:
                 if req.get("warmup"):
                     adapter.warmup()
                 P.send({"id": rid, "ok": True, "voice_id": req["voice_id"], "seconds": round(time.perf_counter() - t0, 2)}, out)
+            elif op == "synth" and adapter.supports_streaming and req.get("stoppable"):
+                # a cancellable whole take: generate step by step and stop between steps once <rid>.stop appears
+                pieces = []
+                for piece in adapter.synth_stream(req["text"], req.get("voice_id"), req.get("params") or {}, int(req.get("seed", 0))):
+                    pieces.append(piece)
+                    if (scratch / f"{rid}.stop").exists():
+                        raise _Stopped()
+                audio = np.concatenate(pieces) if pieces else np.zeros(0, np.float32)
+                _trim_cuda_cache()
+                dst = scratch / f"{rid}.npy"
+                tmp = dst.with_suffix(".tmp.npy")
+                np.save(tmp, audio)
+                os.replace(tmp, dst)
+                dt = time.perf_counter() - t0
+                counters["synth"] += 1
+                counters["audio_seconds"] += len(audio) / adapter.sr
+                counters["busy_seconds"] += dt
+                P.send({"id": rid, "ok": True, "path": str(dst), "sr": adapter.sr, "n": int(len(audio)), "seconds": round(dt, 3)}, out)
             elif op == "synth":
                 audio = adapter.synth(req["text"], req.get("voice_id"), req.get("params") or {}, int(req.get("seed", 0)))
                 _trim_cuda_cache()
@@ -180,6 +202,8 @@ def main(argv=None) -> int:
                     k += 1
                     P.send({"id": rid, "ok": True, "event": "part", "path": str(p), "n": int(len(part))}, out)
                 for piece in adapter.synth_stream(req["text"], req.get("voice_id"), req.get("params") or {}, int(req.get("seed", 0))):
+                    if (scratch / f"{rid}.stop").exists():
+                        raise _Stopped()
                     pieces.append(piece)
                     pending.append(piece)
                     if sum(len(x) for x in pending) >= min_n:
@@ -200,6 +224,9 @@ def main(argv=None) -> int:
                 P.send({"id": rid, "ok": True, **adapter.stats(), **counters}, out)
             else:
                 P.send({"id": rid, "ok": False, "error": f"unknown op {op!r}", "kind": "bad_input"}, out)
+        except _Stopped:
+            _trim_cuda_cache()
+            P.send({"id": rid, "ok": False, "error": "stopped: the render was cancelled", "kind": "cancelled"}, out)
         except BaseException as e:  # noqa: BLE001  the worker must never die silently
             kind = P.classify_error(e)
             counters["errors"] += 1

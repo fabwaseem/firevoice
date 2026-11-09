@@ -159,7 +159,7 @@ class _Worker:
             return None
         return box[0] if box else None
 
-    def request(self, req: dict, timeout: float, on_event=None) -> dict:
+    def request(self, req: dict, timeout: float, on_event=None, group: Optional[threading.Event] = None) -> dict:
         if not self.alive():
             return {"ok": False, "error": "worker not running", "kind": "crash"}
         req.setdefault("id", uuid.uuid4().hex[:12])
@@ -167,6 +167,29 @@ class _Worker:
             P.send(req, self.proc.stdin)
         except Exception as e:
             return {"ok": False, "error": f"send failed: {e}", "kind": "crash"}
+        stop_file = self.pool.scratch / f"{req['id']}.stop"
+        done = threading.Event()
+        if group is not None:
+            def watch():
+                # the worker cannot read stdin while it generates; a stop file in the shared scratch folder reaches it
+                while not done.wait(0.1):
+                    if group.is_set():
+                        try:
+                            stop_file.touch()
+                        except OSError:
+                            pass
+                        return
+            threading.Thread(target=watch, daemon=True, name="fv-stop-watch").start()
+        try:
+            return self._await(req, timeout, on_event)
+        finally:
+            done.set()
+            try:
+                stop_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _await(self, req: dict, timeout: float, on_event=None) -> dict:
         while True:
             r = self._read(timeout)
             if r is None:
@@ -194,7 +217,9 @@ class _Worker:
                 return r
         req = {"op": "synth", "text": job.text, "voice_id": job.voice.voice_id if job.voice else None, "params": job.params, "seed": job.seed}
         if job.on_part is None or not self.caps.get("streaming"):
-            return self.request(req, timeout=self.pool.spec.synth_timeout)
+            if job.group is not None and self.caps.get("streaming"):
+                req["stoppable"] = True        # step-by-step engines stop mid-take when the render is cancelled
+            return self.request(req, timeout=self.pool.spec.synth_timeout, group=job.group)
 
         def part(r):
             try:
@@ -207,7 +232,7 @@ class _Worker:
                 job.on_part(a)
             except Exception:
                 pass
-        return self.request({**req, "op": "synth_stream"}, timeout=self.pool.spec.synth_timeout, on_event=part)
+        return self.request({**req, "op": "synth_stream"}, timeout=self.pool.spec.synth_timeout, on_event=part, group=job.group)
 
 
 class EnginePool:
@@ -384,6 +409,9 @@ class EnginePool:
                     job.future.set_result(a)
                     continue
             kind = r.get("kind", "crash")
+            if kind == "cancelled":
+                job.future.set_exception(Cancelled("render cancelled"))
+                continue
             if kind == "oom":
                 self.stats["oom"] += 1
                 self.oom_until = time.time() + 30

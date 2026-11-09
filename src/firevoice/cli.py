@@ -73,8 +73,20 @@ def _request_dict(a, text: str) -> dict:
 
 
 def _service(a, **kw):
+    """The local service, or with --remote the same calls against a running `firevoice serve`."""
+    if getattr(a, "remote", None):
+        from .remote import RemoteService
+        return RemoteService(a.remote, getattr(a, "token", None))
     from .service import FireVoice
     return FireVoice(default_engine=getattr(a, "engine", None) or DEFAULT_ENGINE, **kw)
+
+
+def _add_remote(p) -> None:
+    if any(x.dest == "remote" for x in p._actions):      # the shared TTS options already give it
+        return
+    p.add_argument("--remote", nargs="?", const=os.environ.get("FIREVOICE_URL", "http://127.0.0.1:8787"), default=None, metavar="URL",
+                   help="run it on a running `firevoice serve` (default URL $FIREVOICE_URL or http://127.0.0.1:8787)")
+    p.add_argument("--token", default=None, help="the server's API token (also FIREVOICE_API_KEY)")
 
 
 def _read_text(t: str) -> str:
@@ -1281,6 +1293,7 @@ def build_parser() -> argparse.ArgumentParser:
     dc.add_argument("--note", default="")
     dc.add_argument("--engine", default=None, help="test: which engine's text pass to show")
     dc.add_argument("--language", default=None)
+    _add_remote(dc)
     dc.set_defaults(fn=cmd_dict)
 
     rd = sub.add_parser("renders", help="kept renders (say --keep-takes): compare takes, re-take, choose, lock, export")
@@ -1293,6 +1306,7 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--text", default=None, help="edit: the passage's new text")
     rd.add_argument("--whole", action="store_true", help="edit: use the whole re-recorded passage instead of splicing the changed words")
     rd.add_argument("--limit", type=int, default=30)
+    _add_remote(rd)
     rd.set_defaults(fn=cmd_renders)
 
     jb = sub.add_parser("jobs", help="background jobs on a running server: list, show, wait, cancel, delete, download")
@@ -1311,6 +1325,7 @@ def build_parser() -> argparse.ArgumentParser:
     so.add_argument("--seconds", type=float, default=None, help="length (default 5 for effects, 8 for music; up to 30)")
     so.add_argument("--seed", type=int, default=None)
     so.add_argument("-o", "--out", default=None)
+    _add_remote(so)
     so.set_defaults(fn=cmd_sound)
 
     db = sub.add_parser("dub", help="dub a recording or video into another language (local translation, original timing)")
@@ -1328,6 +1343,7 @@ def build_parser() -> argparse.ArgumentParser:
     db.add_argument("--better", action="store_true", help="the larger, more accurate translation model (5 GB once)")
     db.add_argument("-o", "--out", default=None, help="dubbed audio (default: <file>.<lang>.mp3)")
     db.add_argument("--video", default=None, help="also write the video with the dubbed soundtrack here")
+    _add_remote(db)
     db.set_defaults(fn=cmd_dub)
 
     dg = sub.add_parser("dialogue", help="multi-speaker script ('Name: line' per turn) -> one mix, stems and subtitles")
@@ -1340,6 +1356,7 @@ def build_parser() -> argparse.ArgumentParser:
     dg.add_argument("--style", default=None)
     dg.add_argument("--engine", default=None)
     dg.add_argument("--dry-run", action="store_true", help="only show the turns and the cast")
+    _add_remote(dg)
     dg.set_defaults(fn=cmd_dialogue)
 
     cv = sub.add_parser("convert", help="voice changer: a recording's words, timing and delivery in a library voice")
@@ -1347,6 +1364,7 @@ def build_parser() -> argparse.ArgumentParser:
     cv.add_argument("--voice", default="default")
     cv.add_argument("-o", "--out", default="converted.wav")
     cv.add_argument("--lufs", type=float, default=-16.0)
+    _add_remote(cv)
     cv.set_defaults(fn=cmd_convert)
 
     au2 = sub.add_parser("audio", help="check how good a recording is to clone from, clean it, or detect FireVoice's watermark")
@@ -1355,6 +1373,7 @@ def build_parser() -> argparse.ArgumentParser:
     au2.add_argument("file")
     au2.add_argument("-o", "--out", default=None)
     au2.add_argument("--strength", choices=["light", "medium", "strong"], default="medium")
+    _add_remote(au2)
     au2.set_defaults(fn=cmd_audio)
 
     pj = sub.add_parser("project", help="long-form projects: chapters of paragraphs, render what changed, export audiobooks")
@@ -1369,6 +1388,7 @@ def build_parser() -> argparse.ArgumentParser:
     pj.add_argument("--chapter", default=None, help="render/export: only this chapter id")
     pj.add_argument("--master", choices=["audiobook"], default=None, help="export/check: bring each file inside audiobook limits")
     pj.add_argument("-o", "--out", default=None, help="export: .m4b (with chapters), .mp3, .wav, .srt, .vtt | bundle: .zip")
+    _add_remote(pj)
     pj.set_defaults(fn=cmd_project)
 
     b = sub.add_parser("batch", help="synthesize many lines from a JSON file; every line may override any request field")
@@ -1377,6 +1397,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--force", action="store_true", help="re-render lines whose audio already exists")
     b.add_argument("--parallel", type=int, default=2, help="lines in flight at once")
     _tts_options(b)
+    _add_remote(b)
     b.set_defaults(fn=cmd_batch)
 
     v = sub.add_parser("voices", help="list, add, design, update and remove voices")
@@ -1445,6 +1466,7 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--description", default=None)
     st.add_argument("--instruct", default=None)
     st.add_argument("--json", action="store_true")
+    _add_remote(st)
     st.set_defaults(fn=cmd_styles)
 
     tr = sub.add_parser("transcribe", help="speech-to-text with word timestamps (GPU Whisper)")

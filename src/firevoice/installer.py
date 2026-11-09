@@ -352,7 +352,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
     py = paths.venv_python(m.venv)
     todo_weights = [(r, f, v) for r, f, v in _weights(m) if force or not weights_ok(f)]
     build = force or not venv_ok(m)
-    warm = bool(m.warmup) and (build or bool(todo_weights) or not (paths.engines_dir() / m.venv / ".warm").exists())
+    warm = bool(m.warmup) and (build or bool(todo_weights) or not (paths.engines_dir() / m.venv / f".warm-{m.engine}").exists())
     steps = (3 + (1 if m.git else 0) if build else 0) + len(todo_weights) + (1 if warm else 0) + 1
     k = 0
     t0 = time.time()
@@ -423,11 +423,14 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 wenv = {**env, "PYTHONPATH": repo_dir or "", "PYTHONUTF8": "1"}
                 code = m.warmup.replace("{weights}", str(paths.weights(_weights(m)[0][1])).replace("\\", "/"))
                 _run([str(py), "-c", code], log, cancel, wenv, cwd=repo_dir)
-                (paths.engines_dir() / m.venv / ".warm").write_text(m.engine, encoding="utf-8")
+                (paths.engines_dir() / m.venv / f".warm-{m.engine}").write_text(m.engine, encoding="utf-8")
                 k += 1
             if m.check:
                 progress(k, steps, f"checking that {m.check} imports")
-                _run([str(py), "-c", f"import {m.check}, torch; print('cuda', torch.cuda.is_available())"], log, cancel, env)
+                # the engine worker puts a checkout on PYTHONPATH and runs inside it; check the same way
+                rd = str(paths.engines_dir() / m.git[2]) if m.git else None
+                cenv = {**env, "PYTHONPATH": rd} if rd else env
+                _run([str(py), "-c", f"import {m.check}, torch; print('cuda', torch.cuda.is_available())"], log, cancel, cenv, cwd=rd)
             if build:
                 _write_marker(m, "ok")
             k += 1
