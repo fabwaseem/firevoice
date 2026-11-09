@@ -407,6 +407,12 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         `weights=true` to delete its downloaded weights as well."""
         return svc.engine_uninstall(name, weights=weights)
 
+    @app.get("/api/v1/system/setup", dependencies=deps, tags=["system"])
+    def system_setup():
+        """First-run facts: the GPU, a recommended engine for it (with alternatives), which engines are ready, and
+        anything missing (ffmpeg, no engine installed)."""
+        return svc.setup_report()
+
     @app.get("/api/v1/system/paths", dependencies=deps, tags=["system"])
     def system_paths():
         """Where the data folder, engine venvs, model weights and ffmpeg were found, and why (env var, settings.json,

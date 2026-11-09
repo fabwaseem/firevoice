@@ -23,6 +23,8 @@ server = ["fastapi>=0.110", "uvicorn>=0.29", "websockets>=12", "uv>=0.5", "pytho
 harvest = ["pyarrow<17", "librosa>=0.10"]             # `firevoice voices harvest` from HF parquet datasets
 bench = ["resemblyzer>=0.1.4", "jiwer>=3", "speechmos>=0.0.1", "py-spy"]   # bake-off scorer
 dev = ["pytest>=8", "httpx"]
+# Everything the desktop app's bundled backend runs with (install CUDA torch first, as for `gpu`):
+desktop = ["firevoice[server,asr,gpu]", "resemblyzer>=0.1.4", "imageio-ffmpeg>=0.5"]
 
 [project.scripts]
 firevoice = "firevoice.cli:main"

@@ -135,6 +135,39 @@ def ffmpeg() -> Optional[str]:
     return ffmpeg_info()[0]
 
 
+def worker_src() -> Path:
+    """A folder to put on an engine worker's PYTHONPATH so it can import this package (the worker runs in the engine's
+    own venv, which does not have FireVoice installed).
+
+    From a checkout that is src/. From an install it must not be site-packages: that folder ahead of the engine venv's
+    standard library lets stray packages there (an old `typing` backport, say) shadow the real ones. So the package is
+    copied once into <home>/runtime/worker-src/<fingerprint>/, a folder that holds nothing else and never changes once
+    written (a new version gets a new folder)."""
+    co = checkout()
+    if co is not None:
+        return co / "src"
+    import hashlib
+    files = sorted(f for f in PACKAGE.rglob("*.py") if "__pycache__" not in f.parts)
+    h = hashlib.sha1()
+    for f in files:
+        st = f.stat()
+        h.update(f"{f.relative_to(PACKAGE).as_posix()}|{st.st_size}|{int(st.st_mtime)}".encode())
+    dest = home() / "runtime" / "worker-src" / h.hexdigest()[:12]
+    if not (dest / "firevoice" / ".complete").exists():
+        tmp = dest.with_name(dest.name + f".tmp{os.getpid()}")
+        shutil.rmtree(tmp, ignore_errors=True)
+        for f in files:
+            out = tmp / "firevoice" / f.relative_to(PACKAGE)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, out)
+        (tmp / "firevoice" / ".complete").write_text("")
+        try:
+            os.replace(tmp, dest)
+        except OSError:          # another process finished first; theirs is identical
+            shutil.rmtree(tmp, ignore_errors=True)
+    return dest
+
+
 def models_dir() -> Path:
     """Small auxiliary models fetched on demand (RNNoise...)."""
     return home() / "models"

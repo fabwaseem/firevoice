@@ -64,3 +64,16 @@ def test_settings_routes(svc, tmp_path, monkeypatch):
     assert r["restart_required"] and r["settings"]["engines_dir"] == str(tmp_path / "eng")
     r = c.put("/api/v1/system/settings", json={"engines_dir": ""}).json()
     assert "engines_dir" not in r["settings"] and r["restart_required"]
+
+
+def test_worker_src_isolated_when_installed(tmp_path, monkeypatch):
+    """An installed backend must not hand workers site-packages as PYTHONPATH (stray packages there shadow the
+    engine venv's stdlib); it gets a folder holding only the firevoice package."""
+    monkeypatch.setenv("FIREVOICE_HOME", str(tmp_path))
+    assert paths.worker_src() == paths.checkout() / "src"            # running from this checkout
+    monkeypatch.setattr(paths, "checkout", lambda: None)
+    d = paths.worker_src()
+    assert d.parent == tmp_path / "runtime" / "worker-src"
+    assert [p.name for p in d.iterdir()] == ["firevoice"]
+    assert (d / "firevoice" / "core" / "worker.py").exists() and (d / "firevoice" / ".complete").exists()
+    assert paths.worker_src() == d                                    # reused, not copied again

@@ -215,7 +215,8 @@ class EnginePool:
                  log_dir: Optional[str | Path] = None, max_retries: int = 2):
         self.spec = engine if isinstance(engine, EngineSpec) else get_engine(engine)
         self.device = device
-        self.src_dir = Path(__file__).resolve().parents[2]
+        from ..paths import worker_src
+        self.src_dir = worker_src()   # src/ in a checkout; an isolated copy of the package when installed
         self.scratch = Path(scratch) if scratch else Path(tempfile.mkdtemp(prefix="firevoice-"))
         self.scratch.mkdir(parents=True, exist_ok=True)
         self.log_dir = Path(log_dir) if log_dir else _home() / "logs"

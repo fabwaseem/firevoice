@@ -1561,6 +1561,43 @@ class FireVoice:
                 "asr": {"model": self.asr_model, "loaded": self._aligner is not None},
                 "jobs": self.jobs.counts(), "voices": len(self.voices.list()), "styles": len(all_styles())}
 
+    def setup_report(self) -> dict:
+        """First-run facts for any client: the GPU, a recommended engine for it, what is ready, and what is missing."""
+        from . import paths
+        from .core.gpu import gpu_info
+        g = gpu_info()
+        vram = g.get("vram_total_gb")
+        engines = {e["name"]: e for e in self.engines()}
+
+        def pick(name: str, why: str) -> dict:
+            e = engines.get(name, {})
+            return {"engine": name, "title": e.get("title", name), "reason": why, "ready": bool(e.get("ready")),
+                    "installable": bool(e.get("installable")), "vram_gb": e.get("vram_gb")}
+        if not g:
+            rec = pick("kokoro", "No NVIDIA GPU found: Kokoro is small enough to run on the CPU (preset voices, no cloning).")
+            alts = []
+        elif (vram or 0) >= 9:
+            rec = pick("voxcpm2", f"{vram:.0f} GB of VRAM fits VoxCPM2, the most natural engine here: 48 kHz, cloning, "
+                                  "voice design and style instructions in 30 languages.")
+            alts = [pick("chatterbox-turbo", "Faster, smaller and ready without a download."),
+                    pick("qwen3-tts", "Strong 3-second cloning in 10 languages.")]
+        elif (vram or 0) >= 4.5:
+            rec = pick("chatterbox-turbo", f"{vram:.0f} GB of VRAM: Chatterbox Turbo clones voices quickly and comes with the backend.")
+            alts = [pick("qwen3-tts", "Better cloning in 10 languages, if it fits next to other apps."),
+                    pick("kokoro", "Tiny and very fast, preset voices only.")]
+        else:
+            rec = pick("kokoro", f"Only {vram or 0:.0f} GB of VRAM: Kokoro needs about 1 GB (preset voices, no cloning).")
+            alts = [pick("chatterbox-turbo", "Cloning, if about 4 GB of VRAM is free.")]
+        ff = paths.ffmpeg()
+        problems = []
+        if not ff:
+            problems.append("ffmpeg not found: install it, or set its path in settings")
+        if not any(e.get("ready") for n, e in engines.items() if n != "null"):
+            problems.append("no engine is installed yet")
+        return {"gpu": g or None, "vram_gb": vram, "recommended": rec, "alternatives": alts, "ffmpeg": ff,
+                "voices": len(self.voices.list()), "ready_engines": sorted(n for n, e in engines.items() if e.get("ready") and n != "null"),
+                "problems": problems}
+
     def close(self) -> None:
         self.jobs.close()
         with self._lock:
