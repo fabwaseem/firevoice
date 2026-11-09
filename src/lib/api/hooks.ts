@@ -80,6 +80,14 @@ export function useJobFeed(onConnection?: (open: boolean) => void) {
   useEffect(() => {
     const unsub = subscribeJobEvents((e) => {
       const job = e.job;
+      if (e.type === "deleted") {
+        qc.removeQueries({ queryKey: qk.job(job.id) });
+        qc.setQueriesData<{ jobs: Job[]; counts: Record<string, number> }>({ queryKey: ["jobs"] }, (old) =>
+          old ? { ...old, jobs: old.jobs.filter((j) => j.id !== job.id) } : old,
+        );
+        qc.invalidateQueries({ queryKey: ["jobs"] });
+        return;
+      }
       qc.setQueryData(qk.job(job.id), job);
       qc.setQueriesData<{ jobs: Job[]; counts: Record<string, number> }>({ queryKey: ["jobs"] }, (old) => {
         if (!old) return old;

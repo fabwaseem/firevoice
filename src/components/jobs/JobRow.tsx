@@ -1,6 +1,8 @@
 import { AudioLines, Ban, Download, Layers, Play, Sparkles, Trash2 } from "lucide-react";
 import type { Job } from "@/lib/api/types";
 import { api } from "@/lib/api/client";
+import { saveBlob } from "@/lib/audio";
+import { toast } from "sonner";
 import { cn, fmtDuration, relTime } from "@/lib/utils";
 import { usePlayer } from "@/stores/player";
 import { ArtTile, Badge, Button, Equalizer, ProgressBar, Tooltip } from "@/components/ui";
@@ -24,6 +26,19 @@ export function JobRow({
   const player = usePlayer();
   const Icon = KIND_ICON[job.kind] ?? AudioLines;
   const title = jobTitle(job);
+  // window.open does nothing useful in the desktop webview (or leaks a token-bearing URL to the browser): fetch the
+  // file and save it through the system save dialog instead
+  const download = async () => {
+    try {
+      const res = await fetch(api.jobAudioUrl(job.id, true));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ext = String((job.result as Record<string, unknown> | null)?.format ?? "mp3");
+      const safe = title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || job.id;
+      await saveBlob(await res.blob(), `${safe}.${ext}`);
+    } catch (e) {
+      toast.error(`Download failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
   const running = job.status === "running";
   const duration = resultNumber(job, "duration");
   const err = errorText(job);
@@ -104,7 +119,7 @@ export function JobRow({
               </Button>
             </Tooltip>
             <Tooltip content="Download audio">
-              <Button variant="ghost" size="icon-sm" aria-label={`Download ${title}`} onClick={() => window.open(api.jobAudioUrl(job.id, true), "_blank")}>
+              <Button variant="ghost" size="icon-sm" aria-label={`Download ${title}`} onClick={download}>
                 <Download className="size-4" />
               </Button>
             </Tooltip>

@@ -173,6 +173,8 @@ export interface StreamChunk {
   audio_base64: string;
   words: WordTime[];
   text: string;
+  /** a piece of a passage that is still rendering (real streaming); more pieces of the same index follow */
+  partial?: boolean;
 }
 export interface StreamDone {
   type: "done";

@@ -130,6 +130,7 @@ export function useRender() {
     const meta = trackMeta(req);
     const collected: { bytes: Uint8Array; start: number }[] = [];
     const words: WordTime[] = [];
+    let passages = 0;
     setState({ ...idle, phase: "starting" });
 
     player.load({ id, ...meta, src: "", href: "/speak" }, true);
@@ -165,11 +166,15 @@ export function useRender() {
       for await (const ev of api.ttsStream({ ...req, format: "wav" }, ac.signal)) {
         if (ev.type === "chunk") {
           const c = ev as StreamChunk;
-          const bytes = base64ToBytes(c.audio_base64);
-          collected.push({ bytes, start: c.start });
           words.push(...c.words);
-          await cp.push(bytes, c.start);
-          const got = collected.length;
+          // an event can carry only words (the end of a streamed passage) or only a piece of one (partial)
+          if (c.audio_base64) {
+            const bytes = base64ToBytes(c.audio_base64);
+            collected.push({ bytes, start: c.start });
+            await cp.push(bytes, c.start);
+          }
+          if (!c.partial) passages += 1;
+          const got = passages;
           const total = Math.max(c.total ?? 0, got);
           if (usePlayer.getState().live) usePlayer.getState().setLive(true, { got, total });
           setState((s) => ({ ...s, phase: "streaming", chunksGot: got, chunksTotal: total, words: [...words] }));
@@ -179,7 +184,7 @@ export function useRender() {
             duration: Number(d.duration ?? cp.duration),
             seconds: d.seconds as number | undefined,
             rtf: d.rtf as number | undefined,
-            chunks: collected.length,
+            chunks: passages,
             takes: d.takes as number | undefined,
             retries: d.retries as number | undefined,
             warnings: (d.warnings as string[]) ?? [],
