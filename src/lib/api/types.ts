@@ -92,6 +92,28 @@ export interface Voice {
   kind: "cloned" | "designed";
   default: boolean;
   transcript?: string;
+  /** branding: one-line description, character traits, what it suits, listening-test tier */
+  tagline?: string;
+  traits?: string[];
+  use_cases?: string[];
+  quality?: VoiceQuality;
+  featured?: boolean;
+  /** a rendered "Hi, I'm …" introduction exists (GET /voices/{id}/preview) */
+  has_preview?: boolean;
+}
+
+export interface VoiceQuality {
+  tier: "S" | "A" | "B" | "C";
+  rank: number;
+  of: number;
+  naturalness?: number | null;
+}
+
+export interface VoiceCollection {
+  id: string;
+  title: string;
+  description: string;
+  voices: string[];
 }
 
 export type AudioFormat = "wav" | "mp3" | "flac" | "ogg" | "opus" | "m4a" | "pcm16";
@@ -178,7 +200,7 @@ export interface STTResult {
   words: WordTime[];
 }
 
-export type JobKind = "tts" | "batch" | "design";
+export type JobKind = "tts" | "batch" | "design" | "previews";
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 
 export interface Job {

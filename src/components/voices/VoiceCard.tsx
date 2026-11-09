@@ -7,6 +7,7 @@ import { usePlayer } from "@/stores/player";
 import { cn, langName, truncate } from "@/lib/utils";
 import { ArtTile, Badge, Equalizer, Tooltip } from "@/components/ui";
 import { initials, genderLabel } from "./helpers";
+import { QualityBadge } from "./QualityBadge";
 
 export function VoiceCard({ voice, onOpen, index = 0 }: { voice: Voice; onOpen: (v: Voice) => void; index?: number }) {
   const update = useUpdateVoice();
@@ -22,9 +23,9 @@ export function VoiceCard({ voice, onOpen, index = 0 }: { voice: Voice; onOpen: 
     player.load({
       id: voice.voice_id,
       title: voice.name,
-      subtitle: "Reference clip",
-      src: api.voiceAudioUrl(voice.voice_id),
-      format: "wav",
+      subtitle: voice.has_preview ? "Introduction" : "Reference clip",
+      src: voice.has_preview ? api.voicePreviewUrl(voice.voice_id) : api.voiceAudioUrl(voice.voice_id),
+      format: voice.has_preview ? "mp3" : "wav",
       href: `/voices/${voice.voice_id}`,
     });
   };
@@ -91,11 +92,12 @@ export function VoiceCard({ voice, onOpen, index = 0 }: { voice: Voice; onOpen: 
       <button type="button" onClick={() => onOpen(voice)} className="min-w-0 text-left">
         <h3 className="truncate text-[14px] font-semibold text-ink">{voice.name}</h3>
         <p className="mt-0.5 min-h-[18px] truncate text-[12.5px] text-muted">
-          {voice.description ? truncate(voice.description, 60) : [genderLabel(voice.gender), voice.accent].filter(Boolean).join(" · ") || voice.voice_id}
+          {voice.tagline ? truncate(voice.tagline, 64) : voice.description ? truncate(voice.description, 60) : [genderLabel(voice.gender), voice.accent].filter(Boolean).join(" · ") || voice.voice_id}
         </p>
       </button>
 
       <div className="flex flex-wrap items-center gap-1.5">
+        <QualityBadge voice={voice} />
         <Badge tone={voice.kind === "designed" ? "info" : "neutral"}>{voice.kind}</Badge>
         <Badge>{langName(voice.language)}</Badge>
         {voice.gender && <Badge>{genderLabel(voice.gender)}</Badge>}

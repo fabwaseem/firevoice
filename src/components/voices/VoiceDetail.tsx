@@ -10,6 +10,7 @@ import { useStudio } from "@/stores/studio";
 import { cn, fmtDuration, langName, relTime } from "@/lib/utils";
 import { ArtTile, Badge, Button, ConfirmDialog, Dialog, Equalizer, Input, Label, Select, Skeleton, Textarea } from "@/components/ui";
 import { GENDERS, genderLabel, initials, parseTags } from "./helpers";
+import { QualityBadge } from "./QualityBadge";
 
 export function VoiceDetail({ voiceId, onClose }: { voiceId: string | null; onClose: () => void }) {
   const { data: voice, isLoading, error } = useVoice(voiceId);
@@ -36,6 +37,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
 
   const [name, setName] = useState(voice.name);
   const [description, setDescription] = useState(voice.description ?? "");
+  const [tagline, setTagline] = useState(voice.tagline ?? "");
   const [gender, setGender] = useState(voice.gender ?? "");
   const [accent, setAccent] = useState(voice.accent ?? "");
   const [tags, setTags] = useState((voice.tags ?? []).join(", "));
@@ -47,6 +49,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
   useEffect(() => {
     setName(voice.name);
     setDescription(voice.description ?? "");
+    setTagline(voice.tagline ?? "");
     setGender(voice.gender ?? "");
     setAccent(voice.accent ?? "");
     setTags((voice.tags ?? []).join(", "));
@@ -57,6 +60,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
   const dirty =
     name !== voice.name ||
     description !== (voice.description ?? "") ||
+    tagline !== (voice.tagline ?? "") ||
     gender !== (voice.gender ?? "") ||
     accent !== (voice.accent ?? "") ||
     tags !== (voice.tags ?? []).join(", ") ||
@@ -64,7 +68,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
 
   const save = () =>
     update.mutate(
-      { id: voice.voice_id, patch: { name: name.trim() || voice.name, description, gender, accent, tags: parseTags(tags), notes } },
+      { id: voice.voice_id, patch: { name: name.trim() || voice.name, tagline, description, gender, accent, tags: parseTags(tags), notes } },
       { onSuccess: () => toast.success("Voice saved") },
     );
 
@@ -83,7 +87,9 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
   const playClip = (style?: string) => {
     const id = style ? `${voice.voice_id}:${style}` : voice.voice_id;
     if (player.track?.id === id) return player.toggle();
-    player.load({ id, title: voice.name, subtitle: style ? `${style} reference clip` : "Reference clip", src: api.voiceAudioUrl(voice.voice_id, style), format: "wav", href: `/voices/${voice.voice_id}` });
+    const intro = !style && voice.has_preview;
+    player.load({ id, title: voice.name, subtitle: style ? `${style} reference clip` : intro ? "Introduction" : "Reference clip",
+      src: intro ? api.voicePreviewUrl(voice.voice_id) : api.voiceAudioUrl(voice.voice_id, style), format: intro ? "mp3" : "wav", href: `/voices/${voice.voice_id}` });
   };
   const isPlaying = (id: string) => player.track?.id === id && player.playing;
 
@@ -112,7 +118,9 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
           )}
         </div>
         <div className="min-w-0 flex-1">
+          {voice.tagline && <p className="mb-2 text-[14px] text-ink-2">{voice.tagline}</p>}
           <div className="flex flex-wrap items-center gap-1.5">
+            <QualityBadge voice={voice} />
             <Badge tone={voice.kind === "designed" ? "info" : "neutral"}>{voice.kind}</Badge>
             <Badge>{langName(voice.language)}</Badge>
             {voice.gender && <Badge>{genderLabel(voice.gender)}</Badge>}
@@ -128,6 +136,9 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
             {voice.ref_seconds != null && <Row k="Reference" v={fmtDuration(voice.ref_seconds)} />}
             {voice.created && <Row k="Added" v={relTime(voice.created)} />}
             {voice.design_prompt && <Row k="Prompt" v={voice.design_prompt} />}
+            {!!voice.use_cases?.length && <Row k="Great for" v={voice.use_cases.join(", ")} />}
+            {!!voice.traits?.length && <Row k="Sound" v={voice.traits.join(", ")} />}
+            <Row k="Voice id" v={voice.voice_id} />
           </dl>
         </div>
       </div>
@@ -148,6 +159,12 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
         <div className="md:col-span-2">
           <Label htmlFor="vd-name">Name</Label>
           <Input id="vd-name" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="md:col-span-2">
+          <Label htmlFor="vd-tagline" hint="shown under the name everywhere">
+            Tagline
+          </Label>
+          <Input id="vd-tagline" value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="Warm, steady narrator with a Scottish accent" />
         </div>
         <div className="md:col-span-2">
           <Label htmlFor="vd-desc">Description</Label>

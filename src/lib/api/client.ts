@@ -1,7 +1,7 @@
 import { useSettings } from "@/stores/settings";
 import type {
   ApiErrorBody, Engine, Health, Job, JobEvent, JobKind, Options, Style, STTResult, SystemInfo, TTSJson, TTSRequest,
-  Voice, StreamEvent,
+  Voice, VoiceCollection, StreamEvent,
 } from "./types";
 
 export class ApiError extends Error {
@@ -84,10 +84,14 @@ export const api = {
     (await request<{ voices: Voice[] }>("/api/v1/voices", {}, filters)).voices,
   voice: (id: string) => request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}`),
   voiceAudioUrl: (id: string, style?: string) => withToken(url(`/api/v1/voices/${encodeURIComponent(id)}/audio`, { style })),
+  /** the voice introducing itself; the server falls back to the reference clip when no preview was rendered */
+  voicePreviewUrl: (id: string) => withToken(url(`/api/v1/voices/${encodeURIComponent(id)}/preview`)),
+  voiceCollections: async () => (await request<{ collections: VoiceCollection[] }>("/api/v1/voices/collections")).collections,
+  renderVoicePreview: (id: string) => request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/preview`, { method: "POST" }),
   addVoice: (form: FormData) => request<Voice>("/api/v1/voices", { method: "POST", body: form }),
   designVoice: (body: { name: string; description: string; engine?: string; text?: string; gender?: string; language?: string; seed?: number }, wait = true) =>
     request<Voice | Job>("/api/v1/voices/design", { method: "POST", body: json(body) }, { wait: wait ? undefined : "false" }),
-  updateVoice: (id: string, patch: Partial<Pick<Voice, "name" | "description" | "gender" | "language" | "accent" | "tags" | "favorite" | "notes">>) =>
+  updateVoice: (id: string, patch: Partial<Pick<Voice, "name" | "tagline" | "description" | "gender" | "language" | "accent" | "tags" | "favorite" | "notes">>) =>
     request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}`, { method: "PATCH", body: json(patch) }),
   setTranscript: (id: string, transcript: string) =>
     request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/transcript`, { method: "PUT", body: json({ transcript }) }),

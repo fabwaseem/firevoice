@@ -25,7 +25,7 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
     const all = voices.data ?? [];
     const needle = q.trim().toLowerCase();
     const filtered = needle
-      ? all.filter((v) => [v.name, v.description, v.language, v.accent, v.gender, ...(v.tags ?? [])].join(" ").toLowerCase().includes(needle))
+      ? all.filter((v) => [v.name, v.voice_id, v.tagline, v.description, v.language, v.accent, v.gender, ...(v.tags ?? []), ...(v.use_cases ?? []), ...(v.traits ?? [])].join(" ").toLowerCase().includes(needle))
       : all;
     return [...filtered].sort((a, b) => Number(b.default) - Number(a.default) || Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name));
   }, [voices.data, q]);
@@ -33,10 +33,10 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
   const selected: Voice | undefined = voices.data?.find((v) => v.voice_id === value);
   const defaultVoice = voices.data?.find((v) => v.default);
   const label = isDesign ? "Designed from description" : value === "default" ? (defaultVoice ? `${defaultVoice.name} (default)` : "Default voice") : (selected?.name ?? value);
-  const sub = isDesign ? value.slice(7) : selected?.description || (value === "default" ? defaultVoice?.description : "") || "";
+  const sub = isDesign ? value.slice(7) : selected?.tagline || selected?.description || (value === "default" ? defaultVoice?.tagline || defaultVoice?.description : "") || "";
 
   const preview = (v: Voice) =>
-    load({ id: v.voice_id, title: v.name, subtitle: "Reference clip", src: api.voiceAudioUrl(v.voice_id), href: `/voices/${v.voice_id}` });
+    load({ id: v.voice_id, title: v.name, subtitle: v.has_preview ? "Introduction" : "Reference clip", src: v.has_preview ? api.voicePreviewUrl(v.voice_id) : api.voiceAudioUrl(v.voice_id), format: v.has_preview ? "mp3" : "wav", href: `/voices/${v.voice_id}` });
 
   return (
     <RP.Root open={open} onOpenChange={setOpen}>
@@ -70,7 +70,7 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
               tile={<Star className="size-4" />}
               seed={defaultVoice?.voice_id ?? "default"}
               title={defaultVoice ? `${defaultVoice.name} · default` : "Default voice"}
-              subtitle={defaultVoice?.description || "Whatever the server marks as default"}
+              subtitle={defaultVoice?.tagline || defaultVoice?.description || "Whatever the server marks as default"}
             />
             {engine?.design !== false && (
               <div className={cn("mt-1 rounded-lg border p-2", isDesign ? "border-fire/40 bg-fire-soft/40" : "border-dashed border-line")}>
@@ -116,10 +116,11 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
                 seed={v.voice_id}
                 tile={initials(v.name)}
                 title={v.name}
-                subtitle={[v.description, langName(v.language), v.gender, v.accent].filter(Boolean).join(" · ")}
+                subtitle={v.tagline || [v.description, langName(v.language), v.gender, v.accent].filter(Boolean).join(" · ")}
                 badges={
                   <>
                     {v.favorite && <Heart className="size-3.5 fill-fire text-fire" aria-label="favorite" />}
+                    {v.quality?.tier === "S" && <Star className="size-3.5 fill-fire text-fire" aria-label="top pick" />}
                     {v.kind === "designed" && <Badge tone="info">designed</Badge>}
                     {v.styles && v.styles.length > 0 && <Badge>{v.styles.length} style clips</Badge>}
                   </>

@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Library, Plus, Sparkles } from "lucide-react";
-import { errMessage, useOptions, useVoices } from "@/lib/api/hooks";
+import { errMessage, useOptions, useVoiceCollections, useVoices } from "@/lib/api/hooks";
 import type { Voice } from "@/lib/api/types";
-import { Button, EmptyState } from "@/components/ui";
+import { Button, Chip, EmptyState } from "@/components/ui";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";
 import { VoiceCard, VoiceCardSkeleton } from "@/components/voices/VoiceCard";
 import { VoiceFilters, EMPTY_FILTERS, type VoiceFilterState } from "@/components/voices/VoiceFilters";
@@ -17,15 +17,23 @@ export function VoicesView() {
   const [filters, setFilters] = useState<VoiceFilterState>(EMPTY_FILTERS);
   const [addOpen, setAddOpen] = useState(false);
   const [designOpen, setDesignOpen] = useState(false);
+  const [shelf, setShelf] = useState("");
+  const collections = useVoiceCollections();
 
   const options = useOptions();
   const voices = useVoices({ q: filters.q || undefined, kind: filters.kind || undefined, gender: filters.gender || undefined, language: filters.language || undefined });
 
   const list = useMemo(() => {
     const all = voices.data ?? [];
-    const filtered = filters.favorites ? all.filter((v) => v.favorite) : all;
-    return [...filtered].sort((a, b) => Number(b.default) - Number(a.default) || Number(!!b.favorite) - Number(!!a.favorite) || a.name.localeCompare(b.name));
-  }, [voices.data, filters.favorites]);
+    const inShelf = shelf ? new Set(collections.data?.find((c) => c.id === shelf)?.voices ?? []) : null;
+    const filtered = all.filter((v) => (!filters.favorites || v.favorite) && (!inShelf || inShelf.has(v.voice_id)));
+    const rank = (v: Voice) => v.quality?.rank ?? 999;
+    return [...filtered].sort((a, b) =>
+      shelf
+        ? rank(a) - rank(b)
+        : Number(b.default) - Number(a.default) || Number(!!b.favorite) - Number(!!a.favorite) || Number(!!b.featured) - Number(!!a.featured) || a.name.localeCompare(b.name),
+    );
+  }, [voices.data, filters.favorites, shelf, collections.data]);
 
   const open = (v: Voice) => navigate(`/voices/${v.voice_id}`);
   const close = () => navigate("/voices");
@@ -48,6 +56,19 @@ export function VoicesView() {
           </>
         }
       />
+
+      {!!collections.data?.length && (
+        <div role="group" aria-label="Collections" className="mb-3 flex flex-wrap items-center gap-1.5">
+          <Chip active={!shelf} onClick={() => setShelf("")}>
+            All voices
+          </Chip>
+          {collections.data.map((c) => (
+            <Chip key={c.id} active={shelf === c.id} onClick={() => setShelf(shelf === c.id ? "" : c.id)} title={c.description}>
+              {c.title} <span className="text-faint">{c.voices.length}</span>
+            </Chip>
+          ))}
+        </div>
+      )}
 
       {hasAny && <VoiceFilters value={filters} onChange={setFilters} languages={options.data?.languages ?? []} />}
 

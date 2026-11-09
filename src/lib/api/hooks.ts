@@ -52,6 +52,10 @@ export function useVoices(filters?: { language?: string; gender?: string; kind?:
   return useQuery({ queryKey: qk.voices(clean), queryFn: () => api.voices(clean), staleTime: 30_000, retry: 1 });
 }
 
+export function useVoiceCollections() {
+  return useQuery({ queryKey: ["voice-collections"], queryFn: api.voiceCollections, staleTime: 60_000, retry: 1 });
+}
+
 export function useVoice(id: string | null) {
   return useQuery({ queryKey: qk.voice(id ?? ""), queryFn: () => api.voice(id!), enabled: !!id, retry: 1 });
 }

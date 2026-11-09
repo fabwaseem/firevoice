@@ -6,7 +6,7 @@ import { usePlayer } from "@/stores/player";
 import { ArtTile, Badge, Button, Equalizer, ProgressBar, Tooltip } from "@/components/ui";
 import { errorText, hasAudio, isTerminal, jobTitle, kindLabel, resultNumber, statusTone } from "./jobUtils";
 
-const KIND_ICON = { tts: AudioLines, batch: Layers, design: Sparkles } as const;
+const KIND_ICON: Record<Job["kind"], typeof AudioLines> = { tts: AudioLines, batch: Layers, design: Sparkles, previews: Play };
 
 export function JobRow({
   job,
