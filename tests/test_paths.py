@@ -55,7 +55,7 @@ def test_settings_routes(svc, tmp_path, monkeypatch):
     from firevoice.server import create_app
     c = TestClient(create_app(svc))
     h = c.get("/health").json()
-    assert h["api_version"] >= 2 and h["min_client_api"] >= 1
+    assert h["api_version"] >= 3 and h["min_client_api"] >= 1
     rep = c.get("/api/v1/system/paths").json()
     assert {"home", "engines_dir", "weights_dir", "ffmpeg"} <= set(rep)
     assert c.put("/api/v1/system/settings", json={"engines_dir": str(tmp_path / "missing")}).status_code == 400
