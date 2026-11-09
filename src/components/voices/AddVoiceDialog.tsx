@@ -1,8 +1,9 @@
+import { toast } from "sonner";
 import { useRef, useState, type DragEvent } from "react";
 import { FileAudio, Mic, Upload, X } from "lucide-react";
 import { useAddVoice, useOptions } from "@/lib/api/hooks";
 import { cn, fmtBytes, langName } from "@/lib/utils";
-import { Button, Dialog, Input, Label, Segmented, Select, Textarea } from "@/components/ui";
+import { Button, Dialog, Input, Label, Segmented, Select, Textarea , NativeSelect } from "@/components/ui";
 import { RecordPanel } from "./RecordPanel";
 import { GENDERS } from "./helpers";
 
@@ -22,6 +23,7 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [tags, setTags] = useState("");
   const [transcript, setTranscript] = useState("");
   const [consent, setConsent] = useState(false);
+  const [clean, setClean] = useState<"" | "light" | "medium" | "strong">("medium");
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -60,8 +62,11 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     if (accent) fd.append("accent", accent);
     if (tags) fd.append("tags", tags);
     if (transcript) fd.append("transcript", transcript);
+    if (clean) fd.append("clean", clean);
     add.mutate(fd, {
-      onSuccess: () => {
+      onSuccess: (v) => {
+        const q = v.quality_check?.after ?? v.quality_check?.before;
+        if (q && q.verdict !== "good") toast.warning(`Clip quality: ${q.verdict}`, { description: q.notes.join("; ") });
         reset();
         onOpenChange(false);
       },
@@ -181,6 +186,12 @@ export function AddVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               Tags
             </Label>
             <Input id="av-tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="mine, studio" />
+          </div>
+          <div>
+            <Label htmlFor="av-clean" hint="takes out hiss, hum and room noise">Clean the clip</Label>
+            <NativeSelect id="av-clean" value={clean} onChange={(e) => setClean(e.target.value as typeof clean)}>
+              <option value="">No, use it as recorded</option><option value="light">Light</option><option value="medium">Medium</option><option value="strong">Strong</option>
+            </NativeSelect>
           </div>
           <label className="mt-1 flex cursor-pointer items-start gap-2.5 rounded-lg border border-line bg-surface-2 p-3 text-[12.5px] text-ink-2">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 size-4 accent-[var(--fire)]" required />

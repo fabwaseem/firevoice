@@ -5,7 +5,7 @@ import { AudioLines, ImageOff, ImagePlus, Pause, Play, Star, Trash2 } from "luci
 import { toast } from "sonner";
 import type { Voice } from "@/lib/api/types";
 import { api } from "@/lib/api/client";
-import { errMessage, useDeleteVoice, useSetDefaultVoice, useUpdateVoice, useVoice } from "@/lib/api/hooks";
+import { errMessage, useDeleteVoice, useSetDefaultVoice, useStyles, useUpdateVoice, useVoice } from "@/lib/api/hooks";
 import { usePlayer } from "@/stores/player";
 import { useStudio } from "@/stores/studio";
 import { cn, fmtDuration, langName, relTime } from "@/lib/utils";
@@ -144,6 +144,8 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
           </dl>
         </div>
       </div>
+
+      {voice.has_ref !== false && <ClipTools voice={voice} />}
 
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" leading={<AudioLines className="size-4" />} onClick={useInSpeak}>
@@ -316,5 +318,65 @@ function AvatarButton({ voiceId, hasAvatar }: { voiceId: string; hasAvatar: bool
         </button>
       )}
     </>
+  );
+}
+
+
+/** The reference clip's quality, cleaning, and the voice's own clip per style. */
+function ClipTools({ voice }: { voice: Voice }) {
+  const qc = useQueryClient();
+  const styles = useStyles();
+  const [strength, setStrength] = useState<"light" | "medium" | "strong">("medium");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [style, setStyle] = useState("");
+  const q = voice.quality_check?.after ?? voice.quality_check?.before;
+  const built = voice.styles ?? [];
+  const buildable = (styles.data ?? []).filter((s) => s.instruct && !built.includes(s.name));
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["voices"] });
+    qc.invalidateQueries({ queryKey: ["voice", voice.voice_id] });
+  };
+  const act = async (key: string, fn: () => Promise<unknown>, done?: string) => {
+    setBusy(key);
+    try {
+      await fn();
+      if (done) toast.success(done);
+      refresh();
+    } catch (e) {
+      toast.error(errMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="space-y-3 rounded-xl border border-line bg-surface-2 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[13px] font-medium text-ink">Reference clip</span>
+        {q && <Badge tone={q.verdict === "good" ? "ok" : q.verdict === "poor" ? "bad" : "warn"}>{q.verdict} · SNR {q.snr_db} dB</Badge>}
+        {voice.quality_check?.cleaned && <Badge>cleaned ({voice.quality_check.cleaned})</Badge>}
+        <div className="flex-1" />
+        <Select value={strength} onChange={(v) => setStrength(v as typeof strength)} options={[{ value: "light", label: "Light" }, { value: "medium", label: "Medium" }, { value: "strong", label: "Strong" }]} />
+        <Button size="sm" variant="outline" loading={busy === "clean"} onClick={() => act("clean", () => api.cleanVoice(voice.voice_id, strength), "Clip cleaned")}>Clean</Button>
+        <Button size="sm" variant="ghost" loading={busy === "restore"} onClick={() => act("restore", () => api.restoreVoice(voice.voice_id), "Original clip restored")}>Restore original</Button>
+      </div>
+      <div>
+        <p className="mb-1.5 text-[13px] font-medium text-ink">Style clips <span className="font-normal text-muted">the voice's own take per style, so renders keep the voice and the delivery</span></p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {built.length ? built.map((s) => (
+            <span key={s} className="inline-flex items-center gap-1 rounded-full bg-fire-soft px-2.5 py-1 text-[12px] text-fire">
+              {s}
+              <button type="button" aria-label={`Remove ${s} clip`} className="opacity-70 hover:opacity-100" onClick={() => act(`rm:${s}`, () => api.removeStyleClip(voice.voice_id, s))}>×</button>
+            </span>
+          )) : <span className="text-[12.5px] text-muted">none yet</span>}
+        </div>
+        {buildable.length > 0 && (
+          <div className="mt-2 flex items-center gap-2">
+            <Select value={style || buildable[0].name} onChange={setStyle} options={buildable.map((s) => ({ value: s.name, label: s.title || s.name }))} />
+            <Button size="sm" variant="outline" loading={busy === "build"}
+              onClick={() => act("build", () => api.buildStyleClip(voice.voice_id, style || buildable[0].name), "Style clip built")}>Build clip</Button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

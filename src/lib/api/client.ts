@@ -2,7 +2,7 @@ import { useSettings } from "@/stores/settings";
 import type {
   ApiErrorBody, Engine, Health, Job, JobEvent, JobKind, Options, Style, STTResult, SystemInfo, TTSJson, TTSRequest,
   Voice, VoiceCollection, StreamEvent, DictRule, DictRuleInput, DictView, KeptRender, WordTime,
-  Project, ProjectSummary, ChapterEdit, AudiobookCheck,
+  Project, ProjectSummary, ChapterEdit, AudiobookCheck, ClipCheck, DesignBatch,
 } from "./types";
 
 export class ApiError extends Error {
@@ -191,6 +191,34 @@ export const api = {
   replaceRules: (rules: DictRuleInput[]) => request<{ rules: DictRule[] }>("/api/v1/dictionary", { method: "PUT", body: json({ rules }) }),
   testDictionary: (text: string, engine?: string | null) =>
     request<{ text: string; spoken: string; engine: string }>("/api/v1/dictionary/test", { method: "POST", body: json({ text, engine: engine ?? undefined }) }),
+
+  // ---- audio tools
+  analyzeAudio: (file: Blob, name = "audio.wav") => {
+    const fd = new FormData();
+    fd.append("file", file, name);
+    return request<ClipCheck>("/api/v1/audio/analyze", { method: "POST", body: fd });
+  },
+  voiceChange: async (file: Blob, name: string, voice: string, signal?: AbortSignal) => {
+    const fd = new FormData();
+    fd.append("file", file, name);
+    fd.append("voice", voice);
+    fd.append("format", "mp3");
+    const res = await fetch(url("/api/v1/voice-changer"), { method: "POST", body: fd, headers: authHeaders(), signal });
+    if (!res.ok) throw await parseError(res);
+    return { blob: await res.blob(), duration: Number(res.headers.get("X-Duration") ?? 0) };
+  },
+  cleanVoice: (id: string, strength: "light" | "medium" | "strong") =>
+    request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/clean`, { method: "POST", body: json({ strength }) }),
+  restoreVoice: (id: string) => request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/restore-original`, { method: "POST" }),
+  buildStyleClip: (id: string, style: string) =>
+    request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/styles/${encodeURIComponent(style)}/build`, { method: "POST", body: json({}) }),
+  removeStyleClip: (id: string, style: string) =>
+    request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/styles/${encodeURIComponent(style)}`, { method: "DELETE" }),
+  designCandidates: (body: { description: string; n?: number; engine?: string; text?: string }) =>
+    request<DesignBatch>("/api/v1/voices/design/candidates", { method: "POST", body: json(body) }),
+  designCandidateUrl: (batch: string, n: number) => withToken(url(`/api/v1/voices/design/candidates/${batch}/${n}/audio`)),
+  keepDesignCandidate: (batch: string, n: number, body: { name: string; gender?: string; language?: string }) =>
+    request<Voice>(`/api/v1/voices/design/candidates/${batch}/${n}/keep`, { method: "POST", body: json(body) }),
 
   // ---- voice avatars
   voiceAvatarUrl: (v: { voice_id: string; avatar?: number | null } | null | undefined) =>

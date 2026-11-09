@@ -100,6 +100,7 @@ export interface Voice {
   featured?: boolean;
   /** a rendered "Hi, I'm …" introduction exists (GET /voices/{id}/preview) */
   has_preview?: boolean;
+  quality_check?: { before: ClipCheck; after: ClipCheck | null; cleaned: string | null } | null;
   /** avatar version (modification time); null when the voice has no avatar */
   avatar?: number | null;
 }
@@ -161,6 +162,26 @@ export interface DictRule extends Required<DictRuleInput> {
 export interface DictView {
   rules: DictRule[];
   builtin: { match: string; say: string }[];
+}
+
+// ---------------------------------------------------------------- audio tools
+export interface ClipCheck {
+  duration: number;
+  peak_db?: number;
+  clipped_pct?: number;
+  speech_db?: number;
+  noise_db?: number;
+  snr_db?: number;
+  silence_pct?: number;
+  verdict: "good" | "fair" | "poor";
+  notes: string[];
+}
+export interface DesignBatch {
+  batch: string;
+  description: string;
+  text: string;
+  engine: string;
+  candidates: { n: number; seed: number; duration: number }[];
 }
 
 // ---------------------------------------------------------------- projects
