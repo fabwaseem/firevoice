@@ -26,6 +26,12 @@ pnpm dev                 # http://localhost:1420
 pnpm tauri dev
 ```
 
+`pnpm tauri dev` starts the UI through `scripts/dev-ui.mjs`. If `pnpm dev` is already serving this app on port 1420, it
+reuses that server instead of failing. If some other program holds the port, it says so and exits.
+
+FireVoice itself stays a standalone API with its own web playground at `/playground`. This app is only a client of it,
+so nothing desktop-specific belongs in the backend repo.
+
 The server address and token live in **Settings** (default `http://127.0.0.1:8787`).
 The backend already allows `localhost`, `127.0.0.1` and `tauri://localhost` origins.
 
