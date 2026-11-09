@@ -73,6 +73,11 @@ export function DubbingView() {
   return (
     <div className="mx-auto max-w-[1100px] fade-up">
       <PageHeader title="Dubbing" subtitle="A recording or video in another language, on the original timeline. Speech to text, translation and voices all run on this machine." />
+      {langs.isError && (
+        <p className="mb-4 rounded-xl bg-warn-soft px-4 py-3 text-[13px] text-warn">
+          This backend has no dubbing yet (it is older than the app). Restart or update the backend, then reload this page.
+        </p>
+      )}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h3 className="mb-3 text-[14px] font-semibold text-ink">Original</h3>
@@ -123,7 +128,7 @@ export function DubbingView() {
             </div>
             <Switch checked={music} onChange={setMusic} label="Keep the music and effects" description="Separates them from the original voices (needs the voice separator from Engines)" />
             <Switch checked={better} onChange={setBetter} label="Better translation" description="A larger model (5 GB, downloaded once), clearly more accurate" />
-            <Button leading={<Languages className="size-4" />} disabled={!file || !!live} loading={busy} onClick={start}>
+            <Button leading={<Languages className="size-4" />} disabled={!file || !!live || !langs.data} loading={busy} onClick={start}>
               Dub it
             </Button>
           </div>

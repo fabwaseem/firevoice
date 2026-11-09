@@ -33,6 +33,11 @@ export function BackendManager() {
     })();
   }, [active, health.isLoading, health.isSuccess]);
 
+  // Know whether the server that answers is one this app started (so it can offer to restart or update it).
+  useEffect(() => {
+    if (active && health.isSuccess && !info) void useBackend.getState().refresh();
+  }, [active, health.isSuccess, info]);
+
   // An app update ships a newer backend: offer to update the runtime even while the old one answers.
   useEffect(() => {
     if (!active || !health.isSuccess || !info || info.mode !== "bundled") return;
@@ -71,9 +76,19 @@ export function BackendManager() {
           <AlertTriangle className="size-4 shrink-0" />
           <span className="flex-1">
             {compat === "server-too-old"
-              ? `The FireVoice server at ${serverUrl} (version ${health.data?.version}) is older than this app needs. Update the backend.`
+              ? info?.running
+                ? "The backend this app started is running older code than the app. Restart it to load the new features (Dubbing, Sound and more)."
+                : `The FireVoice server at ${serverUrl} is older than this app needs; some pages will not work. Restart or update it.`
               : `The FireVoice server at ${serverUrl} needs a newer app. Update FireVoice Desktop.`}
           </span>
+          {active && compat === "server-too-old" && info?.running && info.mode !== "bundled" && (
+            <Button size="sm" variant="soft" loading={phase === "starting"} onClick={async () => {
+              await useBackend.getState().stop();
+              await useBackend.getState().start();
+            }}>
+              Restart backend
+            </Button>
+          )}
           {active && info?.mode === "bundled" && compat === "server-too-old" && (
             <Button size="sm" variant="soft" onClick={() => useBackend.getState().runSetup()}>
               Update now

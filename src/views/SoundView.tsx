@@ -72,6 +72,11 @@ export function SoundView() {
             </Badge>
           )}
         </div>
+        {engines.isSuccess && !engine && (
+          <p className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-[13px] text-warn">
+            This backend has no sound engines yet (it is older than the app). Restart or update the backend, then reload this page.
+          </p>
+        )}
         {engine && !engine.ready && (
           <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-[13px] text-muted">
             {engine.title} is not installed yet. Install it from <Link to="/engines" className="font-medium text-fire hover:underline">Engines</Link> (about 3 GB with its model).
