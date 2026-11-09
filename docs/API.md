@@ -195,6 +195,27 @@ is re-rendered.
 | `POST /api/v1/renders/{id}/regenerate` | New takes for `{chunks: [i, ...]}`, or every unlocked passage. |
 | `DELETE /api/v1/renders/{id}` | Delete a kept render. The newest 200 are kept (and any with a locked passage). |
 
+### Projects (long form)
+
+Audiobooks, courses and series: chapters of paragraphs in `FIREVOICE_HOME/projects/<id>/project.json` (plain JSON).
+Every paragraph renders as a kept render (all takes, speech check), so its status follows from its text and settings:
+`draft`, `rendered`, `stale` (changed since its render) or `locked`.
+
+| | |
+|---|---|
+| `GET /api/v1/projects` | Projects with counts per status, words and rendered duration. |
+| `POST /api/v1/projects` | `{title, text?, defaults?}`. `text` is split into chapters at `# Heading` or `Chapter 1` lines and into paragraphs at blank lines. `defaults` takes any TTS request field plus `paragraph_gap_ms`, `chapter_gap_ms`, `chapter_lead_ms`. |
+| `GET /api/v1/projects/{id}` | Chapters and paragraphs with `status` and `render` (`id` is a kept render: its takes are under `/api/v1/renders/{id}`). |
+| `PATCH /api/v1/projects/{id}` | `{title?, defaults?, chapters?}`. `chapters` replaces the structure; a paragraph that keeps its `id` keeps its render. Paragraphs may set their own `voice`, `style`, `pace`, `engine`, `instruct`, `language`. |
+| `POST /api/v1/projects/{id}/paragraphs/{p}/render` | Render one paragraph now. |
+| `POST /api/v1/projects/{id}/paragraphs/{p}/lock` | `{locked}`: a locked paragraph is skipped by project renders. |
+| `GET /api/v1/projects/{id}/paragraphs/{p}/audio` | One paragraph (chosen takes). |
+| `POST /api/v1/projects/{id}/render` | A background job (`kind: project`) for `{scope: "stale" \| "all", chapter?}`. |
+| `GET /api/v1/projects/{id}/export?format=&chapter=&master=audiobook` | The book or one chapter: any audio format, `m4b` with chapter marks, `srt` or `vtt`. `master=audiobook` brings it inside the usual audiobook limits. |
+| `GET /api/v1/projects/{id}/check?master=` | Per chapter: RMS -23 to -18 dBFS, peak at most -3 dBFS, noise floor at most -60 dBFS, 0.5-1 s quiet at the start, 1-5 s at the end. |
+| `GET /api/v1/projects/{id}/bundle` / `POST /api/v1/projects/import` | The project and every take as one zip, and back (a new id each import). |
+| `GET /api/v1/voices/{id}/pack` / `POST /api/v1/voices/import` | A voice as a portable pack (clip, transcript, per-style clips, metadata, preview, avatar), and back (`consent=true` required). |
+
 ### Speech to text
 
 `POST /api/v1/stt` takes multipart `file`, `language` (default `auto`) and `beam_size` (default 5). It returns:

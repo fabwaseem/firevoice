@@ -122,6 +122,13 @@ class RenderStore:
             self._write_meta(self.root / rid, meta)
             return ch
 
+    def pin(self, rid: str, owner: Optional[str]) -> None:
+        """A pinned render belongs to something else (a project paragraph) and is never pruned."""
+        with self._lock:
+            meta = self.get(rid)
+            meta["pinned"] = owner
+            self._write_meta(self.root / rid, meta)
+
     def delete(self, rid: str) -> None:
         d = self._dir(rid)
         shutil.rmtree(d, ignore_errors=True)
@@ -129,11 +136,15 @@ class RenderStore:
     # ------------------------------------------------------------------ read
     def list(self, limit: int = 50) -> list[dict]:
         out = []
-        for f in sorted(self.root.glob("*/render.json"), reverse=True)[:limit]:
+        for f in sorted(self.root.glob("*/render.json"), reverse=True):
+            if len(out) >= limit:
+                break
             try:
                 m = json.loads(f.read_text(encoding="utf-8"))
             except Exception:
                 continue
+            if m.get("pinned"):
+                continue          # a project paragraph: listed with its project
             out.append({"id": m["id"], "created": m["created"], "title": m.get("title", ""), "engine": m["engine"],
                         "voice": m["request"].get("voice"), "style": m["request"].get("style"), "passages": len(m["chunks"]),
                         "takes": sum(len(c["takes"]) for c in m["chunks"]), "flagged": sum(1 for c in m["chunks"] if _flagged(c))})
@@ -209,15 +220,18 @@ class RenderStore:
         write_json_atomic(d / "render.json", meta)
 
     def _prune(self) -> None:
-        """Keep the newest `keep` renders; older ones go (a render with a locked passage is kept)."""
-        dirs = sorted((p for p in self.root.glob("*") if (p / "render.json").exists()), reverse=True)
-        for p in dirs[self.keep:]:
+        """Keep the newest `keep` renders. Renders pinned to a project, or with a locked passage, are never removed
+        and do not count toward the limit."""
+        free = []
+        for p in sorted((p for p in self.root.glob("*") if (p / "render.json").exists()), reverse=True):
             try:
                 m = json.loads((p / "render.json").read_text(encoding="utf-8"))
-                if any(c.get("locked") for c in m.get("chunks", [])):
-                    continue
             except Exception:
-                pass
+                continue
+            if m.get("pinned") or any(c.get("locked") for c in m.get("chunks", [])):
+                continue
+            free.append(p)
+        for p in free[self.keep:]:
             shutil.rmtree(p, ignore_errors=True)
 
 

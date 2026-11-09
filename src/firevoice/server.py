@@ -66,6 +66,7 @@ TAGS = [
     {"name": "jobs", "description": "Background renders, batches and voice design with progress events and history."},
     {"name": "takes", "description": "Kept renders (keep_takes): every take of every passage with its speech check. Compare, swap, re-take, lock, export."},
     {"name": "dictionary", "description": "Pronunciation dictionary: your rules for how words are said, plus the built-in list."},
+    {"name": "projects", "description": "Long-form projects: chapters of paragraphs, each rendered with every take kept; render what changed, export WAV/MP3/M4B with chapters, audiobook check, bundles."},
     {"name": "elevenlabs", "description": "ElevenLabs-compatible routes for existing clients."},
     {"name": "legacy", "description": "Older studio contract."},
 ]
@@ -272,6 +273,23 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     class RegenBody(BaseModel):
         chunks: Optional[list[int]] = Field(None, description="passage indexes; null = every unlocked passage")
 
+    class ProjectNew(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        title: str = Field("Untitled project", max_length=200)
+        text: str = Field("", max_length=5_000_000, description="optional script: '# Heading' or 'Chapter 1' lines start chapters, blank lines split paragraphs")
+        defaults: Optional[dict[str, Any]] = Field(None, description="any TTS request field (voice, style, engine, pace, lufs, dictionary...) plus paragraph_gap_ms, chapter_gap_ms, chapter_lead_ms")
+
+    class ProjectPatch(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        title: Optional[str] = Field(None, max_length=200)
+        defaults: Optional[dict[str, Any]] = None
+        chapters: Optional[list[dict[str, Any]]] = Field(None, description="the whole structure: [{id?, title, paragraphs: [{id?, text, voice?, style?, pace?, locked?}]}]; "
+                                                                          "paragraphs that keep their id keep their render")
+
+    class ProjectRender(BaseModel):
+        scope: Literal["stale", "all"] = Field("stale", description="stale = drafts and changed paragraphs; all = everything not locked")
+        chapter: Optional[str] = None
+
     class SubBody(BaseModel):
         words: list[dict[str, Any]] = Field(..., description='[{"text", "start", "end"}] in seconds, as /tts returns them')
         format: Literal["srt", "vtt"] = "srt"
@@ -383,6 +401,18 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
             return svc.jobs.submit("design", body.model_dump())
         return await run_in_threadpool(lambda: svc.voice_design(body.name, body.description, engine=body.engine, text=body.text, gender=body.gender,
                                                                 language=body.language, seed=body.seed))
+
+    @app.post("/api/v1/voices/import", dependencies=deps, tags=["voices"], status_code=201)
+    async def voice_import(file: UploadFile = File(...), consent: bool = Form(False), voice_id: str = Form("")):
+        """Add a voice from a voice pack (.fvvoice.zip). Needs consent=true: only voices you own or may use."""
+        data = await file.read()
+        return await run_in_threadpool(lambda: svc.voice_import(data, consent=consent, voice_id=voice_id or None))
+
+    @app.get("/api/v1/voices/{voice_id}/pack", dependencies=deps, tags=["voices"])
+    def voice_pack(voice_id: str):
+        """The voice as a portable pack: its clip, transcript, per-style clips, metadata, preview and avatar."""
+        data, name = svc.voice_pack(voice_id)
+        return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     @app.get("/api/v1/voices/collections", dependencies=deps, tags=["voices"])
     def voice_collections():
@@ -630,6 +660,80 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     @app.delete("/api/v1/renders/{rid}", dependencies=deps, tags=["takes"])
     def render_delete(rid: str):
         return svc.render_delete(rid)
+
+    # ------------------------------------------------------------------ projects
+    @app.get("/api/v1/projects", dependencies=deps, tags=["projects"])
+    def projects():
+        return {"projects": svc.project_list()}
+
+    @app.post("/api/v1/projects", dependencies=deps, tags=["projects"], status_code=201)
+    def project_new(body: ProjectNew):
+        """Create a project, optionally from a whole script (chapters from heading lines, paragraphs from blank lines)."""
+        return svc.project_create(body.title, body.text, body.defaults)
+
+    @app.post("/api/v1/projects/import", dependencies=deps, tags=["projects"], status_code=201)
+    async def project_import(file: UploadFile = File(...)):
+        """A new project from a bundle (.fvproject.zip), with every take it carried."""
+        data = await file.read()
+        return await run_in_threadpool(svc.project_import, data)
+
+    @app.get("/api/v1/projects/{pid}", dependencies=deps, tags=["projects"])
+    def project_get(pid: str):
+        """Chapters, paragraphs with their status (draft, rendered, stale, locked) and render, counts and durations."""
+        return svc.project_get(pid)
+
+    @app.patch("/api/v1/projects/{pid}", dependencies=deps, tags=["projects"])
+    def project_patch(pid: str, body: ProjectPatch):
+        return svc.project_update(pid, body.title, body.defaults, body.chapters)
+
+    @app.delete("/api/v1/projects/{pid}", dependencies=deps, tags=["projects"])
+    def project_delete(pid: str):
+        return svc.project_delete(pid)
+
+    @app.post("/api/v1/projects/{pid}/paragraphs/{para}/render", dependencies=deps, tags=["projects"])
+    async def paragraph_render(request: Request, pid: str, para: str):
+        """Render one paragraph now (every take kept; its takes are under /api/v1/renders/{render id})."""
+        import asyncio
+        cancel = threading.Event()
+        task = asyncio.ensure_future(run_in_threadpool(lambda: svc.paragraph_render(pid, para, cancel=cancel)))
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done and await request.is_disconnected():
+                cancel.set()
+        return task.result()
+
+    @app.post("/api/v1/projects/{pid}/paragraphs/{para}/lock", dependencies=deps, tags=["projects"])
+    def paragraph_lock(pid: str, para: str, body: LockBody = Body(default_factory=LockBody)):
+        return svc.paragraph_lock(pid, para, body.locked)
+
+    @app.get("/api/v1/projects/{pid}/paragraphs/{para}/audio", dependencies=deps, tags=["projects"])
+    def paragraph_audio(pid: str, para: str, format: str = "mp3"):
+        a, sr, _w = svc.paragraph_audio(pid, para)
+        return Response(svc.encode(a, format, sr=sr), media_type=A.media_type(format))
+
+    @app.post("/api/v1/projects/{pid}/render", dependencies=deps, tags=["projects"], status_code=202)
+    def project_render(pid: str, body: ProjectRender = Body(default_factory=ProjectRender)):
+        """Render drafts and changed paragraphs (or all unlocked ones) as a background job; follow it under /api/v1/jobs."""
+        return svc.jobs.submit("project", {"project": pid, "scope": body.scope, "chapter": body.chapter})
+
+    @app.get("/api/v1/projects/{pid}/export", dependencies=deps, tags=["projects"])
+    def project_export(pid: str, format: str = "mp3", chapter: Optional[str] = None,
+                       master: Optional[Literal["audiobook"]] = Query(None, description="audiobook = bring each file inside the usual audiobook limits"),
+                       allow_missing: bool = False):
+        """The book (or one chapter): any audio format, m4b with chapter marks, or srt / vtt subtitles."""
+        data, mt, name = svc.project_export(pid, format, chapter, master, allow_missing)
+        return Response(data, media_type=mt, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    @app.get("/api/v1/projects/{pid}/check", dependencies=deps, tags=["projects"])
+    def project_check(pid: str, master: Optional[Literal["audiobook"]] = None):
+        """The audiobook check per chapter: loudness, peaks, noise floor, quiet at the start and end."""
+        return svc.project_check(pid, master)
+
+    @app.get("/api/v1/projects/{pid}/bundle", dependencies=deps, tags=["projects"])
+    def project_bundle(pid: str):
+        """The project and every take as one zip, to move or back up; import it with POST /api/v1/projects/import."""
+        data, name = svc.project_bundle(pid)
+        return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
     @app.post("/api/v1/subtitles", dependencies=deps, tags=["tts"])
     def subtitles(body: SubBody):

@@ -74,7 +74,7 @@ function busyBtn(btn, on, label) {
 }
 
 // ------------------------------------------------------------------------------------------------ router
-const PAGES = ["speak", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
+const PAGES = ["speak", "projects", "voices", "stt", "jobs", "styles", "dictionary", "engines"];
 function route() {
   const p = PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "speak";
   $$(".page").forEach(s => s.classList.toggle("on", s.id === "page-" + p));
@@ -85,6 +85,7 @@ function route() {
   if (p === "styles") renderStyles();
   if (p === "engines") loadEngines();
   if (p === "dictionary") loadDict();
+  if (p === "projects") window.loadProjects?.();
 }
 window.addEventListener("hashchange", route);
 
@@ -475,11 +476,21 @@ function qaHTML(chunk, take) {
   return words + (qa.extra?.length ? ` <span class="extra" title="heard but not in the script">+ ${esc(qa.extra.join(" "))}</span>` : "");
 }
 async function loadTakes(item) {
-  const rid = item.info.render_id; const box = $("#takes"); if (!box) return;
+  const box = $("#takes"); if (!box) return;
+  const rid = item.info.render_id;
+  await mountTakes(box, rid, async () => {
+    const [aud, w] = await Promise.all([API.req(`/api/v1/renders/${rid}/audio?format=${item.format === "pcm16" ? "wav" : item.format}`, { raw: true }), API.req(`/api/v1/renders/${rid}/words`)]);
+    if (item.url) URL.revokeObjectURL(item.url); item.url = null; item.blob = await aud.blob();
+    item.info = { ...item.info, words: w.words, duration: w.duration }; renderHistory(); showResult(item, false);
+  });
+}
+// The takes panel of any kept render (a result on Speak, or a project paragraph). `onChanged` runs after a swap,
+// a new take or a lock, so the owner can reload the stitched audio.
+async function mountTakes(box, rid, onChanged) {
   let m; try { m = await API.req(`/api/v1/renders/${rid}`); } catch (e) { box.innerHTML = `<span class="small dim">${esc(e.message)}</span>`; return; }
   const flagged = m.chunks.filter(c => c.flagged).length;
   box.innerHTML = `<div class="takes-h"><b>Passages and takes</b><span class="small dim">${m.chunks.length} passage${m.chunks.length === 1 ? "" : "s"}${flagged ? ` · <span class="flag">${flagged} to check</span>` : " · all passed the speech check"}</span>
-      <div class="grow"></div><button class="btn sm ghost" id="regen-all" title="New takes for every unlocked passage">${icon("dice", "sm")}Re-take unlocked</button></div>
+      <div class="grow"></div><button class="btn sm ghost" data-regen title="New takes for every unlocked passage">${icon("dice", "sm")}Re-take unlocked</button></div>
     ${m.chunks.map(c => { const cur = c.takes.find(t => t.n === c.chosen);
       return `<div class="take-row ${c.flagged ? "flagged" : ""} ${c.locked ? "locked" : ""}" data-i="${c.index}">
         <div class="tx">${qaHTML(c, cur)}</div>
@@ -487,12 +498,11 @@ async function loadTakes(item) {
           <button class="btn sm icon ghost" data-act="new" title="New take of this passage">${icon("plus", "sm")}</button>
           <button class="btn sm icon ghost" data-act="lock" title="${c.locked ? "Unlock" : "Lock: keep this take when re-taking the rest"}">${icon(c.locked ? "lock" : "unlock", "sm")}</button></div></div>`; }).join("")}
     <div class="small dim" style="margin-top:6px">Click a take to hear it, double-click to use it. Underlined words were missed or misheard by the speech check.</div>`;
-  const refresh = async () => {
-    const [aud, w] = await Promise.all([API.req(`/api/v1/renders/${rid}/audio?format=${item.format === "pcm16" ? "wav" : item.format}`, { raw: true }), API.req(`/api/v1/renders/${rid}/words`)]);
-    if (item.url) URL.revokeObjectURL(item.url); item.url = null; item.blob = await aud.blob();
-    item.info = { ...item.info, words: w.words, duration: w.duration }; renderHistory(); showResult(item, false);
+  const act = async (btn, fn, done) => {
+    busyBtn(btn, true);
+    try { await fn(); if (onChanged) await onChanged(); await mountTakes(box, rid, onChanged); if (done) toast(done, "ok"); }
+    catch (e) { toast(e.message, "bad"); busyBtn(btn, false); }
   };
-  const act = async (btn, fn, done) => { busyBtn(btn, true); try { await fn(); await refresh(); if (done) toast(done, "ok"); } catch (e) { toast(e.message, "bad"); busyBtn(btn, false); } };
   $$(".take-row", box).forEach(row => {
     const i = +row.dataset.i;
     $$(".pt", row).forEach(b => {
@@ -502,7 +512,7 @@ async function loadTakes(item) {
     $("[data-act=new]", row).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/takes`, { method: "POST", json: {}, timeout: 0 }), `New take for passage ${i + 1}`);
     $("[data-act=lock]", row).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/chunks/${i}/lock`, { method: "POST", json: { locked: !row.classList.contains("locked") } }));
   });
-  $("#regen-all").onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/regenerate`, { method: "POST", json: {}, timeout: 0 }), "New takes for every unlocked passage");
+  $("[data-regen]", box).onclick = e => act(e.currentTarget, () => API.req(`/api/v1/renders/${rid}/regenerate`, { method: "POST", json: {}, timeout: 0 }), "New takes for every unlocked passage");
 }
 
 // ------------------------------------------------------------------------------------------------ dictionary page

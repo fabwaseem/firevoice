@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design", "previews")
+KINDS = ("tts", "batch", "design", "previews", "project")
 
 
 @dataclass
@@ -106,6 +106,14 @@ class JobManager:
             title = title or f"design voice {payload['name']}"
         elif kind == "previews":
             title = title or f"voice previews ({len(payload.get('voices') or []) or 'all'})"
+        elif kind == "project":
+            p = self.svc.project_get(str(payload.get("project") or ""))
+            if payload.get("scope", "stale") not in ("stale", "all"):
+                raise FireVoiceError("bad_request", "scope must be 'stale' (drafts and changed paragraphs) or 'all' (everything not locked)")
+            todo = self.svc.project_todo(p["id"], payload.get("scope", "stale"), payload.get("chapter"))
+            if not todo:
+                raise FireVoiceError("conflict", "nothing to render: every paragraph is rendered and up to date (or locked)")
+            title = title or f"{p['title']}: {len(todo)} paragraph(s)"
         job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload)
         with self.lock:
             self.jobs[job.id] = job
@@ -339,6 +347,27 @@ class JobManager:
                 failed.append({"voice": vid, "error": str(getattr(e, "message", e))[:200]})
         self._progress(j, len(todo), max(1, len(todo)))
         j.result = {"rendered": done, "failed": failed, "skipped": len(ids) - len(todo)}
+
+    def _run_project(self, j: Job, cancel: threading.Event) -> None:
+        """Render a project's drafts and changed paragraphs (or all unlocked ones), one by one, in the background."""
+        from .service import FireVoiceError
+        from .types import Cancelled
+        p = j.payload
+        todo = self.svc.project_todo(p["project"], p.get("scope", "stale"), p.get("chapter"))
+        done, failed = [], []
+        for k, (ch, para) in enumerate(todo):
+            if cancel.is_set():
+                raise Cancelled("cancelled")
+            self._progress(j, k, len(todo), message=f"paragraph {k + 1} of {len(todo)}")
+            try:
+                self.svc.paragraph_render(p["project"], para, priority=1, cancel=cancel)
+                done.append(para)
+            except Cancelled:
+                raise
+            except FireVoiceError as e:
+                failed.append({"paragraph": para, "chapter": ch, "error": e.message[:200]})
+        self._progress(j, len(todo), max(1, len(todo)))
+        j.result = {"project": p["project"], "rendered": len(done), "failed": failed}
 
     def _run_design(self, j: Job, cancel: threading.Event) -> None:
         p = j.payload

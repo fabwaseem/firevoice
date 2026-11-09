@@ -258,6 +258,81 @@ def cmd_renders(a) -> int:
         svc.close()
 
 
+def cmd_project(a) -> int:
+    from .service import FireVoiceError
+    svc = _service(a)
+    try:
+        if a.action == "list":
+            for p in svc.project_list():
+                c = p["counts"]
+                print(f"{p['id']}  {p['title']!r}: {p['chapters']} chapter(s), {p['paragraphs']} paragraph(s), {p['words']} words, "
+                      f"{c['rendered'] + c['locked']} rendered, {c['stale']} changed, {c['draft']} draft, {p['duration'] / 60:.1f} min")
+            return 0
+        if a.action == "new":
+            defaults = {k: v for k, v in (("voice", a.voice), ("style", a.style), ("engine", a.engine)) if v}
+            p = svc.project_create(a.id or "Untitled project", _read_text(a.text) if a.text else "", defaults)
+            print(f"created {p['id']}: {len(p['chapters'])} chapter(s), {p['paragraphs']} paragraph(s)")
+            return 0
+        if a.action == "import":
+            p = svc.project_import(Path(a.id).read_bytes())
+            print(f"imported {p['id']}: {p['title']!r}")
+            return 0
+        if not a.id:
+            print("which project? (firevoice project list)", file=sys.stderr)
+            return 2
+        if a.action == "show":
+            p = svc.project_get(a.id)
+            print(f"{p['title']}  ({p['words']} words, {p['duration'] / 60:.1f} min rendered)")
+            for ch in p["chapters"]:
+                print(f"\n[{ch['id']}] {ch['title']}")
+                for para in ch["paragraphs"]:
+                    extra = ", ".join(f"{k} {para[k]}" for k in ("voice", "style", "pace") if para.get(k))
+                    print(f"  {para['id']}  {para['status']:8}  {para['text'][:80]!r}{'  (' + extra + ')' if extra else ''}")
+        elif a.action == "render":
+            if a.para:
+                svc.paragraph_render(a.id, a.para)
+                print("rendered", a.para)
+            else:
+                todo = svc.project_todo(a.id, "all" if a.all else "stale", a.chapter)
+                if not todo:
+                    print("nothing to render: every paragraph is up to date (or locked)")
+                for k, (_ch, para) in enumerate(todo, 1):
+                    print(f"\r  paragraph {k}/{len(todo)}", end="", file=sys.stderr, flush=True)
+                    svc.paragraph_render(a.id, para)
+                if todo:
+                    print(file=sys.stderr)
+                    print(f"rendered {len(todo)} paragraph(s)")
+        elif a.action in ("lock", "unlock"):
+            svc.paragraph_lock(a.id, a.para, a.action == "lock")
+            print(f"{a.para} {a.action}ed")
+        elif a.action == "export":
+            out = Path(a.out or f"{a.id}.m4b")
+            fmt = out.suffix.lower().lstrip(".") or "mp3"
+            data, _mt, _name = svc.project_export(a.id, {"pcm": "pcm16"}.get(fmt, fmt), a.chapter, a.master)
+            out.write_bytes(data)
+            print(f"wrote {out} ({len(data) // 1024} KB)")
+        elif a.action == "check":
+            r = svc.project_check(a.id, a.master)
+            for ch in r["chapters"]:
+                print(f"{'PASS' if ch['pass'] else 'FAIL'}  {ch['title']}")
+                for c in ch.get("checks", []):
+                    print(f"   {'ok ' if c['ok'] else 'NO '} {c['name']}: {c['value']} {c['unit']} (want {c['target']})")
+            return 0 if r["pass"] else 1
+        elif a.action == "bundle":
+            data, name = svc.project_bundle(a.id)
+            out = Path(a.out or name)
+            out.write_bytes(data)
+            print(f"wrote {out} ({len(data) // 1024 // 1024} MB)")
+        elif a.action == "delete":
+            svc.project_delete(a.id)
+            print("deleted", a.id)
+        return 0
+    except FireVoiceError as e:
+        return _fail(e)
+    finally:
+        svc.close()
+
+
 def cmd_batch(a) -> int:
     """Lines from a JSON file ([{"id", "text", <any request field>}...] or {"lines": [...]}) rendered in parallel."""
     from concurrent.futures import ThreadPoolExecutor
@@ -316,6 +391,19 @@ def cmd_voices(a) -> int:
     try:
         if a.action == "list":
             return _print_voices(svc.voice_list(language=a.language, gender=a.gender, tag=a.tag, q=a.q, kind=a.kind), a)
+        if a.action == "pack":
+            data, name = svc.voice_pack(a.name)
+            out = Path(a.pack or name)
+            out.write_bytes(data)
+            print(f"wrote {out} ({len(data) // 1024} KB)")
+            return 0
+        if a.action == "import":
+            if not a.pack:
+                print("usage: firevoice voices import --pack FILE.zip --consent [--name ID]", file=sys.stderr)
+                return 2
+            v = svc.voice_import(Path(a.pack).read_bytes(), consent=a.consent, voice_id=a.name)
+            print(f"added {v['voice_id']} ({v.get('name') or ''})")
+            return 0
         if a.action == "brand":
             only = [x.strip() for x in (a.only or "").split(",") if x.strip()] or None
             rows = svc.voice_brand(a.report, force=a.force, log=print, only=only)
@@ -851,6 +939,20 @@ def build_parser() -> argparse.ArgumentParser:
     rd.add_argument("--limit", type=int, default=30)
     rd.set_defaults(fn=cmd_renders)
 
+    pj = sub.add_parser("project", help="long-form projects: chapters of paragraphs, render what changed, export audiobooks")
+    pj.add_argument("action", nargs="?", default="list", choices=["list", "new", "show", "render", "lock", "unlock", "export", "check", "bundle", "import", "delete"])
+    pj.add_argument("id", nargs="?", help="project id (list shows them); new: the title; import: the bundle file")
+    pj.add_argument("para", nargs="?", help="render/lock/unlock: a paragraph id (show lists them)")
+    pj.add_argument("--text", default=None, help="new: the script, or @file.txt ('# Heading' / 'Chapter 1' lines start chapters, blank lines split paragraphs)")
+    pj.add_argument("--voice", default=None, help="new: default voice")
+    pj.add_argument("--style", default=None, help="new: default style")
+    pj.add_argument("--engine", default=None, help="new: default engine")
+    pj.add_argument("--all", action="store_true", help="render: every unlocked paragraph, not only drafts and changed ones")
+    pj.add_argument("--chapter", default=None, help="render/export: only this chapter id")
+    pj.add_argument("--master", choices=["audiobook"], default=None, help="export/check: bring each file inside audiobook limits")
+    pj.add_argument("-o", "--out", default=None, help="export: .m4b (with chapters), .mp3, .wav, .srt, .vtt | bundle: .zip")
+    pj.set_defaults(fn=cmd_project)
+
     b = sub.add_parser("batch", help="synthesize many lines from a JSON file; every line may override any request field")
     b.add_argument("file")
     b.add_argument("-o", "--out", default="voice_out")
@@ -860,7 +962,8 @@ def build_parser() -> argparse.ArgumentParser:
     b.set_defaults(fn=cmd_batch)
 
     v = sub.add_parser("voices", help="list, add, design, update and remove voices")
-    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews"])
+    v.add_argument("action", nargs="?", default="list", choices=["list", "info", "add", "design", "update", "remove", "default", "style-ref", "harvest", "brand", "previews", "pack", "import"])
+    v.add_argument("--pack", default=None, help="pack: output .zip (default <voice>.fvvoice.zip) | import: the voice pack to add")
     v.add_argument("--name")
     v.add_argument("--ref", help="add / style-ref: audio clip (6-20 s of clean speech)")
     v.add_argument("--consent", action="store_true", help="confirm you own or have permission to use this voice")

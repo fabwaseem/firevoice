@@ -80,6 +80,14 @@ def filter_audio(a: np.ndarray, sr: int, af: str) -> np.ndarray:
     return np.frombuffer(raw, dtype="<f4").copy()
 
 
+def resample(a: np.ndarray, sr: int, out_sr: int) -> np.ndarray:
+    if sr == out_sr or not len(a):
+        return a
+    raw = _run([_ffmpeg(), "-v", "error", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0", "-af", "aresample=resampler=soxr",
+                "-f", "f32le", "-ar", str(out_sr), "-ac", "1", "pipe:1"], a.astype("<f4").tobytes())
+    return np.frombuffer(raw, dtype="<f4").copy()
+
+
 def soft_limit(a: np.ndarray, knee: float = 0.8, ceiling: float = 0.98) -> np.ndarray:
     """Leave everything under `knee` alone and bend louder samples smoothly toward `ceiling` (no hard clipping)."""
     a = np.asarray(a, dtype=np.float32)

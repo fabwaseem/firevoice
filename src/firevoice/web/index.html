@@ -18,6 +18,7 @@
     <div class="nav-label">Create</div>
     <nav class="nav" id="nav">
       <a href="#speak" data-page="speak"><svg class="i"><use href="#i-wave"/></svg><span class="lbl">Speak</span></a>
+      <a href="#projects" data-page="projects"><svg class="i"><use href="#i-book"/></svg><span class="lbl">Projects</span><span class="count" id="n-projects"></span></a>
       <a href="#voices" data-page="voices"><svg class="i"><use href="#i-users"/></svg><span class="lbl">Voices</span><span class="count" id="n-voices"></span></a>
       <a href="#stt" data-page="stt"><svg class="i"><use href="#i-mic"/></svg><span class="lbl">Speech to text</span></a>
       <a href="#jobs" data-page="jobs"><svg class="i"><use href="#i-layers"/></svg><span class="lbl">Jobs</span><span class="count" id="n-jobs"></span></a>
@@ -211,6 +212,18 @@
       <div class="scards" id="scards"></div>
     </section>
 
+    <!-- ============================================================== PROJECTS -->
+    <section class="page" id="page-projects">
+      <div id="pj-list-view">
+        <div class="page-head"><div><h1>Projects</h1><p>Audiobooks, courses and series: chapters of paragraphs, each with its own takes. Render only what changed, export with chapters.</p></div>
+          <div class="grow"></div><button class="btn" id="pj-import"><svg class="i"><use href="#i-upload"/></svg>Import bundle</button>
+          <button class="btn primary" id="pj-new"><svg class="i"><use href="#i-plus"/></svg>New project</button></div>
+        <div class="pj-grid" id="pj-grid"></div>
+        <input type="file" id="pj-file" accept=".zip,application/zip" class="hidden">
+      </div>
+      <div id="pj-editor" class="hidden"></div>
+    </section>
+
     <!-- ============================================================== DICTIONARY -->
     <section class="page" id="page-dictionary">
       <div class="page-head"><div><h1>Pronunciation dictionary</h1><p>Your rules for how words are said: names, brands, acronyms. They run before everything else and work in every language.</p></div>
@@ -287,5 +300,6 @@
   <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
 </svg>
 <script src="/web/app.js"></script>
+<script src="/web/projects.js"></script>
 </body>
 </html>

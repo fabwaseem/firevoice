@@ -168,6 +168,8 @@ class FireVoice:
         from .takestore import RenderStore
         self.dictionary = Dictionary(home() / "dictionary.json")
         self.renders = RenderStore(home() / "takes")
+        from .projects import ProjectStore
+        self.projects = ProjectStore(home() / "projects")
         self.jobs = JobManager(self)
 
     # -------------------------------------------------------------------- engines
@@ -550,6 +552,253 @@ class FireVoice:
         self.render_get(rid)
         self.renders.delete(rid)
         return {"id": rid, "deleted": True}
+
+    # -------------------------------------------------------------------- projects
+    def _project(self, pid: str) -> dict:
+        try:
+            return self.projects.get(pid)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def _check_defaults(self, defaults: Optional[dict]) -> None:
+        from .projects import LAYOUT_FIELDS
+        if defaults is None:
+            return
+        if not isinstance(defaults, dict):
+            raise FireVoiceError("bad_request", "defaults must be an object")
+        tts = {k: v for k, v in defaults.items() if k not in LAYOUT_FIELDS}
+        for k in ("text", "keep_takes"):
+            tts.pop(k, None)
+        self.prepare(TTSRequest.from_dict({**tts, "text": "check"}))
+        for k in LAYOUT_FIELDS:
+            v = defaults.get(k)
+            if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool) or not 0 <= v <= 30000):
+                raise FireVoiceError("bad_request", f"{k} must be a number of milliseconds between 0 and 30000")
+
+    def project_list(self) -> list[dict]:
+        from .projects import summary
+        return [summary(p) for p in self.projects.list()]
+
+    def project_get(self, pid: str) -> dict:
+        from .projects import view
+        return view(self._project(pid))
+
+    def project_create(self, title: str, text: str = "", defaults: Optional[dict] = None) -> dict:
+        from .projects import view
+        self._check_defaults(defaults)
+        return view(self.projects.create(title, text, defaults))
+
+    def project_update(self, pid: str, title: Optional[str] = None, defaults: Optional[dict] = None, chapters: Optional[list] = None) -> dict:
+        from .projects import view
+        self._project(pid)
+        self._check_defaults(defaults)
+        try:
+            p, dropped = self.projects.update(pid, title=title, defaults=defaults, chapters=chapters)
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+        for rid in dropped:          # paragraphs that were deleted take their renders with them
+            self.renders.delete(rid)
+        return view(p)
+
+    def project_delete(self, pid: str) -> dict:
+        p = self._project(pid)
+        for ch in p["chapters"]:
+            for para in ch["paragraphs"]:
+                if para.get("render"):
+                    self.renders.delete(para["render"]["id"])
+        self.projects.delete(pid)
+        return {"id": pid, "deleted": True}
+
+    def paragraph_render(self, pid: str, para_id: str, priority: int = 0, cancel: Optional[threading.Event] = None) -> dict:
+        """Render one paragraph with its current text and settings (every take kept). Its old render is replaced."""
+        from .projects import find_para, render_key, request_for, view
+        p = self._project(pid)
+        try:
+            para = find_para(p, para_id)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        if not para["text"].strip():
+            raise FireVoiceError("bad_request", "this paragraph is empty")
+        req = request_for(p, para)
+        r = self.tts(TTSRequest.from_dict(req), cancel=cancel, priority=priority)
+        if not r.render_id:
+            raise FireVoiceError("internal", "the render was not kept")
+        self.renders.pin(r.render_id, pid)
+        p, old = self.projects.set_render(pid, para_id, {"id": r.render_id, "key": render_key(req), "duration": round(r.duration, 3), "at": time.time()})
+        if old and old != r.render_id:
+            self.renders.delete(old)
+        return view(p)
+
+    def paragraph_lock(self, pid: str, para_id: str, locked: bool) -> dict:
+        from .projects import view
+        self._project(pid)
+        try:
+            return view(self.projects.set_lock(pid, para_id, locked))
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def paragraph_audio(self, pid: str, para_id: str) -> tuple:
+        from .projects import find_para
+        p = self._project(pid)
+        try:
+            para = find_para(p, para_id)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        if not para.get("render"):
+            raise FireVoiceError("not_found", "this paragraph has not been rendered yet")
+        return self.render_audio(para["render"]["id"])
+
+    def project_todo(self, pid: str, scope: str = "stale", chapter: Optional[str] = None) -> list[tuple[str, str]]:
+        """(chapter id, paragraph id) to render: "stale" = drafts and stale ones, "all" = everything not locked."""
+        from .projects import status
+        p = self._project(pid)
+        out = []
+        for ch in p["chapters"]:
+            if chapter and ch["id"] != chapter:
+                continue
+            for para in ch["paragraphs"]:
+                st = status(p, para)
+                if not para["text"].strip() or st == "locked":
+                    continue
+                if scope == "all" or st in ("draft", "stale"):
+                    out.append((ch["id"], para["id"]))
+        return out
+
+    def project_audio(self, pid: str, chapter: Optional[str] = None, master: Optional[str] = None, allow_missing: bool = False) -> tuple:
+        """The project (or one chapter) as one timeline of the paragraphs' chosen takes.
+        -> (audio, sample rate, words with absolute times, [(chapter title, start s, end s)])"""
+        from .projects import audiobook_check, master_audiobook, status  # noqa: F401
+        p = self._project(pid)
+        lay = p.get("defaults") or {}
+        chapters = [c for c in p["chapters"] if not chapter or c["id"] == chapter]
+        if chapter and not chapters:
+            raise FireVoiceError("not_found", f"project {pid} has no chapter {chapter!r}")
+        missing = [para for c in chapters for para in c["paragraphs"] if para["text"].strip() and not para.get("render")]
+        if missing and not allow_missing:
+            raise FireVoiceError("conflict", f"{len(missing)} paragraph(s) are not rendered yet; render them first (or export with allow_missing)")
+        pieces = []
+        for c in chapters:
+            for para in c["paragraphs"]:
+                if para.get("render"):
+                    a, sr, w = self.render_audio(para["render"]["id"])
+                    pieces.append((c, para, a, sr, w))
+        if not pieces:
+            raise FireVoiceError("conflict", "nothing is rendered yet")
+        sr = max(x[3] for x in pieces)
+        parts, words, marks = [], [], []
+        t = 0.0
+        cur_ch = None
+        for c, para, a, psr, w in pieces:
+            if c is not cur_ch:
+                if cur_ch is not None:
+                    gap = A.silence(int(lay.get("chapter_gap_ms", 2500)), sr)
+                    parts.append(gap)
+                    t += len(gap) / sr
+                    marks[-1] = (marks[-1][0], marks[-1][1], t)
+                lead = A.silence(int(lay.get("chapter_lead_ms", 500)), sr)
+                marks.append((c["title"], t, t))
+                parts.append(lead)
+                t += len(lead) / sr
+                cur_ch = c
+            elif parts:
+                gap = A.silence(int(lay.get("paragraph_gap_ms", 700)), sr)
+                parts.append(gap)
+                t += len(gap) / sr
+            a = A.resample(a, psr, sr)
+            words += [{"text": x["text"], "start": round(t + x["start"], 3), "end": round(t + x["end"], 3)} for x in w]
+            parts.append(a)
+            t += len(a) / sr
+        tail = A.silence(1500, sr)
+        parts.append(tail)
+        t += len(tail) / sr
+        marks[-1] = (marks[-1][0], marks[-1][1], t)
+        out = np.concatenate(parts).astype(np.float32)
+        if master == "audiobook":
+            out = master_audiobook(out, sr)
+        return out, sr, words, marks
+
+    def project_export(self, pid: str, fmt: str = "mp3", chapter: Optional[str] = None, master: Optional[str] = None,
+                       allow_missing: bool = False) -> tuple[bytes, str, str]:
+        """-> (bytes, media type, file name). fmt: any audio format, or m4b (chapter marks), srt, vtt."""
+        import re as _re
+        from .projects import m4b_bytes
+        p = self._project(pid)
+        a, sr, words, marks = self.project_audio(pid, chapter, master, allow_missing)
+        stem = _re.sub(r"[^\w\- ]+", "", p["title"]).strip()[:60] or pid
+        if chapter:
+            stem += " - " + _re.sub(r"[^\w\- ]+", "", marks[0][0]).strip()[:40]
+        if fmt in ("srt", "vtt"):
+            text, mt = self.subtitles(words, fmt)
+            return text.encode("utf-8"), mt, f"{stem}.{fmt}"
+        if fmt == "m4b":
+            return m4b_bytes(a, sr, marks, p["title"]), "audio/mp4", f"{stem}.m4b"
+        if fmt not in A.FORMATS:
+            raise FireVoiceError("bad_request", f"unknown format {fmt!r}; use m4b, srt, vtt or {', '.join(A.FORMATS)}")
+        return self.encode(a, fmt, sr=sr), A.media_type(fmt), f"{stem}.{A.FORMATS[fmt][2]}"
+
+    def project_check(self, pid: str, master: Optional[str] = None) -> dict:
+        """The audiobook check for every chapter (rendered paragraphs only)."""
+        from .projects import audiobook_check
+        p = self._project(pid)
+        out = []
+        for c in p["chapters"]:
+            if not any(para.get("render") for para in c["paragraphs"]):
+                out.append({"chapter": c["id"], "title": c["title"], "pass": False, "checks": [], "note": "nothing rendered yet"})
+                continue
+            a, sr, _w, _m = self.project_audio(pid, c["id"], master, allow_missing=True)
+            out.append({"chapter": c["id"], "title": c["title"], **audiobook_check(a, sr)})
+        return {"master": master, "chapters": out, "pass": bool(out) and all(c["pass"] for c in out)}
+
+    def project_bundle(self, pid: str) -> tuple[bytes, str]:
+        from .bundles import project_bundle
+        p = self._project(pid)
+        stem = re.sub(r"[^\w\- ]+", "", p["title"]).strip()[:60] or pid
+        return project_bundle(p, self.renders.root), f"{stem}.fvproject.zip"
+
+    def project_import(self, data: bytes) -> dict:
+        from .bundles import import_project_bundle
+        from .projects import view
+        try:
+            return view(import_project_bundle(data, self.projects.root, self.renders.root))
+        except (ValueError, KeyError) as e:
+            raise FireVoiceError("bad_request", str(e))
+        except Exception as e:
+            raise FireVoiceError("bad_request", f"cannot read the bundle: {e}")
+
+    def voice_pack(self, voice_id: str) -> tuple[bytes, str]:
+        from .bundles import voice_pack
+        v = self.voice(voice_id)
+        return voice_pack(Path(self.voices.get(v["voice_id"])["dir"])), f"{v['voice_id']}.fvvoice.zip"
+
+    def voice_import(self, data: bytes, *, consent: bool, voice_id: Optional[str] = None) -> dict:
+        """Add a voice from a voice pack. Like any cloned voice it needs consent: only import voices you own or have
+        permission to use."""
+        import io
+        import json as _json
+        import zipfile
+        from .bundles import import_voice_pack
+        from .voices import _slug
+        if not consent:
+            raise FireVoiceError("bad_request", "consent is required: only import voices you own or have permission to use")
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                meta = _json.loads(z.read("meta.json").decode("utf-8"))
+        except Exception as e:
+            raise FireVoiceError("bad_request", f"not a FireVoice voice pack: {e}")
+        vid = _slug(voice_id or meta.get("voice_id") or "voice")
+        base, k = vid, 2
+        while self.voices.exists(vid):
+            vid = f"{base}-{k}"
+            k += 1
+        try:
+            import_voice_pack(data, self.voices.root, vid)
+        except (ValueError, FileExistsError) as e:
+            raise FireVoiceError("bad_request", str(e))
+        self.voices.update(vid, consent=True, imported=time.time())
+        name = (self.voices.get(vid).get("name") or "")
+        if name and any(str(v.get("name", "")).lower() == name.lower() and v["voice_id"] != vid for v in self.voices.list()):
+            self.voices.update(vid, name=f"{name} ({vid})")
+        return self.voice(vid)
 
     def subtitles(self, words, fmt: str = "srt") -> tuple[str, str]:
         from . import subtitles as S

@@ -163,6 +163,21 @@ The playground and the desktop app show the same thing after a render: each pass
 missed or misheard underlined, its takes to compare, a new-take button and a lock, plus SRT and VTT downloads. The
 Dictionary page edits your pronunciation rules and plays them back.
 
+## Projects (audiobooks and other long form)
+
+```bash
+firevoice project new "The Lighthouse" --text @book.txt --voice Ember --style audiobook   # "# Heading" lines start chapters
+firevoice project render ID              # drafts and changed paragraphs only (--all: every unlocked one)
+firevoice project show ID                # every paragraph with its status: draft, rendered, stale, locked
+firevoice project export ID -o book.m4b --master audiobook   # also .mp3 .wav .srt .vtt, --chapter ID
+firevoice project check ID --master audiobook                # loudness, peaks, noise floor, head and tail quiet
+firevoice project bundle ID -o book.zip ; firevoice project import book.zip
+firevoice voices pack Ember --pack ember.zip ; firevoice voices import --pack ember.zip --consent
+```
+
+The Projects page in the playground and the desktop app edits chapters and paragraphs (each with its own voice and
+style if you like), saves as you type, renders only what changed in the background, and opens each paragraph's takes.
+
 ## Markup, styles and voices
 
 ### Markup
