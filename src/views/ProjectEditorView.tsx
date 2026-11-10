@@ -83,19 +83,41 @@ export function ProjectEditorView() {
     }
   }, [projectId, apply]);
 
-  // edits save themselves 800 ms after the last change
+  // edits save themselves 800 ms after the last change, and at once when the editor or the window closes
+  const pending = useRef<{ chapters: ChapterEdit[]; title: string } | null>(null);
   const edit = (next: ChapterEdit[], nextTitle = title) => {
     setDraft(next);
+    pending.current = { chapters: next, title: nextTitle };
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void save(next, { title: nextTitle }), 800);
+    timer.current = setTimeout(() => {
+      pending.current = null;
+      void save(next, { title: nextTitle });
+    }, 800);
   };
   const flush = async () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
+      pending.current = null;
       await save(draft, { title });
     }
   };
+  useEffect(() => {
+    const send = () => {
+      const p = pending.current;
+      if (!p || !projectId) return;
+      pending.current = null;
+      if (timer.current) clearTimeout(timer.current);
+      void api.updateProject(projectId, { chapters: p.chapters, title: p.title }).catch(() => undefined);
+    };
+    window.addEventListener("pagehide", send);
+    window.addEventListener("beforeunload", send);
+    return () => {
+      window.removeEventListener("pagehide", send);
+      window.removeEventListener("beforeunload", send);
+      send();
+    };
+  }, [projectId]);
 
   // follow a "render changed" job: refresh statuses as paragraphs finish
   useEffect(() => {

@@ -80,7 +80,14 @@ export function useRender() {
     setState((s) => (s.phase === "streaming" || s.phase === "rendering" || s.phase === "starting" ? { ...s, phase: "idle" } : s));
   }, []);
 
-  useEffect(() => () => stop(), [stop]);
+  // Leaving the page does not cancel a render: it finishes (and is kept in History), playing in the player bar.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const renderWhole = useCallback(async (req: TTSRequest) => {
     stop();
@@ -111,6 +118,7 @@ export function useRender() {
         stats: { duration: r.duration, seconds: r.seconds, rtf: r.rtf, chunks: r.chunks, takes: r.takes, retries: r.retries, warnings: r.warnings ?? [], engine: r.engine, renderId: r.render_id ?? null },
       });
       if (r.warnings?.length) toast.warning(r.warnings[0], { description: r.warnings.length > 1 ? `${r.warnings.length - 1} more warning(s)` : undefined });
+      if (!mounted.current) toast.success("Your render is ready", { description: "It's in the player and saved in History." });
     } catch (e) {
       if (ac.signal.aborted) return;
       const msg = errMessage(e);
@@ -156,6 +164,7 @@ export function useRender() {
       }
       s.setLive(false);
       s.load({ id, ...meta, src: URL.createObjectURL(wav.blob), blob: wav.blob, format: "wav", duration: wav.duration, words, href: "/speak" }, false);
+      if (!mounted.current) toast.success("Your render is finished", { description: "Saved in History." });
       setState((st) => ({ ...st, phase: "done", words, stats: stats ?? { duration: wav.duration, warnings: [], chunks: collected.length } }));
     };
 

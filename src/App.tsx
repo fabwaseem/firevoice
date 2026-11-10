@@ -1,22 +1,29 @@
+import { lazy, type ComponentType } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHashRouter, RouterProvider } from "react-router";
 import { AppShell } from "@/components/shell/AppShell";
 import { RouteError } from "@/components/shell/RouteError";
 import { HomeView } from "@/views/HomeView";
-import { SpeakView } from "@/views/SpeakView";
-import { VoicesView } from "@/views/VoicesView";
-import { TranscribeView } from "@/views/TranscribeView";
-import { JobsView } from "@/views/JobsView";
-import { EnginesView } from "@/views/EnginesView";
-import { StylesView } from "@/views/StylesView";
-import { DictionaryView } from "@/views/DictionaryView";
-import { ProjectsView } from "@/views/ProjectsView";
-import { VoiceChangerView } from "@/views/VoiceChangerView";
-import { DialogueView } from "@/views/DialogueView";
-import { DubbingView } from "@/views/DubbingView";
-import { SoundView } from "@/views/SoundView";
-import { ProjectEditorView } from "@/views/ProjectEditorView";
-import { SettingsView } from "@/views/SettingsView";
+
+// Pages load when first opened, so the app starts from a small bundle. Home ships with it.
+function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
+  return lazy(() => load().then((m) => ({ default: m[name] })));
+}
+const SpeakView = page(() => import("@/views/SpeakView"), "SpeakView");
+const VoicesView = page(() => import("@/views/VoicesView"), "VoicesView");
+const TranscribeView = page(() => import("@/views/TranscribeView"), "TranscribeView");
+const JobsView = page(() => import("@/views/JobsView"), "JobsView");
+const EnginesView = page(() => import("@/views/EnginesView"), "EnginesView");
+const StylesView = page(() => import("@/views/StylesView"), "StylesView");
+const DictionaryView = page(() => import("@/views/DictionaryView"), "DictionaryView");
+const ProjectsView = page(() => import("@/views/ProjectsView"), "ProjectsView");
+const VoiceChangerView = page(() => import("@/views/VoiceChangerView"), "VoiceChangerView");
+const DialogueView = page(() => import("@/views/DialogueView"), "DialogueView");
+const DubbingView = page(() => import("@/views/DubbingView"), "DubbingView");
+const SoundView = page(() => import("@/views/SoundView"), "SoundView");
+const ProjectEditorView = page(() => import("@/views/ProjectEditorView"), "ProjectEditorView");
+const SettingsView = page(() => import("@/views/SettingsView"), "SettingsView");
+const HistoryView = page(() => import("@/views/HistoryView"), "HistoryView");
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +40,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <HomeView /> },
       { path: "speak", element: <SpeakView /> },
+      { path: "history", element: <HistoryView /> },
       { path: "voices", element: <VoicesView /> },
       { path: "voices/:voiceId", element: <VoicesView /> },
       { path: "transcribe", element: <TranscribeView /> },

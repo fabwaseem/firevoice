@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, Mic, Square, Upload, Wand2 } from "lucide-react";
 import { api } from "@/lib/api/client";
@@ -12,28 +13,36 @@ import { QualityCheck } from "@/components/tools/QualityReport";
 import { SeparateCard } from "@/components/tools/SeparateCard";
 import { Badge, Button, Card, Label, NativeSelect } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
+import { RecentHistory } from "@/components/history/HistoryList";
 
 /** Voice changer: keep the words, timing and delivery of a recording, swap the voice. */
 export function VoiceChangerView() {
   const voices = useVoices();
-  const studio = useStudio();
+  const studioVoice = useStudio((s) => s.voice);
   const [source, setSource] = useState<{ blob: Blob; name: string; url: string } | null>(null);
   const [check, setCheck] = useState<ClipCheck | null>(null);
-  const [voice, setVoice] = useState(studio.voice);
+  const [voice, setVoice] = useState(studioVoice);
   const [result, setResult] = useState<{ blob: Blob; url: string; duration: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const abort = useRef<AbortController | null>(null);
+  const qc = useQueryClient();
+  const latest = useRef(0);
 
-  useEffect(() => () => { abort.current?.abort(); recRef.current?.stop(); }, []);
+  // leaving the page stops a recording but not a conversion: it finishes and is kept in History
+  useEffect(() => () => recRef.current?.stop(), []);
+  // release the previews' object URLs when they are replaced or the page goes away
+  useEffect(() => () => { if (source) URL.revokeObjectURL(source.url); }, [source]);
+  useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
 
   const use = (blob: Blob, name: string) => {
+    const n = ++latest.current;
     setSource({ blob, name, url: URL.createObjectURL(blob) });
     setResult(null);
     setCheck(null);
-    api.analyzeAudio(blob, name).then(setCheck).catch(() => setCheck(null));
+    // only the newest file's check is shown, even when an older one answers later
+    api.analyzeAudio(blob, name).then((c) => n === latest.current && setCheck(c)).catch(() => n === latest.current && setCheck(null));
   };
 
   const record = async () => {
@@ -63,12 +72,12 @@ export function VoiceChangerView() {
   const convert = async () => {
     if (!source) return;
     setBusy(true);
-    abort.current = new AbortController();
     try {
-      const r = await api.voiceChange(source.blob, source.name, voice, abort.current.signal);
+      const r = await api.voiceChange(source.blob, source.name, voice);
       setResult({ blob: r.blob, url: URL.createObjectURL(r.blob), duration: r.duration });
+      void qc.invalidateQueries({ queryKey: ["history"] });
     } catch (e) {
-      if (!abort.current?.signal.aborted) toast.error(errMessage(e));
+      toast.error(errMessage(e));
     } finally {
       setBusy(false);
     }
@@ -96,8 +105,10 @@ export function VoiceChangerView() {
               <p className="text-[12.5px] text-muted">{source.name}</p>
               {check && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
-                  <Badge tone={check.verdict === "good" ? "ok" : check.verdict === "poor" ? "bad" : "warn"}>{check.verdict}</Badge>
-                  <span className="text-muted">{check.duration}s · SNR {check.snr_db ?? "?"} dB</span>
+                  <Badge tone={check.verdict === "good" ? "ok" : check.verdict === "poor" ? "bad" : "warn"}>
+                    {check.verdict === "good" ? "Clean recording" : check.verdict === "poor" ? "Noisy recording" : "Usable recording"}
+                  </Badge>
+                  <span className="text-muted">{check.duration}s</span>
                   {check.notes.map((n) => <span key={n} className="text-muted">· {n}</span>)}
                 </div>
               )}
@@ -117,12 +128,13 @@ export function VoiceChangerView() {
               <audio controls autoPlay src={result.url} className="w-full" />
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="ghost" leading={<Download className="size-4" />} onClick={() => void saveBlob(result.blob, `${vname}-voice-changer.mp3`)}>Download</Button>
-                <span className="text-[12.5px] text-muted">{result.duration}s in {vname}</span>
+                <span className="text-[12.5px] text-muted">{result.duration}s in {vname} · saved in History</span>
               </div>
             </div>
           )}
         </Card>
       </div>
+      <RecentHistory kinds={["changer"]} title="Recent voice changes" limit={5} empty="Voice changes are saved automatically and listed here." />
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <SeparateCard />
         <QualityCheck />

@@ -10,13 +10,13 @@ function stamp(sec: number): string {
 }
 
 /** Group word times into SRT cues of roughly `perLine` words, breaking early at sentence punctuation. */
-export function wordsToSrt(words: WordTime[], perLine = 8): string {
+export function wordsToSrt(words: (WordTime & { roman?: string })[], perLine = 8): string {
   if (!words.length) return "";
   const cues: { start: number; end: number; text: string }[] = [];
-  let cur: WordTime[] = [];
+  let cur: (WordTime & { roman?: string })[] = [];
   const flush = () => {
     if (!cur.length) return;
-    cues.push({ start: cur[0].start, end: cur[cur.length - 1].end, text: cur.map((w) => w.text).join(" ").replace(/\s+([,.!?;:])/g, "$1") });
+    cues.push({ start: cur[0].start, end: cur[cur.length - 1].end, text: cur.map((w) => w.roman ?? w.text).join(" ").replace(/\s+([,.!?;:])/g, "$1") });
     cur = [];
   };
   for (const w of words) {

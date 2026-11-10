@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, MessagesSquare, Play, Search } from "lucide-react";
 import { api } from "@/lib/api/client";
@@ -9,6 +10,7 @@ import { useStudio } from "@/stores/studio";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ArtTile, Badge, Button, Card, EmptyState, Label, NativeSelect, Slider, Textarea } from "@/components/ui";
 import { cn, fmtTime } from "@/lib/utils";
+import { RecentHistory } from "@/components/history/HistoryList";
 
 const EXAMPLE = `Ayesha: Assalam o Alaikum, and welcome back to the show!
 Bilal: Thanks for having me. (laughs) I promise to keep it short this time.
@@ -22,7 +24,8 @@ type Cast = Record<string, { voice?: string; style?: string }>;
 export function DialogueView() {
   const voices = useVoices();
   const styles = useStyles();
-  const studio = useStudio();
+  const studioEngine = useStudio((s) => s.engine);
+  const qc = useQueryClient();
   const [script, setScript] = useState(() => localStorage.getItem("firevoice.dialogue") || EXAMPLE);   // a ready example on first visit
   const [speakers, setSpeakers] = useState<string[]>([]);
   const [cast, setCast] = useState<Cast>({});
@@ -64,7 +67,9 @@ export function DialogueView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const body = () => ({ script, cast, gap_ms: gap, defaults: { engine: studio.engine ?? undefined } });
+  const body = () => ({ script, cast, gap_ms: gap, defaults: { engine: studioEngine ?? undefined } });
+  // the mix's object URL is released when a new mix replaces it or the page goes away
+  useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
 
   const render = async () => {
     setBusy("render");
@@ -72,6 +77,7 @@ export function DialogueView() {
       const r = await api.dialogue({ ...body(), format: "mp3", response: "json" });
       const blob = new Blob([Uint8Array.from(atob(r.audio_base64), (c) => c.charCodeAt(0))], { type: "audio/mpeg" });
       setResult({ ...r, blob, url: URL.createObjectURL(blob) });
+      void qc.invalidateQueries({ queryKey: ["history"] });
     } catch (e) {
       toast.error(errMessage(e));
     } finally {
@@ -137,7 +143,7 @@ export function DialogueView() {
                       if (!c.voice) return;
                       preview.current?.pause();
                       preview.current = new Audio(api.voicePreviewUrl(c.voice));
-                      void preview.current.play();
+                      preview.current.play().catch(() => toast.error("Could not play this voice's preview"));
                     }}><Play className="size-4" /></Button>
                   </div>
                 );
@@ -173,6 +179,7 @@ export function DialogueView() {
           )}
         </Card>
       </div>
+      <RecentHistory kinds={["dialogue"]} title="Recent dialogues" limit={5} empty="Dialogues you render are saved automatically and listed here." />
     </div>
   );
 }

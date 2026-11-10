@@ -5,6 +5,7 @@ import {
   BookA,
   BookOpen,
   Cpu,
+  History,
   Home,
   Languages,
   Library,
@@ -47,6 +48,7 @@ const GROUPS: { title?: string; items: Item[] }[] = [
   {
     title: "Library",
     items: [
+      { to: "/history", label: "History", icon: History },
       { to: "/voices", label: "Voices", icon: Library },
       { to: "/styles", label: "Styles", icon: Palette },
       { to: "/dictionary", label: "Dictionary", icon: BookA },

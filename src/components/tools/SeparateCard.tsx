@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Download, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
@@ -15,14 +16,24 @@ export function SeparateCard() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<Mode>("vocals");
   const [busy, setBusy] = useState(false);
-  const [out, setOut] = useState<{ voice: Blob; rest: Blob; vUrl: string; rUrl: string } | null>(null);
+  const [out, setOut] = useState<{ voice: Blob; vUrl: string; rUrl: string; rest?: Blob } | null>(null);
+  const qc = useQueryClient();
+  // object URLs made here are released when replaced or when the card goes away
+  useEffect(() => () => { if (out) { URL.revokeObjectURL(out.vUrl); if (out.rUrl.startsWith("blob:")) URL.revokeObjectURL(out.rUrl); } }, [out]);
 
   const run = async () => {
     if (!file) return;
     setBusy(true);
     try {
-      const [voice, rest] = await Promise.all([api.separate(file, mode, "voice"), api.separate(file, mode, "rest")]);
-      setOut({ voice, rest, vUrl: URL.createObjectURL(voice), rUrl: URL.createObjectURL(rest) });
+      // one separation: the voice comes back, both tracks are kept in History, the other track plays from there
+      const r = await api.separate(file, mode, "voice");
+      if (r.historyId) {
+        setOut({ voice: r.blob, vUrl: URL.createObjectURL(r.blob), rUrl: api.historyAudioUrl({ id: r.historyId }, "rest") });
+        void qc.invalidateQueries({ queryKey: ["history"] });
+      } else {
+        const rest = await api.separate(file, mode, "rest");
+        setOut({ voice: r.blob, rest: rest.blob, vUrl: URL.createObjectURL(r.blob), rUrl: URL.createObjectURL(rest.blob) });
+      }
     } catch (e) {
       toast.error(errMessage(e));
     } finally {
@@ -33,7 +44,7 @@ export function SeparateCard() {
   return (
     <Card className="p-5">
       <h3 className="text-[14px] font-semibold text-ink">Separate voice and music</h3>
-      <p className="mt-1 text-[12.5px] text-muted">Pull a voice out of music and effects, noise or room echo. Needs the voice separator from Engines.</p>
+      <p className="mt-1 text-[12.5px] text-muted">Pull a voice out of music and effects, noise or room echo. Needs Crucible from Engines. Both tracks are kept in History.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
           type="file"
@@ -69,7 +80,10 @@ export function SeparateCard() {
           <div>
             <div className="mb-1 flex items-center justify-between text-muted">
               The {REST[mode]}
-              <Button size="sm" variant="ghost" leading={<Download className="size-3.5" />} onClick={() => void saveBlob(out.rest, `${REST[mode].split(" ")[0]}.mp3`)}>
+              <Button size="sm" variant="ghost" leading={<Download className="size-3.5" />} onClick={async () => {
+                const blob = out.rest ?? (await (await fetch(out.rUrl)).blob());
+                void saveBlob(blob, `${REST[mode].split(" ")[0]}.mp3`);
+              }}>
                 Save
               </Button>
             </div>

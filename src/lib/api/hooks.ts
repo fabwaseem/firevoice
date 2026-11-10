@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { api, ApiError, subscribeJobEvents } from "./client";
-import type { Job, Style, Voice } from "./types";
+import type { HistoryItem, HistoryKind, Job, Style, Voice } from "./types";
 import { useSettings } from "@/stores/settings";
 import { engineName } from "@/lib/engineNames";
 
@@ -22,7 +22,31 @@ export const qk = {
   kept: (id: string) => ["kept", id] as const,
   installPlan: (name: string) => ["install-plan", name] as const,
   paths: ["paths"] as const,
+  history: (f?: Record<string, string | number | undefined>) => ["history", f ?? {}] as const,
 };
+
+/** Saved outputs, newest first (all kinds, or the given ones). */
+export function useHistory(kind?: HistoryKind | HistoryKind[], opts: { limit?: number; q?: string } = {}) {
+  const k = Array.isArray(kind) ? kind.join(",") : kind;
+  return useQuery({
+    queryKey: qk.history({ kind: k, limit: opts.limit, q: opts.q }),
+    queryFn: () => api.history({ kind, limit: opts.limit, q: opts.q }),
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useDeleteHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (item: HistoryItem) => api.deleteHistory(item),
+    onSuccess: () => {
+      toast.success("Deleted");
+      qc.invalidateQueries({ queryKey: ["history"] });
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
 
 export function useInstallPlan(name: string, enabled = true) {
   return useQuery({ queryKey: qk.installPlan(name), queryFn: () => api.installPlan(name), enabled, staleTime: 60_000 });

@@ -1,11 +1,13 @@
 import { useRef, useState } from "react";
 import { Ear, Mic, Square } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
 import type { STTResult } from "@/lib/api/types";
 import { LANGUAGE_NAMES, uid } from "@/lib/utils";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { RecentHistory } from "@/components/history/HistoryList";
 import { Button, Card, CardBody, CardHeader, EmptyState, Input, Label, LabeledSlider, Select, Switch } from "@/components/ui";
 import { AudioSource, type SourceFile } from "@/components/transcribe/AudioSource";
 import { TranscriptResult } from "@/components/transcribe/TranscriptResult";
@@ -29,6 +31,7 @@ export function TranscribeView() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ data: STTResult; source: SourceFile; trackId: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const qc = useQueryClient();
 
   const run = async () => {
     if (!source) return;
@@ -39,7 +42,8 @@ export function TranscribeView() {
     try {
       const data = await api.stt(source.blob, { language, beam_size: beam, filename: source.name, keyterms: keyterms.trim() || undefined, diarize }, ctl.signal);
       setResult({ data, source, trackId: `stt-${uid()}` });
-      toast.success(`Transcribed ${data.words.length} words`);
+      toast.success(`Transcribed ${data.words.length} words · saved in History`);
+      void qc.invalidateQueries({ queryKey: ["history"] });
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const msg = errMessage(e);
@@ -53,7 +57,7 @@ export function TranscribeView() {
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      <PageHeader title="Transcribe" subtitle="Speech to text with word timings, on the GPU Whisper that also validates renders." />
+      <PageHeader title="Transcribe" subtitle="Speech to text with word timings, made on your GPU. Every transcript is saved in History." />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[440px_minmax(0,1fr)]">
         <div className="space-y-4">
           <Card>
@@ -74,7 +78,7 @@ export function TranscribeView() {
                 <Label htmlFor="stt-lang">Language</Label>
                 <Select value={language} onChange={setLanguage} options={LANG_OPTIONS} ariaLabel="Language" disabled={busy} />
               </div>
-              <LabeledSlider label="Beam size" value={beam} onChange={setBeam} min={1} max={10} step={1} hint="Wider beams are more accurate and slower" disabled={busy} onReset={() => setBeam(5)} />
+              <LabeledSlider label="Accuracy" value={beam} onChange={setBeam} min={1} max={10} step={1} hint="Higher is more careful and slower" disabled={busy} onReset={() => setBeam(5)} />
               <div>
                 <Label htmlFor="stt-keys" hint="comma-separated">Key terms</Label>
                 <Input id="stt-keys" value={keyterms} onChange={(e) => setKeyterms(e.target.value)} placeholder="FireVoice, Ayesha, Inferno" disabled={busy} />
@@ -93,7 +97,7 @@ export function TranscribeView() {
               </div>
               {busy && (
                 <p className="flex items-center gap-2 text-[12.5px] text-muted" aria-live="polite">
-                  <span className="size-2 animate-pulse rounded-full bg-fire" /> Listening… the first run also loads the Whisper model.
+                  <span className="size-2 animate-pulse rounded-full bg-fire" /> Listening… the first run also loads the speech model.
                 </p>
               )}
               {error && (
@@ -120,6 +124,7 @@ export function TranscribeView() {
           )}
         </div>
       </div>
+      <RecentHistory kinds={["transcript"]} title="Recent transcripts" limit={6} empty="Transcripts are saved automatically and listed here." />
     </div>
   );
 }

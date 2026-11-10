@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { Outlet, useLocation } from "react-router";
 import { Toaster } from "sonner";
 import { useSettings, applyTheme } from "@/stores/settings";
@@ -14,7 +14,6 @@ import { usePlayer } from "@/stores/player";
 export function AppShell() {
   const theme = useSettings((s) => s.theme);
   const hasTrack = usePlayer((s) => !!s.track);
-  const [, setFeedOpen] = useState(true);
 
   useEffect(() => {
     applyTheme(theme);
@@ -24,7 +23,7 @@ export function AppShell() {
     return () => mq.removeEventListener("change", onChange);
   }, [theme]);
 
-  useJobFeed(setFeedOpen);
+  useJobFeed();
 
   // Each view starts at the top; the scroll container is <main>, not the window.
   const { pathname } = useLocation();
@@ -48,7 +47,9 @@ export function AppShell() {
             <BackendManager />
             <Welcome />
             <OfflineBanner />
-            <Outlet />
+            <Suspense fallback={<PageLoading />}>
+              <Outlet />
+            </Suspense>
           </main>
           <PlayerBar />
         </div>
@@ -64,5 +65,16 @@ export function AppShell() {
         />
       </div>
     </TooltipProvider>
+  );
+}
+
+/** Shown for the moment a page's code loads the first time it opens. */
+function PageLoading() {
+  return (
+    <div className="mx-auto max-w-[1000px] animate-pulse" aria-busy="true" aria-label="Loading">
+      <div className="mb-2 h-8 w-48 rounded-lg bg-surface-3" />
+      <div className="mb-6 h-4 w-80 rounded bg-surface-3/70" />
+      <div className="h-64 rounded-xl bg-surface-3/50" />
+    </div>
   );
 }

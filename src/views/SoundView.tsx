@@ -1,31 +1,23 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { Dice5, Download, Music, Play, Sparkles, Waves } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Music, Sparkles, Waves } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useEngines } from "@/lib/api/hooks";
-import { saveBlob } from "@/lib/audio";
+import { usePlayer } from "@/stores/player";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { RecentHistory } from "@/components/history/HistoryList";
 import { Badge, Button, Card, Label, Segmented } from "@/components/ui";
 
 type Kind = "sfx" | "music";
-interface Made {
-  id: string;
-  prompt: string;
-  kind: Kind;
-  url: string;
-  blob: Blob;
-  seed: string;
-  duration: string;
-  engine: string;
-}
 
 const IDEAS: Record<Kind, string[]> = {
   sfx: ["ocean waves crashing on a beach", "a wooden door creaking open slowly", "a campfire crackling at night, crickets", "a thunderstorm with heavy rain", "footsteps on a stone floor"],
   music: ["calm lo-fi piano bed for a podcast intro, warm and slow", "upbeat acoustic guitar, bright, for a product video", "tense cinematic strings, low and slow", "soft ambient pads for meditation"],
 };
 
-/** Sound effects, ambience and music beds from a description (AudioLDM 2, MusicGen). */
+/** Sound effects, ambience and music from a description (Crackle, Bonfire). Everything made is kept in History. */
 export function SoundView() {
   const engines = useEngines("sfx");
   const [kind, setKind] = useState<Kind>("sfx");
@@ -33,7 +25,8 @@ export function SoundView() {
   const [seconds, setSeconds] = useState(5);
   const [seed, setSeed] = useState("");
   const [busy, setBusy] = useState(false);
-  const [made, setMade] = useState<Made[]>([]);
+  const qc = useQueryClient();
+  const load = usePlayer((s) => s.load);
   const engineName = kind === "music" ? "musicgen" : "audioldm2";
   const engine = engines.data?.find((e) => e.name === engineName);
 
@@ -42,7 +35,10 @@ export function SoundView() {
     setBusy(true);
     try {
       const r = await api.sound({ prompt: prompt.trim(), kind, duration: seconds, seed: seed ? Number(seed) : undefined });
-      setMade((m) => [{ id: `${Date.now()}`, prompt: prompt.trim(), kind, url: URL.createObjectURL(r.blob), blob: r.blob, seed: r.seed, duration: r.duration, engine: r.engine }, ...m]);
+      // play it from History, where it is kept (the response itself is only needed when nothing was saved)
+      const src = r.historyId ? api.historyAudioUrl({ id: r.historyId }) : URL.createObjectURL(r.blob);
+      load({ id: r.historyId ? `history:${r.historyId}:audio` : `sound-${Date.now()}`, title: prompt.trim(), subtitle: kind === "music" ? "Music" : "Sound effect", src, href: "/sound" });
+      void qc.invalidateQueries({ queryKey: ["history"] });
     } catch (e) {
       toast.error(errMessage(e));
     } finally {
@@ -115,35 +111,9 @@ export function SoundView() {
             Make it
           </Button>
         </div>
-        <p className="mt-3 text-[12px] text-faint">Both models' weights are licensed for non-commercial use only. Everything made here carries FireVoice's inaudible watermark.</p>
       </Card>
 
-      {made.length > 0 && (
-        <div className="mt-4 space-y-2">
-          {made.map((m) => (
-            <Card key={m.id} className="flex flex-col gap-2 p-4 md:flex-row md:items-center">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13.5px] text-ink">{m.prompt}</p>
-                <p className="text-[12px] text-faint">
-                  {m.kind === "music" ? "music" : "effect"} · {m.duration}s · seed {m.seed}
-                </p>
-              </div>
-              <audio controls src={m.url} className="h-9 md:w-[320px]" />
-              <div className="flex gap-1">
-                <Button size="icon-sm" variant="ghost" aria-label="Make again with this seed" onClick={() => { setPrompt(m.prompt); setKind(m.kind); setSeed(m.seed); }}>
-                  <Dice5 className="size-4" />
-                </Button>
-                <Button size="icon-sm" variant="ghost" aria-label="Download" onClick={() => void saveBlob(m.blob, `${m.prompt.slice(0, 40).replace(/[^a-z0-9]+/gi, "-")}.mp3`)}>
-                  <Download className="size-4" />
-                </Button>
-                <Button size="icon-sm" variant="ghost" aria-label="Play" onClick={() => void new Audio(m.url).play()}>
-                  <Play className="size-4" />
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
+      <RecentHistory kinds={["sound", "music"]} title="Made here" empty="Sounds and music you make are saved automatically and listed here." />
     </div>
   );
 }

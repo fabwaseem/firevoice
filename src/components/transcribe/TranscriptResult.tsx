@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { AudioLines, Captions, Copy, Download, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
@@ -14,12 +14,15 @@ import { wordsToSrt } from "./srt";
 export function TranscriptResult({ result, source, trackId }: { result: STTResult; source: SourceFile; trackId: string }) {
   const navigate = useNavigate();
   const setStudio = useStudio((s) => s.set);
-  const player = usePlayer();
-  const isCurrent = player.track?.id === trackId;
-  const active = isCurrent ? activeWordIndex(result.words, player.position) : -1;
+  const isCurrent = usePlayer((s) => s.track?.id === trackId);
+  const position = usePlayer((s) => (s.track?.id === trackId ? s.position : 0));
+  const load = usePlayer((s) => s.load);
+  const requestSeek = usePlayer((s) => s.requestSeek);
+  const toggle = usePlayer((s) => s.toggle);
+  const playing = usePlayer((s) => s.playing);
+  const active = isCurrent ? activeWordIndex(result.words, position) : -1;
+  const setPlaying = usePlayer((s) => s.setPlaying);
   const activeRef = useRef<HTMLButtonElement>(null);
-  const [srcUrl] = useState(() => URL.createObjectURL(source.blob));
-  useEffect(() => () => URL.revokeObjectURL(srcUrl), [srcUrl]);
 
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -29,23 +32,27 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
   const base = source.name.replace(/\.[^.]+$/, "") || "transcript";
   const srt = useMemo(() => wordsToSrt(result.words), [result.words]);
 
+  // the player gets its own object URL each time and releases it when another track replaces it
+  const track = () => ({ id: trackId, title: source.name, subtitle: `Transcript · ${langName(result.language)}`, src: URL.createObjectURL(source.blob), blob: source.blob, duration: result.duration, words: result.words, href: "/transcribe" });
   const ensureLoaded = () => {
-    if (!isCurrent) {
-      player.load({ id: trackId, title: source.name, subtitle: `Transcript · ${langName(result.language)}`, src: srcUrl, blob: source.blob, duration: result.duration, words: result.words, href: "/transcribe" }, false);
-    }
+    if (!isCurrent) load(track(), false);
   };
   const togglePlay = () => {
-    if (isCurrent) player.toggle();
-    else player.load({ id: trackId, title: source.name, subtitle: `Transcript · ${langName(result.language)}`, src: srcUrl, blob: source.blob, duration: result.duration, words: result.words, href: "/transcribe" });
+    if (isCurrent) toggle();
+    else load(track());
   };
   const seekWord = (start: number) => {
     ensureLoaded();
-    player.requestSeek(start);
-    if (!player.playing) player.setPlaying(true);
+    requestSeek(start);
+    if (!playing) setPlaying(true);
   };
   const copy = async (text: string, what: string) => {
-    await navigator.clipboard.writeText(text);
-    toast.success(`${what} copied`);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${what} copied`);
+    } catch {
+      toast.error("Could not copy to the clipboard");
+    }
   };
 
   return (
@@ -73,8 +80,8 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
           </span>
         }
         action={
-          <Button variant="primary" size="sm" onClick={togglePlay} leading={isCurrent && player.playing ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}>
-            {isCurrent && player.playing ? "Pause" : "Play"}
+          <Button variant="primary" size="sm" onClick={togglePlay} leading={isCurrent && playing ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}>
+            {isCurrent && playing ? "Pause" : "Play"}
           </Button>
         }
       />
@@ -116,7 +123,7 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
               </Button>
             </span>
           </Tooltip>
-          <Button size="sm" leading={<Download className="size-4" />} onClick={() => void saveBlob(new Blob([result.text], { type: "text/plain" }), `${base}.txt`)}>
+          <Button size="sm" leading={<Download className="size-4" />} onClick={() => void saveBlob(new Blob([result.text_roman ?? result.text], { type: "text/plain" }), `${base}.txt`)}>
             Save .txt
           </Button>
           <Button size="sm" leading={<Download className="size-4" />} disabled={!srt} onClick={() => void saveBlob(new Blob([srt], { type: "text/plain" }), `${base}.srt`)}>
@@ -128,14 +135,14 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
             className="ml-auto"
             leading={<AudioLines className="size-4" />}
             onClick={() => {
-              setStudio({ text: result.text });
+              setStudio({ text: result.text_roman ?? result.text });
               navigate("/speak");
             }}
           >
             Send to Speak
           </Button>
         </div>
-        {isCurrent && player.playing && (
+        {isCurrent && playing && (
           <p className="mt-3 flex items-center gap-2 text-[12px] text-muted">
             <Equalizer className="text-fire" /> Following playback; click a word to jump.
           </p>

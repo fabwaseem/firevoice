@@ -575,3 +575,25 @@ export interface Health {
 export interface ApiErrorBody {
   error: { code: string; message: string };
 }
+
+/** Everything made, kept until deleted. Speech items (kind "speech") are kept renders. */
+export type HistoryKind = "speech" | "sound" | "music" | "changer" | "dialogue" | "transcript" | "separate" | "clean";
+
+export interface HistoryFile {
+  file?: string;
+  type: "audio" | "json" | "text";
+  duration?: number;
+}
+
+export interface HistoryItem {
+  id: string;
+  kind: HistoryKind;
+  /** "render" for speech: its audio and deletion go through /api/v1/renders */
+  source?: "render";
+  title: string;
+  created: number;
+  duration?: number | null;
+  sample_rate?: number | null;
+  files: Record<string, HistoryFile>;
+  meta: Record<string, unknown>;
+}

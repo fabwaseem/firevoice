@@ -1,4 +1,5 @@
 import { useSettings } from "@/stores/settings";
+import type { HistoryItem, HistoryKind } from "./types";
 import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
 import { rememberEngineNames } from "@/lib/engineNames";
 
@@ -92,7 +93,7 @@ export const api = {
     });
     if (!res.ok) throw await parseError(res);
     const h = (k: string) => res.headers.get(k) ?? "";
-    return { blob: await res.blob(), seed: h("X-Seed"), duration: h("X-Duration"), engine: h("X-Engine"), license: h("X-License") };
+    return { blob: await res.blob(), seed: h("X-Seed"), duration: h("X-Duration"), engine: h("X-Engine"), historyId: h("X-History-Id") || null };
   },
   engine: (name: string) => request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}`),
   loadEngine: (name: string, workers?: number) =>
@@ -144,7 +145,7 @@ export const api = {
     fd.append("format", "mp3");
     const res = await fetch(url("/api/v1/audio/separate"), { method: "POST", headers: authHeaders(), body: fd });
     if (!res.ok) throw await parseError(res);
-    return res.blob();
+    return { blob: await res.blob(), historyId: res.headers.get("X-History-Id") };
   },
   renderQuality: (id: string) => request<QualityReport>(`/api/v1/renders/${encodeURIComponent(id)}/quality`),
   detectWatermark: (file: Blob, name = "audio") => {
@@ -278,7 +279,7 @@ export const api = {
     fd.append("format", "mp3");
     const res = await fetch(url("/api/v1/voice-changer"), { method: "POST", body: fd, headers: authHeaders(), signal });
     if (!res.ok) throw await parseError(res);
-    return { blob: await res.blob(), duration: Number(res.headers.get("X-Duration") ?? 0) };
+    return { blob: await res.blob(), duration: Number(res.headers.get("X-Duration") ?? 0), historyId: res.headers.get("X-History-Id") };
   },
   cleanVoice: (id: string, strength: "light" | "medium" | "strong" | "neural") =>
     request<Voice>(`/api/v1/voices/${encodeURIComponent(id)}/clean`, { method: "POST", body: json({ strength }) }),
@@ -341,6 +342,31 @@ export const api = {
 
   // ---- kept renders: takes and QA
   keptRender: (id: string) => request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}`),
+  // ---- history: everything made
+  history: (q: { kind?: HistoryKind | HistoryKind[]; limit?: number; before?: number; q?: string } = {}) =>
+    request<{ items: HistoryItem[] }>("/api/v1/history", {}, {
+      kind: Array.isArray(q.kind) ? q.kind.join(",") : q.kind,
+      limit: q.limit ?? 60,
+      before: q.before,
+      q: q.q,
+    }).then((r) => r.items),
+  historyItem: (id: string) => request<HistoryItem>(`/api/v1/history/${encodeURIComponent(id)}`),
+  /** A playable URL for a history item's audio (speech items come from their kept render). */
+  historyAudioUrl: (item: Pick<HistoryItem, "id" | "source">, stem = "audio", format = "mp3") =>
+    item.source === "render"
+      ? withToken(url(`/api/v1/renders/${encodeURIComponent(item.id)}/audio`, { format }))
+      : withToken(url(`/api/v1/history/${encodeURIComponent(item.id)}/files/${encodeURIComponent(stem)}`, { format })),
+  historyFile: async (item: Pick<HistoryItem, "id" | "source">, stem = "audio", format = "mp3") => {
+    const path = item.source === "render" ? `/api/v1/renders/${encodeURIComponent(item.id)}/audio` : `/api/v1/history/${encodeURIComponent(item.id)}/files/${encodeURIComponent(stem)}`;
+    const res = await fetch(url(path, { format }), { headers: authHeaders() });
+    if (!res.ok) throw await parseError(res);
+    return res.blob();
+  },
+  renameHistory: (id: string, title: string) => request<HistoryItem>(`/api/v1/history/${encodeURIComponent(id)}`, { method: "PATCH", body: json({ title }) }),
+  deleteHistory: (item: Pick<HistoryItem, "id" | "source">) =>
+    item.source === "render"
+      ? request<{ deleted: boolean }>(`/api/v1/renders/${encodeURIComponent(item.id)}`, { method: "DELETE" })
+      : request<{ deleted: boolean }>(`/api/v1/history/${encodeURIComponent(item.id)}`, { method: "DELETE" }),
   keptRenderWords: (id: string) => request<{ words: WordTime[]; duration: number }>(`/api/v1/renders/${encodeURIComponent(id)}/words`),
   keptRenderAudio: async (id: string, format: string) => {
     const res = await fetch(url(`/api/v1/renders/${encodeURIComponent(id)}/audio`, { format }), { headers: authHeaders() });
