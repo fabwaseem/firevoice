@@ -55,6 +55,12 @@
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installerHooks": "windows/hooks.nsh",
+        "customLanguageFiles": {
+          "English": "windows/English.nsh"
+        }
       }
     },
     "resources": {

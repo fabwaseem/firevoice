@@ -1,4 +1,5 @@
 mod backend;
+mod datafolders;
 mod updater;
 
 use tauri::Manager;
@@ -31,6 +32,11 @@ pub fn run() {
             updater::update_check,
             updater::update_install,
         ])
+        .setup(|app| {
+            // where the user's data lives, for "delete all FireVoice data" in the uninstaller
+            datafolders::record(app.handle());
+            Ok(())
+        })
         .build(tauri::generate_context!())
         .expect("error while building FireVoice");
 
