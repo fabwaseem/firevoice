@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.3 (2026-11-10)
+
+A new first-run experience.
+
+- Welcome: a tour of what FireVoice can do, from speech and your own voices to dubbing, transcription and music.
+- Set up: the one-time setup now shows each step as it happens, with clear progress and an easy way to try again.
+- Your engine: FireVoice checks your graphics card and suggests the engine that suits it, explained in plain words, and installs it in place.
+- First words: pick a voice and hear FireVoice speak before you start.
+- Starting, updating and setting up now have their own calm screens, with no flicker.
+
 ## 1.5.2 (2026-11-10)
 
 Uninstalling can now remove everything.
