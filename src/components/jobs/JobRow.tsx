@@ -1,12 +1,11 @@
 import { AudioLines, Ban, BookOpen, Download, HardDriveDownload, Languages, Layers, MessagesSquare, Palette, Play, Sparkles, Trash2 } from "lucide-react";
 import type { Job } from "@/lib/api/types";
-import { api } from "@/lib/api/client";
-import { saveBlob } from "@/lib/audio";
+import { errMessage } from "@/lib/api/hooks";
 import { toast } from "sonner";
 import { cn, fmtDuration, relTime } from "@/lib/utils";
 import { usePlayer } from "@/stores/player";
 import { ArtTile, Badge, Button, Equalizer, ProgressBar, Tooltip } from "@/components/ui";
-import { errorText, hasAudio, isTerminal, jobTitle, kindLabel, resultNumber, statusTone } from "./jobUtils";
+import { downloadJobAudio, errorText, hasAudio, jobAudioSrc, isTerminal, jobTitle, kindLabel, resultNumber, statusLabel, statusTone } from "./jobUtils";
 
 const KIND_ICON: Record<Job["kind"], typeof AudioLines> = {
   tts: AudioLines, batch: Layers, design: Sparkles, previews: Play, project: BookOpen, style_refs: Palette, dialogue: MessagesSquare, install: HardDriveDownload, dub: Languages,
@@ -25,33 +24,30 @@ export function JobRow({
   onCancel: () => void;
   onDelete: () => void;
 }) {
-  const player = usePlayer();
+  const isCurrent = usePlayer((s) => s.track?.id === job.id);
+  const isPlaying = usePlayer((s) => s.playing && s.track?.id === job.id);
   const Icon = KIND_ICON[job.kind] ?? AudioLines;
   const title = jobTitle(job);
   // window.open does nothing useful in the desktop webview (or leaks a token-bearing URL to the browser): fetch the
   // file and save it through the system save dialog instead
   const download = async () => {
     try {
-      const res = await fetch(api.jobAudioUrl(job.id, true));
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const ext = String((job.result as Record<string, unknown> | null)?.format ?? "mp3");
-      const safe = title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || job.id;
-      await saveBlob(await res.blob(), `${safe}.${ext}`);
+      await downloadJobAudio(job);
     } catch (e) {
-      toast.error(`Download failed: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`Download failed: ${errMessage(e)}`);
     }
   };
   const running = job.status === "running";
   const duration = resultNumber(job, "duration");
   const err = errorText(job);
-  const isCurrent = player.track?.id === job.id;
 
   const play = () => {
+    const player = usePlayer.getState();
     if (isCurrent) {
       player.toggle();
       return;
     }
-    player.load({ id: job.id, title, subtitle: `${kindLabel(job.kind)} · ${relTime(job.created)}`, src: api.jobAudioUrl(job.id), href: `/jobs/${job.id}`, duration });
+    player.load({ id: job.id, title, subtitle: `${kindLabel(job.kind)} · ${relTime(job.created)}`, src: jobAudioSrc(job), href: `/jobs/${job.id}`, duration });
   };
 
   return (
@@ -80,7 +76,7 @@ export function JobRow({
           <span className="truncate text-[14px] font-semibold text-ink">{title}</span>
           <Badge tone={statusTone(job.status)} dot={!running}>
             {running && <Equalizer className="h-2.5" />}
-            {job.status}
+            {statusLabel(job.status)}
           </Badge>
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-[12px] text-muted">
@@ -115,9 +111,9 @@ export function JobRow({
       <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
         {hasAudio(job) && (
           <>
-            <Tooltip content={isCurrent && player.playing ? "Pause" : "Play"}>
-              <Button variant={isCurrent ? "soft" : "ghost"} size="icon-sm" aria-label={isCurrent && player.playing ? "Pause" : `Play ${title}`} onClick={play}>
-                {isCurrent && player.playing ? <Equalizer className="h-3 text-fire" /> : <Play className="size-4" />}
+            <Tooltip content={isPlaying ? "Pause" : "Play"}>
+              <Button variant={isCurrent ? "soft" : "ghost"} size="icon-sm" aria-label={isPlaying ? "Pause" : `Play ${title}`} onClick={play}>
+                {isPlaying ? <Equalizer className="h-3 text-fire" /> : <Play className="size-4" />}
               </Button>
             </Tooltip>
             <Tooltip content="Download audio">

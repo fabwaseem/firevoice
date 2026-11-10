@@ -9,7 +9,7 @@ import type { AudiobookCheck, ChapterEdit, Paragraph, ParagraphStatus, Project }
 import { saveBlob } from "@/lib/audio";
 import { usePlayer } from "@/stores/player";
 import { LoadError } from "@/components/shell/PageHeader";
-import { Badge, Button, Card, Input, Label, NativeSelect, Skeleton, Switch, Textarea, Tooltip } from "@/components/ui";
+import { Badge, Button, Card, ConfirmDialog, Input, Label, NativeSelect, Skeleton, Switch, Textarea, Tooltip } from "@/components/ui";
 import { TakesPanel } from "@/components/speak/TakesPanel";
 import { cn, fmtTime } from "@/lib/utils";
 
@@ -40,6 +40,9 @@ export function ProjectEditorView() {
   const [check, setCheck] = useState<AudiobookCheck | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
+  // one confirmation at a time (deleting the project, a chapter or a paragraph)
+  const [confirm, setConfirm] = useState<{ title: string; description: string; label: string; run: () => Promise<unknown> | void } | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const job = useJob(jobId);
@@ -135,7 +138,9 @@ export function ProjectEditorView() {
   if (q.isLoading || !draft) return <div className="mx-auto max-w-[1100px] space-y-3"><Skeleton className="h-12" /><Skeleton className="h-64" /></div>;
   if (q.isError || !p) return <LoadError message={errMessage(q.error)} retry={() => void q.refetch()} />;
 
-  const todo = p.counts.draft + p.counts.stale;
+  const c = (p.counts ?? {}) as Partial<Record<string, number>>;
+  const counts = { rendered: c.rendered ?? 0, locked: c.locked ?? 0, stale: c.stale ?? 0, draft: c.draft ?? 0 };
+  const todo = counts.draft + counts.stale;
   const voiceName = (id?: string | null) => (voices.data ?? []).find((v) => v.voice_id === id)?.name ?? (id && id !== "default" ? id : "Default voice");
 
   const play = (key: string, src: string) => {
@@ -209,14 +214,30 @@ export function ProjectEditorView() {
     }
   };
 
-  const remove = async () => {
-    if (!window.confirm(`Delete "${p.title}" and every take in it? This cannot be undone.`)) return;
+  const remove = () =>
+    setConfirm({
+      title: `Delete “${p.title}”?`,
+      description: "The project and every take in it are deleted. This cannot be undone.",
+      label: "Delete project",
+      run: async () => {
+        try {
+          await api.deleteProject(projectId);
+          qc.invalidateQueries({ queryKey: qk.projects });
+          navigate("/projects");
+        } catch (e) {
+          toast.error(errMessage(e));
+        }
+      },
+    });
+
+  const runConfirm = async () => {
+    if (!confirm) return;
+    setConfirming(true);
     try {
-      await api.deleteProject(projectId);
-      qc.invalidateQueries({ queryKey: qk.projects });
-      navigate("/projects");
-    } catch (e) {
-      toast.error(errMessage(e));
+      await confirm.run();
+    } finally {
+      setConfirming(false);
+      setConfirm(null);
     }
   };
 
@@ -240,11 +261,11 @@ export function ProjectEditorView() {
         <Link to="/projects" className="inline-flex h-8 items-center gap-1.5 rounded-[10px] px-2 text-[13px] text-ink-2 hover:bg-surface-3"><ArrowLeft className="size-4" />Projects</Link>
         <input aria-label="Project title" value={title} onChange={(e) => { setTitle(e.target.value); edit(draft, e.target.value); }}
           className="min-w-[200px] flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-[24px] font-bold tracking-tight text-ink hover:border-line focus:border-fire focus:outline-none" />
-        <Badge tone="ok">{p.counts.rendered + p.counts.locked} ready</Badge>
-        {p.counts.stale > 0 && <Badge tone="warn">{p.counts.stale} changed</Badge>}
-        {p.counts.draft > 0 && <Badge>{p.counts.draft} draft</Badge>}
+        <Badge tone="ok">{counts.rendered + counts.locked} ready</Badge>
+        {counts.stale > 0 && <Badge tone="warn">{counts.stale} changed</Badge>}
+        {counts.draft > 0 && <Badge>{counts.draft} draft</Badge>}
         <Badge>{p.words} words · {fmtTime(p.duration)}</Badge>
-        <span className={cn("text-[12px]", saving === "error" ? "text-bad" : "text-muted")}>{saving === "saving" ? "saving…" : saving === "error" ? "not saved" : "saved"}</span>
+        <span className={cn("text-[12px]", saving === "error" ? "text-bad" : "text-muted")}>{saving === "saving" ? "Saving…" : saving === "error" ? "Not saved" : "Saved"}</span>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -305,9 +326,14 @@ export function ProjectEditorView() {
                   </Tooltip>
                 )}
                 <Tooltip content="Delete chapter">
-                  <Button size="icon-sm" variant="ghost" aria-label="Delete chapter" onClick={() => {
-                    if (window.confirm(`Delete "${ch.title}" and its ${ch.paragraphs.length} paragraph(s), with their takes?`)) void structural(draft.filter((_, i) => i !== ci));
-                  }}><Trash2 className="size-4" /></Button>
+                  <Button size="icon-sm" variant="ghost" aria-label="Delete chapter" onClick={() =>
+                    setConfirm({
+                      title: `Delete “${ch.title || `Chapter ${ci + 1}`}”?`,
+                      description: `The chapter and its ${ch.paragraphs.length} paragraph${ch.paragraphs.length === 1 ? "" : "s"} are deleted, with their takes.`,
+                      label: "Delete chapter",
+                      run: () => structural(draft.filter((_, i) => i !== ci)),
+                    })
+                  }><Trash2 className="size-4" /></Button>
                 </Tooltip>
               </div>
               <div className="divide-y divide-line">
@@ -325,11 +351,11 @@ export function ProjectEditorView() {
                         <Textarea aria-label="Paragraph text" rows={2} className="min-h-12" value={para.text} onChange={(e) => update({ text: e.target.value })} />
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                           <NativeSelect aria-label="Voice for this paragraph" className="h-7 w-auto max-w-56 text-[12px]" value={para.voice ?? ""} onChange={(e) => update({ voice: e.target.value || null })}>
-                            <option value="">project voice</option>
+                            <option value="">Project voice</option>
                             {(voices.data ?? []).map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name || v.voice_id}</option>)}
                           </NativeSelect>
                           <NativeSelect aria-label="Style for this paragraph" className="h-7 w-auto max-w-44 text-[12px]" value={para.style ?? ""} onChange={(e) => update({ style: e.target.value || null })}>
-                            <option value="">project style</option>
+                            <option value="">Project style</option>
                             {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
                           </NativeSelect>
                         </div>
@@ -359,7 +385,17 @@ export function ProjectEditorView() {
                         </Tooltip>
                         <Tooltip content="Delete paragraph">
                           <Button size="icon-sm" variant="ghost" aria-label="Delete paragraph"
-                            onClick={() => void structural(draft.map((c, i) => (i === ci ? { ...c, paragraphs: c.paragraphs.filter((_, j) => j !== pi) } : c)))}>
+                            onClick={() => {
+                              const next = () => structural(draft.map((c, i) => (i === ci ? { ...c, paragraphs: c.paragraphs.filter((_, j) => j !== pi) } : c)));
+                              // an empty paragraph with nothing rendered goes at once
+                              if (!para.text.trim() && !srv?.render) return void next();
+                              setConfirm({
+                                title: "Delete this paragraph?",
+                                description: srv?.render ? "The paragraph and its takes are deleted." : "The paragraph is deleted.",
+                                label: "Delete paragraph",
+                                run: next,
+                              });
+                            }}>
                             <Trash2 className="size-4" />
                           </Button>
                         </Tooltip>
@@ -383,6 +419,17 @@ export function ProjectEditorView() {
         <Button variant="outline" leading={<Plus className="size-4" />}
           onClick={() => void structural([...draft, { title: `Chapter ${draft.length + 1}`, paragraphs: [{ text: "" }] }])}>Add chapter</Button>
       </div>
+
+      <ConfirmDialog
+        open={!!confirm}
+        onOpenChange={(v) => !v && !confirming && setConfirm(null)}
+        title={confirm?.title ?? ""}
+        description={confirm?.description}
+        confirmLabel={confirm?.label ?? "Delete"}
+        destructive
+        loading={confirming}
+        onConfirm={() => void runConfirm()}
+      />
     </div>
   );
 }
@@ -393,7 +440,7 @@ function CheckCard({ check }: { check: AudiobookCheck }) {
     <Card className="mb-4 overflow-x-auto p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h3 className="text-[14px] font-semibold text-ink">Audiobook check</h3>
-        <Badge tone={check.pass ? "ok" : "warn"}>{check.pass ? "every chapter passes" : "some checks fail"}</Badge>
+        <Badge tone={check.pass ? "ok" : "warn"}>{check.pass ? "Every chapter passes" : "Some checks fail"}</Badge>
         <span className="text-[12px] text-muted">{check.master ? "with the audiobook master" : "as rendered; turn on Audiobook master to fix loudness and peaks on export"}</span>
       </div>
       <table className="w-full text-left text-[13px]">

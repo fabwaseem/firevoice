@@ -167,8 +167,9 @@ export async function saveBlob(blob: Blob, suggestedName: string): Promise<boole
     try {
       const { save } = await import("@tauri-apps/plugin-dialog");
       const { writeFile } = await import("@tauri-apps/plugin-fs");
-      const ext = suggestedName.split(".").pop() ?? "mp3";
-      const path = await save({ defaultPath: suggestedName, filters: [{ name: ext.toUpperCase() + " audio", extensions: [ext] }] });
+      const ext = suggestedName.includes(".") ? (suggestedName.split(".").pop() ?? "mp3") : "mp3";
+      const isAudio = ["mp3", "wav", "flac", "ogg", "opus", "m4a"].includes(ext.toLowerCase());
+      const path = await save({ defaultPath: suggestedName, filters: [{ name: ext.toUpperCase() + (isAudio ? " audio" : " file"), extensions: [ext] }] });
       if (!path) return false;
       await writeFile(path, new Uint8Array(await blob.arrayBuffer()));
       return true;

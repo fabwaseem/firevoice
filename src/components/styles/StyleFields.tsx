@@ -55,8 +55,8 @@ export function TextFields({ draft, patch, readOnly }: { draft: StyleDraft; patc
 export function SliderFields({ draft, patch, readOnly, base }: { draft: StyleDraft; patch: Patch; readOnly: boolean; base?: StyleDraft }) {
   const groups: { id: "delivery" | "sampling" | "engine"; title: string; hint: string }[] = [
     { id: "delivery", title: "Delivery", hint: "tempo and pauses" },
-    { id: "sampling", title: "Sampling", hint: "all engines" },
-    { id: "engine", title: "Engine-specific", hint: "ignored by engines without the knob" },
+    { id: "sampling", title: "Variation", hint: "all engines" },
+    { id: "engine", title: "Engine-specific", hint: "other engines ignore these" },
   ];
   return (
     <>
@@ -93,7 +93,7 @@ export function EmotionFields({ draft, patch, readOnly }: { draft: StyleDraft; p
   };
   const any = draft.emo_vector.some((v) => v > 0);
   return (
-    <Section title="Emotion vector" hint={any ? "Firebrand and Firestorm" : "unset — engine default"}>
+    <Section title="Emotions" hint={any ? "Firebrand and Firestorm" : "not set, so the engine decides"}>
       <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
         {EMO_LABELS.map((label, i) => (
           <LabeledSlider key={label} label={label[0].toUpperCase() + label.slice(1)} value={draft.emo_vector[i] ?? 0} min={0} max={1} step={0.05} disabled={readOnly} onChange={(v) => setEmo(i, v)} format={(v) => v.toFixed(2)} />
@@ -105,7 +105,7 @@ export function EmotionFields({ draft, patch, readOnly }: { draft: StyleDraft; p
 
 export function SampleField({ draft, patch, readOnly }: { draft: StyleDraft; patch: Patch; readOnly: boolean }) {
   return (
-    <Section title="Showcase paragraph" hint="used by “Try it” and firevoice samples">
+    <Section title="Showcase paragraph" hint="used by “Try it” and voice samples">
       <Textarea aria-label="Showcase paragraph" value={draft.sample} disabled={readOnly} onChange={(e) => patch({ sample: e.target.value })} className="min-h-[96px]" placeholder="A paragraph that shows this style off." />
     </Section>
   );

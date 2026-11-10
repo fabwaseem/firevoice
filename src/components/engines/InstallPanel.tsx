@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Check, Download, FileText, HardDriveDownload, Trash2, X } from "lucide-react";
 import type { Engine } from "@/lib/api/types";
-import { api } from "@/lib/api/client";
-import { useActiveInstall, useInstallEngine, useInstallPlan, useJob, useUninstallEngine } from "@/lib/api/hooks";
-import { openExternal } from "@/lib/external";
+import { toast } from "sonner";
+import { api, downloadFile, safeFileName } from "@/lib/api/client";
+import { errMessage, useActiveInstall, useInstallEngine, useInstallPlan, useJob, useUninstallEngine } from "@/lib/api/hooks";
 import { Button, ConfirmDialog, Dialog, ProgressBar, Switch } from "@/components/ui";
 
 /** Install, follow and remove an engine from its card. The backend does the work as an `install` job; this only
@@ -23,6 +23,12 @@ export function InstallPanel({ engine }: { engine: Engine }) {
   const running = job && (job.status === "queued" || job.status === "running");
   const failed = job && job.status === "failed";
 
+  const saveLog = (id: string) =>
+    void downloadFile(api.jobFileUrl(id, "install.log"), `${safeFileName(engine.title, "engine")} install log.txt`).catch((e) =>
+      toast.error(`Could not get the log: ${errMessage(e)}`),
+    );
+  const cancel = (id: string) => void api.cancelJob(id).catch((e) => toast.error(errMessage(e)));
+
   const start = () =>
     install.mutate({ name: engine.name }, { onSuccess: (j) => { setJobId(j.id); setPlanOpen(false); } });
 
@@ -36,11 +42,11 @@ export function InstallPanel({ engine }: { engine: Engine }) {
           </div>
           <ProgressBar value={job.progress ?? 0} className="mt-2" />
           <div className="mt-2 flex gap-2">
-            <Button size="sm" variant="ghost" leading={<X className="size-3.5" />} onClick={() => api.cancelJob(job.id)}>
+            <Button size="sm" variant="ghost" leading={<X className="size-3.5" />} onClick={() => cancel(job.id)}>
               Cancel
             </Button>
-            <Button size="sm" variant="ghost" leading={<FileText className="size-3.5" />} onClick={() => openExternal(api.jobFileUrl(job.id, "install.log"))}>
-              Log
+            <Button size="sm" variant="ghost" leading={<FileText className="size-3.5" />} onClick={() => saveLog(job.id)}>
+              Save log
             </Button>
           </div>
         </div>
@@ -49,16 +55,16 @@ export function InstallPanel({ engine }: { engine: Engine }) {
       {failed && job && !engine.ready && (
         <div className="mt-3 rounded-md bg-surface-2 px-3 py-2 text-[12px] text-muted">
           Install failed: {typeof job.error === "string" ? job.error : job.error?.message}
-          <button className="ml-2 underline" onClick={() => openExternal(api.jobFileUrl(job.id, "install.log"))}>
-            log
+          <button className="ml-2 underline" onClick={() => saveLog(job.id)}>
+            Save log
           </button>
         </div>
       )}
 
       {!engine.ready && !running && (
         <div className="mt-3 rounded-md bg-surface-2 px-3 py-2">
-          {engine.problems.map((p) => (
-            <p key={p} className="font-mono text-[11.5px] text-muted">
+          {(engine.problems ?? []).map((p) => (
+            <p key={p} className="text-[12px] text-muted">
               {p}
             </p>
           ))}
@@ -67,7 +73,7 @@ export function InstallPanel({ engine }: { engine: Engine }) {
               Install…
             </Button>
           ) : (
-            <p className="mt-1 text-[12px] text-faint">{plan.data?.manual ?? "Install steps are in the FireVoice README under “Other engines”."}</p>
+            <p className="mt-1 text-[12px] text-faint">{plan.data?.manual ?? "This engine cannot be installed from the app yet."}</p>
           )}
         </div>
       )}
@@ -82,7 +88,7 @@ export function InstallPanel({ engine }: { engine: Engine }) {
         open={planOpen}
         onOpenChange={setPlanOpen}
         title={`Install ${engine.title}`}
-        description="FireVoice builds a private Python environment for this engine and downloads its model. It runs in the background; you can keep working."
+        description="FireVoice sets up everything this engine needs and downloads its voice model. It runs in the background; you can keep working."
         footer={
           <>
             <Button variant="ghost" onClick={() => setPlanOpen(false)}>
@@ -110,7 +116,7 @@ export function InstallPanel({ engine }: { engine: Engine }) {
             </ul>
             {plan.data.estimated_gb != null && (
               <p className="text-muted">
-                About <b className="text-ink">{plan.data.estimated_gb} GB</b> to download, less when another engine already fetched the same torch build.
+                About <b className="text-ink">{plan.data.estimated_gb} GB</b> to download, less when another engine already downloaded the same parts.
               </p>
             )}
             {plan.data.notes && <p className="text-faint">{plan.data.notes}</p>}
@@ -119,8 +125,7 @@ export function InstallPanel({ engine }: { engine: Engine }) {
                 This engine runs code from its own repository, pinned to a fixed version. Install only engines you trust.
               </p>
             )}
-            {!plan.data.uv && <p className="text-bad">The backend has no uv, which installs need. Update the backend or install uv.</p>}
-            <p className="font-mono text-[11.5px] text-faint">{plan.data.engines_dir}</p>
+            {!plan.data.uv && <p className="text-bad">FireVoice is missing the installer it needs for engines. Update FireVoice and try again.</p>}
           </div>
         )}
       </Dialog>
@@ -131,7 +136,7 @@ export function InstallPanel({ engine }: { engine: Engine }) {
         title={`Remove ${engine.title}?`}
         description={
           <div className="space-y-3">
-            <p>This deletes the engine's Python environment. You can install it again later.</p>
+            <p>This removes the engine from this computer. You can install it again later.</p>
             <Switch checked={removeWeights} onChange={setRemoveWeights} label="Delete the downloaded model too" description="Frees several GB; a reinstall downloads it again" />
           </div>
         }

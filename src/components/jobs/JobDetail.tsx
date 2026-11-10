@@ -1,11 +1,31 @@
-import { Download, ExternalLink, Play, X } from "lucide-react";
+import { Download, FileDown, Play, X } from "lucide-react";
+import { toast } from "sonner";
 import type { Job } from "@/lib/api/types";
-import { api } from "@/lib/api/client";
+import { api, downloadFile, safeFileName } from "@/lib/api/client";
+import { errMessage, useVoices } from "@/lib/api/hooks";
 import { fmtDuration, relTime, truncate } from "@/lib/utils";
 import { usePlayer } from "@/stores/player";
 import { Badge, Button, Card, CardBody, CardHeader, Equalizer, ProgressBar } from "@/components/ui";
-import { errorText, hasAudio, jobTitle, payloadSummary, resultCount, resultNumber, statusTone } from "./jobUtils";
+import { downloadJobAudio, errorText, hasAudio, jobAudioSrc, jobTitle, kindLabel, payloadSummary, resultCount, resultNumber, statusLabel, statusTone } from "./jobUtils";
 import { engineName } from "@/lib/engineNames";
+import { WordDownloads } from "@/components/tools/WordDownloads";
+import type { TimedWord } from "@/lib/words";
+
+const FILE_LABEL: Record<string, string> = {
+  "words.json": "Word timings",
+  "manifest.json": "Job details",
+  "lines.json": "Translated lines",
+};
+
+/** The extra files a finished job wrote, by kind. */
+function jobFiles(job: Job): string[] {
+  if (job.kind === "dub") {
+    const files = job.result?.files;
+    return Array.isArray(files) ? files.filter((f): f is string => typeof f === "string") : [];
+  }
+  if (job.kind === "install") return [];
+  return job.kind === "tts" ? ["words.json"] : ["manifest.json"];
+}
 
 function KV({ rows }: { rows: [string, React.ReactNode][] }) {
   const shown = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
@@ -32,7 +52,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
-  const player = usePlayer();
+  const isCurrent = usePlayer((s) => s.track?.id === job.id);
+  const isPlaying = usePlayer((s) => s.playing && s.track?.id === job.id);
+  const voices = useVoices();
+  const voiceName = (id?: string) => (id ? (voices.data ?? []).find((v) => v.voice_id === id)?.name || id : undefined);
   const title = jobTitle(job);
   const err = errorText(job);
   const p = payloadSummary(job);
@@ -45,7 +68,29 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
   const seconds = resultNumber(job, "seconds");
   const warnings = Array.isArray(job.result?.warnings) ? (job.result!.warnings as string[]) : [];
   const resultVoice = typeof job.result?.voice_id === "string" ? (job.result!.voice_id as string) : undefined;
-  const isCurrent = player.track?.id === job.id;
+  const resultVoiceName = typeof job.result?.name === "string" && job.result.name ? (job.result.name as string) : voiceName(resultVoice);
+  const files = job.status === "done" ? jobFiles(job) : [];
+
+  const play = () => {
+    const player = usePlayer.getState();
+    if (isCurrent) player.toggle();
+    else player.load({ id: job.id, title, subtitle: `${kindLabel(job.kind)} · ${relTime(job.created)}`, src: jobAudioSrc(job), href: `/jobs/${job.id}`, duration });
+  };
+  const download = async () => {
+    try {
+      await downloadJobAudio(job);
+    } catch (e) {
+      toast.error(`Download failed: ${errMessage(e)}`);
+    }
+  };
+  const downloadExtra = async (name: string) => {
+    try {
+      const base = safeFileName(title, job.id);
+      await downloadFile(api.jobFileUrl(job.id, name), name.startsWith(base) ? name : `${base} - ${name}`);
+    } catch (e) {
+      toast.error(`Download failed: ${errMessage(e)}`);
+    }
+  };
 
   return (
     <Card raised className="sticky top-0 fade-up">
@@ -55,9 +100,9 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
           <span className="flex items-center gap-2">
             <Badge tone={statusTone(job.status)} dot={job.status !== "running"}>
               {job.status === "running" && <Equalizer className="h-2.5" />}
-              {job.status}
+              {statusLabel(job.status)}
             </Badge>
-            <span className="capitalize">{job.kind}</span>
+            <span>{kindLabel(job.kind)}</span>
             <span aria-hidden>·</span>
             <span>{relTime(job.created)}</span>
           </span>
@@ -89,16 +134,12 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
             <Button
               variant="primary"
               size="sm"
-              leading={isCurrent && player.playing ? <Equalizer className="h-3" /> : <Play className="size-4 fill-current" />}
-              onClick={() =>
-                isCurrent
-                  ? player.toggle()
-                  : player.load({ id: job.id, title, subtitle: `${job.kind} · ${relTime(job.created)}`, src: api.jobAudioUrl(job.id), href: `/jobs/${job.id}`, duration })
-              }
+              leading={isPlaying ? <Equalizer className="h-3" /> : <Play className="size-4 fill-current" />}
+              onClick={play}
             >
-              {isCurrent && player.playing ? "Pause" : "Play"}
+              {isPlaying ? "Pause" : "Play"}
             </Button>
-            <Button size="sm" leading={<Download className="size-4" />} onClick={() => window.open(api.jobAudioUrl(job.id, true), "_blank")}>
+            <Button size="sm" leading={<Download className="size-4" />} onClick={download}>
               Download
             </Button>
           </div>
@@ -108,7 +149,7 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
           <KV
             rows={[
               ["Engine", p.engine ? engineName(String(p.engine)) : p.engine],
-              ["Voice", p.voice],
+              ["Voice", voiceName(p.voice)],
               ["Style", p.style],
               ["Lines", p.lines],
               ["Description", p.description],
@@ -123,11 +164,11 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
               rows={[
                 ["Audio", duration != null ? fmtDuration(duration) : undefined],
                 ["Render time", seconds != null ? fmtDuration(seconds) : undefined],
-                ["Speed", rtf != null ? `${rtf.toFixed(2)} RTF` : undefined],
-                ["Chunks", chunks],
+                ["Speed", rtf != null && rtf > 0 ? (rtf <= 1 ? `${(1 / rtf).toFixed(1)}× faster than real time` : `${rtf.toFixed(1)}× slower than real time`) : undefined],
+                ["Sentences", chunks],
                 ["Takes", takes != null ? `${takes}${retries ? ` (${retries} re-rolled)` : ""}` : undefined],
                 ["Words timed", words],
-                ["Voice created", resultVoice],
+                ["Voice created", resultVoiceName],
                 ["Elapsed", job.elapsed != null ? fmtDuration(job.elapsed) : undefined],
               ]}
             />
@@ -141,21 +182,19 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
           </Section>
         )}
 
-        {job.status === "done" && (
+        {files.length > 0 && (
           <Section title="Files">
             <div className="flex flex-wrap gap-2">
-              {(job.kind === "tts" ? ["words.json"] : ["manifest.json"]).map((name) => (
-                <a
-                  key={name}
-                  href={api.jobFileUrl(job.id, name)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3 font-mono text-[12px] text-ink-2 hover:border-line-strong hover:text-ink"
-                >
-                  {name}
-                  <ExternalLink className="size-3.5" />
-                </a>
-              ))}
+              {files.map((name) =>
+                name === "words.json" ? (
+                  // every word with its time: spreadsheet, JSON or word-by-word subtitles
+                  <WordDownloads key={name} variant="ghost" baseName={job.title || "speech"} words={() => api.jobFile<TimedWord[]>(job.id, name)} />
+                ) : (
+                  <Button key={name} size="sm" variant="ghost" leading={<FileDown className="size-4" />} onClick={() => void downloadExtra(name)}>
+                    {FILE_LABEL[name] ?? name}
+                  </Button>
+                ),
+              )}
             </div>
           </Section>
         )}
@@ -166,7 +205,7 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
               ["Created", new Date(job.created * 1000).toLocaleString()],
               ["Started", job.started ? new Date(job.started * 1000).toLocaleString() : undefined],
               ["Finished", job.finished ? new Date(job.finished * 1000).toLocaleString() : undefined],
-              ["Job id", <span className="font-mono text-[12px]">{job.id}</span>],
+              ["Reference", <span className="font-mono text-[12px]">{job.id.slice(0, 8)}</span>],
             ]}
           />
         </Section>

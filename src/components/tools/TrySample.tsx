@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { url } from "@/lib/api/client";
+import { authHeaders, url } from "@/lib/api/client";
 import { Button } from "@/components/ui";
 
 /** Sample recordings that ship with the backend (GET /api/v1/samples): speech.mp3, conversation.mp3, speech-with-music.mp3. */
 export type SampleName = "speech.mp3" | "conversation.mp3" | "speech-with-music.mp3";
 
 export async function sampleFile(name: SampleName): Promise<File> {
-  const r = await fetch(url(`/api/v1/samples/${name}`));
-  if (!r.ok) throw new Error(`The sample ${name} is not on this backend (${r.status}); restart or update it.`);
+  const r = await fetch(url(`/api/v1/samples/${name}`), { headers: authHeaders() });
+  if (!r.ok) throw new Error("This sample is not available. Restart or update FireVoice, then try again.");
   return new File([await r.blob()], name, { type: "audio/mpeg" });
 }
 

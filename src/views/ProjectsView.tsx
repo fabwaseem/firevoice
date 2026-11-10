@@ -73,8 +73,11 @@ export function ProjectsView() {
 }
 
 function ProjectCard({ p, onOpen }: { p: ProjectSummary; onOpen: () => void }) {
-  const n = Math.max(1, p.paragraphs);
-  const ready = p.counts.rendered + p.counts.locked;
+  const n = Math.max(1, p.paragraphs ?? 0);
+  // older servers may leave counts out
+  const c = (p.counts ?? {}) as Partial<Record<string, number>>;
+  const counts = { rendered: c.rendered ?? 0, locked: c.locked ?? 0, stale: c.stale ?? 0, draft: c.draft ?? 0 };
+  const ready = counts.rendered + counts.locked;
   return (
     <button type="button" onClick={onOpen} className="text-left">
       <Card className="h-full p-4 transition-colors hover:border-fire">
@@ -82,12 +85,12 @@ function ProjectCard({ p, onOpen }: { p: ProjectSummary; onOpen: () => void }) {
         <p className="mt-1 text-[12.5px] text-muted">{p.chapters} chapter{p.chapters === 1 ? "" : "s"} · {p.paragraphs} paragraphs · {p.words} words</p>
         <div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-surface-3">
           <span className="bg-ok" style={{ width: `${(100 * ready) / n}%` }} />
-          <span className="bg-warn" style={{ width: `${(100 * p.counts.stale) / n}%` }} />
+          <span className="bg-warn" style={{ width: `${(100 * counts.stale) / n}%` }} />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[12px]">
           <Badge tone="ok">{ready} ready</Badge>
-          {p.counts.stale > 0 && <Badge tone="warn">{p.counts.stale} changed</Badge>}
-          {p.counts.draft > 0 && <Badge>{p.counts.draft} draft</Badge>}
+          {counts.stale > 0 && <Badge tone="warn">{counts.stale} changed</Badge>}
+          {counts.draft > 0 && <Badge>{counts.draft} draft</Badge>}
           <Badge>{fmtTime(p.duration)}</Badge>
           <span className="text-muted">edited {relTime(p.updated)}</span>
         </div>
@@ -97,21 +100,22 @@ function ProjectCard({ p, onOpen }: { p: ProjectSummary; onOpen: () => void }) {
 }
 
 function NewProjectDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: (id: string) => void }) {
-  const studio = useStudio();
+  const studioVoice = useStudio((s) => s.voice);
+  const studioEngine = useStudio((s) => s.engine);
   const voices = useVoices();
   const styles = useStyles();
   const options = useOptions();
   const qc = useQueryClient();
   const [title, setTitle] = useState("The Lighthouse Keeper");
   const [text, setText] = useState(SAMPLE_BOOK);
-  const [voice, setVoice] = useState(studio.voice);
+  const [voice, setVoice] = useState(studioVoice);
   const [style, setStyle] = useState("audiobook");
   const [busy, setBusy] = useState(false);
 
   const create = async () => {
     setBusy(true);
     try {
-      const p = await api.createProject({ title: title.trim() || "Untitled project", text, defaults: { voice, style, engine: studio.engine ?? options.data?.default_engine } });
+      const p = await api.createProject({ title: title.trim() || "Untitled project", text, defaults: { voice, style, engine: studioEngine ?? options.data?.default_engine } });
       qc.invalidateQueries({ queryKey: qk.projects });
       onOpenChange(false);
       setTitle("");

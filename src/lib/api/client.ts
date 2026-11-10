@@ -2,6 +2,10 @@ import { useSettings } from "@/stores/settings";
 import type { HistoryItem, HistoryKind } from "./types";
 import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
 import { rememberEngineNames } from "@/lib/engineNames";
+import { saveBlob } from "@/lib/audio";
+import { DEFAULT_SERVER, normaliseServerUrl } from "@/stores/settings";
+
+export { normaliseServerUrl };
 
 export class ApiError extends Error {
   code: string;
@@ -15,10 +19,11 @@ export class ApiError extends Error {
 }
 
 function base(): string {
-  return useSettings.getState().serverUrl;
+  return normaliseServerUrl(useSettings.getState().serverUrl);
 }
 
-function authHeaders(): Record<string, string> {
+/** The Authorization header for the current token (empty when no token is set). */
+export function authHeaders(): Record<string, string> {
   const t = useSettings.getState().token;
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
@@ -31,7 +36,12 @@ export function withToken(url: string): string {
 }
 
 export function url(path: string, query?: Record<string, string | number | boolean | null | undefined>): string {
-  const u = new URL(path, base() + "/");
+  let u: URL;
+  try {
+    u = new URL(path, base() + "/");
+  } catch {
+    u = new URL(path, DEFAULT_SERVER + "/");
+  }
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, String(v));
@@ -52,10 +62,46 @@ async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, code, message);
 }
 
-async function request<T>(path: string, init: RequestInit = {}, query?: Record<string, string | number | boolean | null | undefined>): Promise<T> {
-  const headers: Record<string, string> = { ...authHeaders(), ...((init.headers as Record<string, string>) ?? {}) };
-  if (init.body && typeof init.body === "string" && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-  const res = await fetch(url(path, query), { ...init, headers });
+/** Combine a caller's abort signal with a timeout, using the best the runtime offers. */
+function withTimeout(signal: AbortSignal | null | undefined, timeoutMs?: number): AbortSignal | undefined {
+  if (!timeoutMs) return signal ?? undefined;
+  const timeout =
+    typeof AbortSignal.timeout === "function"
+      ? AbortSignal.timeout(timeoutMs)
+      : (() => {
+          const c = new AbortController();
+          setTimeout(() => c.abort(new DOMException("The request timed out", "TimeoutError")), timeoutMs);
+          return c.signal;
+        })();
+  if (!signal) return timeout;
+  const anyFn = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === "function") return anyFn.call(AbortSignal, [signal, timeout]);
+  const c = new AbortController();
+  const abort = (s: AbortSignal) => () => c.abort(s.reason);
+  if (signal.aborted) c.abort(signal.reason);
+  else signal.addEventListener("abort", abort(signal), { once: true });
+  timeout.addEventListener("abort", abort(timeout), { once: true });
+  return c.signal;
+}
+
+type RequestOptions = RequestInit & { timeoutMs?: number };
+
+/** Health and system calls give up after this long so the app never hangs on "Connecting". */
+const QUICK_TIMEOUT = 8000;
+
+async function request<T>(path: string, init: RequestOptions = {}, query?: Record<string, string | number | boolean | null | undefined>): Promise<T> {
+  const { timeoutMs, ...rest } = init;
+  const headers: Record<string, string> = { ...authHeaders(), ...((rest.headers as Record<string, string>) ?? {}) };
+  if (rest.body && typeof rest.body === "string" && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  let res: Response;
+  try {
+    res = await fetch(url(path, query), { ...rest, headers, signal: withTimeout(rest.signal, timeoutMs) });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new ApiError(0, "timeout", "FireVoice took too long to answer. Please try again.");
+    }
+    throw e;
+  }
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;
   const ct = res.headers.get("content-type") ?? "";
@@ -67,9 +113,9 @@ const json = (body: unknown) => JSON.stringify(body);
 
 // ------------------------------------------------------------------ system
 export const api = {
-  health: () => request<Health>("/health"),
+  health: () => request<Health>("/health", { timeoutMs: QUICK_TIMEOUT }),
   system: async () => {
-    const s = await request<SystemInfo>("/api/v1/system");
+    const s = await request<SystemInfo>("/api/v1/system", { timeoutMs: QUICK_TIMEOUT });
     rememberEngineNames(s.engine_names);
     return s;
   },
@@ -104,8 +150,8 @@ export const api = {
     request<Job>(`/api/v1/engines/${encodeURIComponent(name)}/install`, { method: "POST" }, { force }),
   uninstallEngine: (name: string, weights = false) =>
     request<{ engine: string; removed: string[]; also_affects: string[] }>(`/api/v1/engines/${encodeURIComponent(name)}/install`, { method: "DELETE" }, { weights }),
-  paths: () => request<PathsReport>("/api/v1/system/paths"),
-  setupReport: () => request<SetupReport>("/api/v1/system/setup"),
+  paths: () => request<PathsReport>("/api/v1/system/paths", { timeoutMs: QUICK_TIMEOUT }),
+  setupReport: () => request<SetupReport>("/api/v1/system/setup", { timeoutMs: QUICK_TIMEOUT * 2 }),
   saveSettings: (body: Partial<Record<PathSettingKey, string>>) =>
     request<{ settings: PathsReport["settings"]; restart_required: boolean; paths: PathsReport }>("/api/v1/system/settings", { method: "PUT", body: json(body) }),
 
@@ -394,6 +440,24 @@ export const api = {
   jobEventUrl: (id: string) => withToken(url(`/api/v1/jobs/${encodeURIComponent(id)}/events`)),
 };
 
+/** Fetch a server file with the auth header (for saving to disk or reading locally). */
+export async function fetchBlob(u: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await fetch(u, { headers: authHeaders(), signal });
+  if (!res.ok) throw await parseError(res);
+  return res.blob();
+}
+
+/** Make a file name safe for the save dialog. */
+export function safeFileName(name: string, fallback = "firevoice"): string {
+  return name.replace(/[^\w\-. ]+/g, "").trim().slice(0, 80) || fallback;
+}
+
+/** Fetch a server file with the auth header and save it through the save dialog. False when cancelled. */
+export async function downloadFile(u: string, suggestedName: string): Promise<boolean> {
+  const blob = await fetchBlob(u);
+  return saveBlob(blob, suggestedName);
+}
+
 /** Subscribe to the global job event stream. Returns an unsubscribe function. Reconnects with `since`. */
 export function subscribeJobEvents(onEvent: (e: JobEvent) => void, onState?: (open: boolean) => void): () => void {
   let es: EventSource | null = null;
@@ -403,7 +467,15 @@ export function subscribeJobEvents(onEvent: (e: JobEvent) => void, onState?: (op
 
   const open = () => {
     if (closed) return;
-    es = new EventSource(api.jobEventsUrl(since));
+    try {
+      es = new EventSource(api.jobEventsUrl(since));
+    } catch {
+      es = null;
+      onState?.(false);
+      setTimeout(open, retry);
+      retry = Math.min(retry * 2, 15000);
+      return;
+    }
     es.onopen = () => {
       retry = 1000;
       onState?.(true);

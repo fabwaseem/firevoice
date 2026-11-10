@@ -5,21 +5,22 @@ import { api } from "@/lib/api/client";
 import { useVoices } from "@/lib/api/hooks";
 import type { Engine, Voice } from "@/lib/api/types";
 import { usePlayer } from "@/stores/player";
-import { ArtTile, Badge, Input, Textarea } from "@/components/ui";
+import { ArtTile, Badge, Input } from "@/components/ui";
 import { cn, langName } from "@/lib/utils";
+import { DesignVoiceDialog } from "@/components/voices/DesignVoiceDialog";
 
 function initials(name: string) {
   return name.split(/[\s\-_]+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("");
 }
 
 /** Voice selector: library voices with search and preview, plus a “design from description” mode. */
-export function VoicePicker({ value, onChange, engine, disabled }: { value: string; onChange: (v: string) => void; engine?: Engine; disabled?: boolean }) {
+export function VoicePicker({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; engine?: Engine; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const voices = useVoices();
   const load = usePlayer((s) => s.load);
   const isDesign = value.startsWith("design:");
-  const [designText, setDesignText] = useState(isDesign ? value.slice(7) : "");
+  const [designOpen, setDesignOpen] = useState(false);
 
   const list = useMemo(() => {
     const all = voices.data ?? [];
@@ -39,6 +40,7 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
     load({ id: v.voice_id, title: v.name, subtitle: v.has_preview ? "Introduction" : "Reference clip", src: v.has_preview ? api.voicePreviewUrl(v.voice_id) : api.voiceAudioUrl(v.voice_id), format: v.has_preview ? "mp3" : "wav", href: `/voices/${v.voice_id}` });
 
   return (
+    <>
     <RP.Root open={open} onOpenChange={setOpen}>
       <RP.Trigger asChild>
         <button
@@ -73,38 +75,21 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
               title={defaultVoice ? `${defaultVoice.name} · default` : "Default voice"}
               subtitle={defaultVoice?.tagline || defaultVoice?.description || "Whatever the server marks as default"}
             />
-            {engine?.design !== false && (
-              <div className={cn("mt-1 rounded-lg border p-2", isDesign ? "border-fire/40 bg-fire-soft/40" : "border-dashed border-line")}>
-                <div className="mb-1.5 flex items-center gap-2 text-[12.5px] font-semibold text-ink">
-                  <Wand2 className="size-4 text-fire" /> Design a voice from a description
-                  {engine && !engine.design && <Badge tone="warn">engine can’t design</Badge>}
-                </div>
-                <Textarea
-                  rows={2}
-                  value={designText}
-                  onChange={(e) => setDesignText(e.target.value)}
-                  placeholder="a warm, unhurried documentary narrator in his fifties"
-                  className="min-h-0 text-[13px]"
-                  aria-label="Voice description"
-                />
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {["a flat, robotic AI assistant", "a bright, upbeat young podcast host", "a hushed, menacing horror narrator"].map((ex) => (
-                    <button key={ex} type="button" onClick={() => setDesignText(ex)} className="rounded-full bg-surface-3 px-2 py-0.5 text-[11.5px] text-ink-2 hover:text-ink">
-                      {ex}
-                    </button>
-                  ))}
-                  <span className="flex-1" />
-                  <button
-                    type="button"
-                    disabled={!designText.trim()}
-                    onClick={() => { onChange(`design:${designText.trim()}`); setOpen(false); }}
-                    className="rounded-full bg-ink px-2.5 py-0.5 text-[11.5px] font-medium text-bg disabled:opacity-40"
-                  >
-                    Use description
-                  </button>
-                </div>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                // after the picker has closed, so its closing click doesn't count as a click outside the new window
+                window.setTimeout(() => setDesignOpen(true), 60);
+              }}
+              className="mt-1 flex w-full items-center gap-3 rounded-lg border border-dashed border-line p-2 text-left transition-colors hover:border-fire/50 hover:bg-fire-soft/40"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-fire-soft text-fire"><Wand2 className="size-4" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-ink">Design a new voice…</span>
+                <span className="block truncate text-[12px] text-muted">Describe it, hear three takes, keep one in Voices</span>
+              </span>
+            </button>
             <div className="mt-2 mb-1 px-2 text-[11px] font-semibold tracking-[0.08em] text-faint uppercase">Library · {list.length}</div>
             {voices.isLoading && <div className="px-2 py-4 text-[13px] text-muted">Loading voices…</div>}
             {voices.isError && <div className="px-2 py-4 text-[13px] text-bad">Could not load voices.</div>}
@@ -123,7 +108,7 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
                   <>
                     {v.favorite && <Heart className="size-3.5 fill-fire text-fire" aria-label="favorite" />}
                     {v.quality?.tier === "S" && <Star className="size-3.5 fill-fire text-fire" aria-label="top pick" />}
-                    {v.kind === "designed" && <Badge tone="info">designed</Badge>}
+                    {v.kind === "designed" && <Badge tone="info">Designed</Badge>}
                     {v.styles && v.styles.length > 0 && <Badge>{v.styles.length} style clips</Badge>}
                   </>
                 }
@@ -134,6 +119,8 @@ export function VoicePicker({ value, onChange, engine, disabled }: { value: stri
         </RP.Content>
       </RP.Portal>
     </RP.Root>
+    <DesignVoiceDialog open={designOpen} onOpenChange={setDesignOpen} onKept={(v) => onChange(v.voice_id)} />
+    </>
   );
 }
 

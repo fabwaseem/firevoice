@@ -31,12 +31,12 @@ export function EnginesView() {
       {gpu.name}
       {gpu.vram_total_gb != null && gpu.vram_free_gb != null && (
         <>
-          {" "}· <span className="tabular">{fmtGB(gpu.vram_free_gb)}</span> free of <span className="tabular">{fmtGB(gpu.vram_total_gb)}</span> VRAM
+          {" "}· <span className="tabular">{fmtGB(gpu.vram_free_gb)}</span> free of <span className="tabular">{fmtGB(gpu.vram_total_gb)}</span> GPU memory
         </>
       )}
     </>
   ) : (
-    "Every model behind one service, each in its own environment."
+    "All the voice engines FireVoice can use on this computer."
   );
 
   return (

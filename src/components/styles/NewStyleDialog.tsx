@@ -17,7 +17,7 @@ export function NewStyleDialog({ open, onOpenChange, styles, onCreate }: { open:
       open={open}
       onOpenChange={onOpenChange}
       title="New style"
-      description="Start from an existing style and tune it. Saved under ~/.firevoice/styles."
+      description="Start from an existing style and tune it to your liking."
       size="sm"
       footer={
         <>

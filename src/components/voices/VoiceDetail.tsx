@@ -10,13 +10,13 @@ import { usePlayer } from "@/stores/player";
 import { useStudio } from "@/stores/studio";
 import { cn, fmtDuration, langName, relTime } from "@/lib/utils";
 import { ArtTile, Badge, Button, ConfirmDialog, Dialog, Equalizer, Input, Label, Select, Skeleton, Textarea } from "@/components/ui";
-import { GENDERS, genderLabel, initials, parseTags } from "./helpers";
+import { GENDERS, genderLabel, initials, kindLabel, parseTags } from "./helpers";
 import { QualityBadge } from "./QualityBadge";
 
 export function VoiceDetail({ voiceId, onClose }: { voiceId: string | null; onClose: () => void }) {
   const { data: voice, isLoading, error } = useVoice(voiceId);
   return (
-    <Dialog open={!!voiceId} onOpenChange={(o) => !o && onClose()} title={voice?.name ?? "Voice"} description={voice ? voice.voice_id : undefined} size="lg">
+    <Dialog open={!!voiceId} onOpenChange={(o) => !o && onClose()} title={voice?.name ?? "Voice"} description={voice?.kind ? `${kindLabel(voice.kind)} voice` : undefined} size="lg">
       {isLoading && <DetailSkeleton />}
       {error && (
         <p role="alert" className="text-[13px] text-bad">
@@ -29,12 +29,14 @@ export function VoiceDetail({ voiceId, onClose }: { voiceId: string | null; onCl
 }
 
 function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
+  const styles = useStyles();
   const consent = useQuery({ queryKey: ["consent", voice.voice_id], queryFn: () => api.voiceConsent(voice.voice_id), retry: false, staleTime: 60_000 });
   const navigate = useNavigate();
   const update = useUpdateVoice();
   const setDefault = useSetDefaultVoice();
   const del = useDeleteVoice();
-  const player = usePlayer();
+  const currentId = usePlayer((s) => s.track?.id);
+  const playing = usePlayer((s) => s.playing);
   const setStudio = useStudio((s) => s.set);
 
   const [name, setName] = useState(voice.name);
@@ -88,12 +90,14 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
 
   const playClip = (style?: string) => {
     const id = style ? `${voice.voice_id}:${style}` : voice.voice_id;
+    const player = usePlayer.getState();
     if (player.track?.id === id) return player.toggle();
     const intro = !style && voice.has_preview;
-    player.load({ id, title: voice.name, subtitle: style ? `${style} reference clip` : intro ? "Introduction" : "Reference clip",
+    player.load({ id, title: voice.name, subtitle: style ? `${styleTitle(style)} style clip` : intro ? "Introduction" : "Reference clip",
       src: intro ? api.voicePreviewUrl(voice.voice_id) : api.voiceAudioUrl(voice.voice_id, style), format: intro ? "mp3" : "wav", href: `/voices/${voice.voice_id}` });
   };
-  const isPlaying = (id: string) => player.track?.id === id && player.playing;
+  const isPlaying = (id: string) => currentId === id && playing;
+  const styleTitle = (name: string) => (styles.data ?? []).find((s) => s.name === name)?.title || name;
 
   const useInSpeak = () => {
     setStudio({ voice: voice.voice_id });
@@ -124,15 +128,14 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
           {voice.tagline && <p className="mb-2 text-[14px] text-ink-2">{voice.tagline}</p>}
           <div className="flex flex-wrap items-center gap-1.5">
             <QualityBadge voice={voice} />
-            <Badge tone={voice.kind === "designed" ? "info" : "neutral"}>{voice.kind}</Badge>
+            {voice.kind && <Badge tone={voice.kind === "designed" ? "info" : "neutral"}>{kindLabel(voice.kind)}</Badge>}
             <Badge>{langName(voice.language)}</Badge>
             {voice.gender && <Badge>{genderLabel(voice.gender)}</Badge>}
             {voice.default && (
               <Badge tone="fire">
-                <Star className="size-3 fill-current" /> default
+                <Star className="size-3 fill-current" /> Default
               </Badge>
             )}
-            {voice.license && <Badge>{voice.license}</Badge>}
           </div>
           <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12.5px]">
             {voice.source && <Row k="Source" v={voice.source} />}
@@ -141,8 +144,8 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
                 k="Consent"
                 v={
                   consent.data.basis === "consent"
-                    ? `${consent.data.by || "given"} · ${consent.data.via} · ${(consent.data.time || "").slice(0, 10)}${consent.data.clip_note ? ` (${consent.data.clip_note})` : ""}`
-                    : consent.data.basis
+                    ? [consent.data.by || "Given", consent.data.via, (consent.data.time || "").slice(0, 10)].filter(Boolean).join(" · ") + (consent.data.clip_note ? ` (${consent.data.clip_note})` : "")
+                    : sentenceCase(consent.data.basis)
                 }
               />
             )}
@@ -151,12 +154,11 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
             {voice.design_prompt && <Row k="Prompt" v={voice.design_prompt} />}
             {!!voice.use_cases?.length && <Row k="Great for" v={voice.use_cases.join(", ")} />}
             {!!voice.traits?.length && <Row k="Sound" v={voice.traits.join(", ")} />}
-            <Row k="Voice id" v={voice.voice_id} />
           </dl>
         </div>
       </div>
 
-      {voice.has_ref !== false && <ClipTools voice={voice} />}
+      {voice.has_ref !== false && <ClipTools voice={voice} isPlaying={(s) => isPlaying(`${voice.voice_id}:${s}`)} onPlay={playClip} styleTitle={styleTitle} />}
 
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" leading={<AudioLines className="size-4" />} onClick={useInSpeak}>
@@ -212,7 +214,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
 
       {voice.kind === "cloned" && (
         <section>
-          <Label htmlFor="vd-transcript" hint="used by in-context cloning engines">
+          <Label htmlFor="vd-transcript" hint="the exact words spoken in the reference clip">
             Transcript
           </Label>
           <Textarea id="vd-transcript" value={transcript} onChange={(e) => setTranscript(e.target.value)} className="min-h-[72px]" />
@@ -224,34 +226,11 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
         </section>
       )}
 
-      <section>
-        <Label hint={`${voice.styles?.length ?? 0} clips`}>Per-style reference clips</Label>
-        {voice.styles?.length ? (
-          <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
-            {voice.styles.map((s) => {
-              const id = `${voice.voice_id}:${s}`;
-              return (
-                <li key={s} className="flex items-center justify-between gap-3 bg-surface px-3 py-2">
-                  <span className="text-[13px] font-medium text-ink">{s}</span>
-                  <Button variant="ghost" size="icon-sm" aria-label={isPlaying(id) ? `Pause ${s} clip` : `Play ${s} clip`} onClick={() => playClip(s)}>
-                    {isPlaying(id) ? <Pause className="size-4" /> : <Play className="size-4" />}
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="rounded-lg border border-dashed border-line-strong px-3 py-3 text-[12.5px] text-muted">
-            None yet. Add one from the CLI: <code className="font-mono text-[12px]">firevoice voices style-ref --name {voice.name} --style-name horror --ref clip.wav</code>
-          </p>
-        )}
-      </section>
-
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete “${voice.name}”?`}
-        description="The reference clip, transcript and per-style clips are removed from the library. Renders already made with it are kept."
+        description="The reference clip, transcript and style clips are removed from the library. Renders already made with it are kept."
         confirmLabel="Delete voice"
         destructive
         loading={del.isPending}
@@ -267,6 +246,14 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
     </div>
   );
 }
+
+/** "public-domain" -> "Public domain" */
+function sentenceCase(s: string | undefined | null): string {
+  const t = (s ?? "").replace(/[_-]+/g, " ").trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
+}
+
+const VERDICT: Record<string, string> = { good: "Good quality", fair: "Fair quality", poor: "Poor quality" };
 
 function Row({ k, v }: { k: string; v: string }) {
   return (
@@ -334,7 +321,7 @@ function AvatarButton({ voiceId, hasAvatar }: { voiceId: string; hasAvatar: bool
 
 
 /** The reference clip's quality, cleaning, and the voice's own clip per style. */
-function ClipTools({ voice }: { voice: Voice }) {
+function ClipTools({ voice, isPlaying, onPlay, styleTitle }: { voice: Voice; isPlaying: (style: string) => boolean; onPlay: (style: string) => void; styleTitle: (name: string) => string }) {
   const qc = useQueryClient();
   const styles = useStyles();
   const [strength, setStrength] = useState<"light" | "medium" | "strong" | "neural">("medium");
@@ -363,10 +350,10 @@ function ClipTools({ voice }: { voice: Voice }) {
     <div className="space-y-3 rounded-xl border border-line bg-surface-2 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[13px] font-medium text-ink">Reference clip</span>
-        {q && <Badge tone={q.verdict === "good" ? "ok" : q.verdict === "poor" ? "bad" : "warn"}>{q.verdict} · SNR {q.snr_db} dB</Badge>}
-        {voice.quality_check?.cleaned && <Badge>cleaned ({voice.quality_check.cleaned})</Badge>}
+        {q && <Badge tone={q.verdict === "good" ? "ok" : q.verdict === "poor" ? "bad" : "warn"}>{VERDICT[q.verdict] ?? sentenceCase(q.verdict)}</Badge>}
+        {voice.quality_check?.cleaned && <Badge>Cleaned</Badge>}
         <div className="flex-1" />
-        <Select value={strength} onChange={(v) => setStrength(v as typeof strength)} options={[{ value: "light", label: "Light" }, { value: "medium", label: "Medium" }, { value: "strong", label: "Strong" }, { value: "neural", label: "Neural" }]} />
+        <Select value={strength} onChange={(v) => setStrength(v as typeof strength)} options={[{ value: "light", label: "Light" }, { value: "medium", label: "Medium" }, { value: "strong", label: "Strong" }, { value: "neural", label: "Deepest" }]} ariaLabel="Cleaning strength" />
         <Button size="sm" variant="outline" loading={busy === "clean"} onClick={() => act("clean", () => api.cleanVoice(voice.voice_id, strength), "Clip cleaned")}>Clean</Button>
         <Button size="sm" variant="ghost" loading={busy === "restore"} onClick={() => act("restore", () => api.restoreVoice(voice.voice_id), "Original clip restored")}>Restore original</Button>
       </div>
@@ -375,10 +362,13 @@ function ClipTools({ voice }: { voice: Voice }) {
         <div className="flex flex-wrap items-center gap-1.5">
           {built.length ? built.map((s) => (
             <span key={s} className="inline-flex items-center gap-1 rounded-full bg-fire-soft px-2.5 py-1 text-[12px] text-fire">
-              {s}
-              <button type="button" aria-label={`Remove ${s} clip`} className="opacity-70 hover:opacity-100" onClick={() => act(`rm:${s}`, () => api.removeStyleClip(voice.voice_id, s))}>×</button>
+              <button type="button" aria-label={isPlaying(s) ? `Pause ${styleTitle(s)} clip` : `Play ${styleTitle(s)} clip`} className="opacity-80 hover:opacity-100" onClick={() => onPlay(s)}>
+                {isPlaying(s) ? <Pause className="size-3" /> : <Play className="size-3" />}
+              </button>
+              {styleTitle(s)}
+              <button type="button" aria-label={`Remove ${styleTitle(s)} clip`} className="opacity-70 hover:opacity-100" onClick={() => act(`rm:${s}`, () => api.removeStyleClip(voice.voice_id, s))}>×</button>
             </span>
-          )) : <span className="text-[12.5px] text-muted">none yet</span>}
+          )) : <span className="text-[12.5px] text-muted">None yet</span>}
         </div>
         {buildable.length > 0 && (
           <div className="mt-2 flex items-center gap-2">

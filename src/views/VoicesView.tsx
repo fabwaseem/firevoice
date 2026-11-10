@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Library, Plus, Sparkles } from "lucide-react";
 import { errMessage, useOptions, useVoiceCollections, useVoices } from "@/lib/api/hooks";
@@ -20,8 +20,15 @@ export function VoicesView() {
   const [shelf, setShelf] = useState("");
   const collections = useVoiceCollections();
 
+  // search as you type, without a request per keystroke
+  const [q, setQ] = useState(filters.q);
+  useEffect(() => {
+    const t = setTimeout(() => setQ(filters.q), 250);
+    return () => clearTimeout(t);
+  }, [filters.q]);
+
   const options = useOptions();
-  const voices = useVoices({ q: filters.q || undefined, kind: filters.kind || undefined, gender: filters.gender || undefined, language: filters.language || undefined });
+  const voices = useVoices({ q: q || undefined, kind: filters.kind || undefined, gender: filters.gender || undefined, language: filters.language || undefined });
 
   const list = useMemo(() => {
     const all = voices.data ?? [];

@@ -75,7 +75,7 @@ export function useUninstallEngine() {
   return useMutation({
     mutationFn: ({ name, weights }: { name: string; weights?: boolean }) => api.uninstallEngine(name, weights),
     onSuccess: (r) => {
-      toast.success(`${engineName(r.engine)} removed` + (r.also_affects.length ? ` (its environment also served ${r.also_affects.map(engineName).join(", ")})` : ""));
+      toast.success(`${engineName(r.engine)} removed` + (r.also_affects.length ? ` (this also affects ${r.also_affects.map(engineName).join(", ")})` : ""));
       qc.invalidateQueries({ queryKey: qk.engines });
       qc.invalidateQueries({ queryKey: qk.options });
       qc.invalidateQueries({ queryKey: ["install-plan"] });
@@ -85,7 +85,7 @@ export function useUninstallEngine() {
 }
 
 export function useSetupReport(enabled = true) {
-  return useQuery({ queryKey: ["setup-report"], queryFn: api.setupReport, enabled, staleTime: 30_000 });
+  return useQuery({ queryKey: ["setup-report"], queryFn: api.setupReport, enabled, staleTime: 30_000, retry: 1 });
 }
 
 export function usePaths() {
@@ -98,7 +98,7 @@ export function useSaveSettings() {
     mutationFn: api.saveSettings,
     onSuccess: (r) => {
       qc.setQueryData(qk.paths, r.paths);
-      toast.success(r.restart_required ? "Saved. Restart the backend to use the new engine folders." : "Saved");
+      toast.success(r.restart_required ? "Saved. Restart FireVoice to use the new folders." : "Saved");
     },
     onError: (e) => toast.error(errMessage(e)),
   });
@@ -122,7 +122,7 @@ export function useKeptRender(id: string | null | undefined) {
 
 export function errMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message;
-  if (e instanceof TypeError) return "Cannot reach the FireVoice server. Is `firevoice serve` running?";
+  if (e instanceof TypeError) return "Cannot reach FireVoice right now. Check that it is running, then try again.";
   if (e instanceof Error) return e.message;
   return String(e);
 }
@@ -139,7 +139,7 @@ export function useHealth() {
 }
 
 export function useSystem(enabled = true) {
-  return useQuery({ queryKey: qk.system, queryFn: api.system, refetchInterval: 8000, enabled, retry: 1 });
+  return useQuery({ queryKey: qk.system, queryFn: api.system, refetchInterval: 15_000, enabled, retry: 1 });
 }
 
 export function useOptions() {
@@ -147,7 +147,7 @@ export function useOptions() {
 }
 
 export function useEngines(task: "tts" | "sfx" | "vc" | "all" = "tts") {
-  return useQuery({ queryKey: [...qk.engines, task], queryFn: () => api.engines(task), refetchInterval: 10_000, retry: 1 });
+  return useQuery({ queryKey: [...qk.engines, task], queryFn: () => api.engines(task), refetchInterval: 30_000, retry: 1 });
 }
 
 /** Engine id -> its FireVoice name ("voxcpm2" -> "Inferno"); unknown ids come back unchanged. */
@@ -158,7 +158,8 @@ export function useEngineName() {
 
 export function useVoices(filters?: { language?: string; gender?: string; kind?: string; tag?: string; q?: string }) {
   const clean = Object.fromEntries(Object.entries(filters ?? {}).filter(([, v]) => v)) as Record<string, string>;
-  return useQuery({ queryKey: qk.voices(clean), queryFn: () => api.voices(clean), staleTime: 30_000, retry: 1 });
+  // keep showing the last list while a new search or filter loads
+  return useQuery({ queryKey: qk.voices(clean), queryFn: () => api.voices(clean), staleTime: 30_000, retry: 1, placeholderData: (prev) => prev });
 }
 
 export function useVoiceCollections() {
@@ -346,7 +347,7 @@ export function useCreateJob() {
   return useMutation({
     mutationFn: ({ kind, payload, title }: { kind: Job["kind"]; payload: Record<string, unknown>; title?: string }) => api.createJob(kind, payload, title),
     onSuccess: (job) => {
-      toast.success(`Queued “${job.title || job.kind}”`);
+      toast.success(job.title ? `Queued “${job.title}”` : "Added to the queue");
       qc.invalidateQueries({ queryKey: ["jobs"] });
     },
     onError: (e) => toast.error(errMessage(e)),

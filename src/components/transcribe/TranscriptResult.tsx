@@ -10,6 +10,8 @@ import { useStudio } from "@/stores/studio";
 import { Badge, Button, Card, CardBody, CardHeader, Equalizer, Tooltip } from "@/components/ui";
 import type { SourceFile } from "./AudioSource";
 import { wordsToSrt } from "./srt";
+import { attachesToPrevious, wordText } from "@/lib/words";
+import { WordDownloads } from "@/components/tools/WordDownloads";
 
 export function TranscriptResult({ result, source, trackId }: { result: STTResult; source: SourceFile; trackId: string }) {
   const navigate = useNavigate();
@@ -70,13 +72,11 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
             {speed != null && (
               <>
                 <span aria-hidden>·</span>
-                <span className="tabular">{speed.toFixed(1)}× realtime</span>
+                <span className="tabular">{speed.toFixed(1)}× real time</span>
               </>
             )}
             <span aria-hidden>·</span>
-            <span className="font-mono text-[11.5px]">
-              {result.model} on {result.device}
-            </span>
+            <span>{/cuda|gpu/i.test(String(result.device ?? "")) ? "on your GPU" : "on your computer"}</span>
           </span>
         }
         action={
@@ -104,8 +104,10 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
                   i === active && "bg-fire text-white hover:bg-fire hover:text-white",
                 )}
               >
-                {w.roman ?? w.text}{" "}
+                {wordText(w)}
               </button>
+              {/* the space sits between the buttons: a browser drops trailing spaces inside a button */}
+              {i < result.words.length - 1 && !attachesToPrevious(wordText(result.words[i + 1])) ? " " : ""}
               </span>
             ))
           ) : (
@@ -129,6 +131,7 @@ export function TranscriptResult({ result, source, trackId }: { result: STTResul
           <Button size="sm" leading={<Download className="size-4" />} disabled={!srt} onClick={() => void saveBlob(new Blob([srt], { type: "text/plain" }), `${base}.srt`)}>
             Save .srt
           </Button>
+          <WordDownloads words={result.words} baseName={base} />
           <Button
             size="sm"
             variant="soft"

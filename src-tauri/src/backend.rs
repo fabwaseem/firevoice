@@ -15,7 +15,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::thread;
 
 use serde::{Deserialize, Serialize};
@@ -79,6 +79,11 @@ struct SetupEvent {
     message: String,
     status: String, // running | done | failed
     error: Option<String>,
+}
+
+/// Lock a mutex, recovering the data if a thread panicked while holding it (the state stays usable).
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 fn exe(name: &str) -> String {
@@ -160,7 +165,7 @@ fn alive(child: &mut Option<Child>) -> bool {
 
 fn info(app: &AppHandle, st: &Backend) -> BackendInfo {
     let (mode, python, ready) = resolve(app);
-    let mut child = st.child.lock().unwrap();
+    let mut child = lock(&st.child);
     let running = alive(&mut child);
     let r = recipe(app);
     BackendInfo {
@@ -172,10 +177,10 @@ fn info(app: &AppHandle, st: &Backend) -> BackendInfo {
         installed_version: installed(app).map(|i| i.version),
         running,
         pid: child.as_ref().map(|c| c.id()),
-        port: if running { *st.port.lock().unwrap() } else { None },
+        port: if running { *lock(&st.port) } else { None },
         log_path: log_path(app).display().to_string(),
         runtime_dir: runtime_dir(app).display().to_string(),
-        setup_running: *st.setup_running.lock().unwrap(),
+        setup_running: *lock(&st.setup_running),
     }
 }
 
@@ -187,24 +192,25 @@ pub fn backend_info(app: AppHandle, st: State<Backend>) -> BackendInfo {
 #[tauri::command]
 pub fn backend_start(app: AppHandle, st: State<Backend>, port: Option<u16>) -> Result<BackendInfo, String> {
     {
-        let mut child = st.child.lock().unwrap();
+        let mut child = lock(&st.child);
         if alive(&mut child) {
             drop(child);
             return Ok(info(&app, &st));
         }
     }
     let (mode, python, ready) = resolve(&app);
-    let python = python.ok_or("No FireVoice backend found: set it up first, or run `firevoice serve` yourself.")?;
+    let python = python.ok_or("FireVoice's voice engine is not set up on this computer yet. Set it up from Settings, then try again.")?;
     if !ready {
         return Err(if mode == "bundled" {
-            "The FireVoice backend is not set up yet (or this version of the app needs it updated).".into()
+            "FireVoice's voice engine is not set up yet, or this version of the app needs it updated.".into()
         } else {
-            format!("Python not found at {}", python.display())
+            log::warn!("backend python missing: {}", python.display());
+            "FireVoice could not find the files it needs to start its voice engine. Try setting it up again from Settings.".into()
         });
     }
     let port = port.unwrap_or(8787);
     let log = log_path(&app);
-    let mut f = OpenOptions::new().create(true).append(true).open(&log).map_err(|e| format!("cannot open {}: {e}", log.display()))?;
+    let mut f = OpenOptions::new().create(true).append(true).open(&log).map_err(|e| format!("Could not open the log file {}: {e}", log.display()))?;
     let _ = writeln!(f, "\n===== starting FireVoice backend ({mode}) on port {port} =====");
     let err = f.try_clone().map_err(|e| e.to_string())?;
     let mut cmd = Command::new(&python);
@@ -220,16 +226,19 @@ pub fn backend_start(app: AppHandle, st: State<Backend>, port: Option<u16>) -> R
     }
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
-    let child = cmd.spawn().map_err(|e| format!("could not start {}: {e}", python.display()))?;
+    let child = cmd.spawn().map_err(|e| {
+        log::error!("could not start {}: {e}", python.display());
+        format!("FireVoice could not start its voice engine ({e}).")
+    })?;
     log::info!("FireVoice backend started, pid {}", child.id());
-    *st.child.lock().unwrap() = Some(child);
-    *st.port.lock().unwrap() = Some(port);
+    *lock(&st.child) = Some(child);
+    *lock(&st.port) = Some(port);
     Ok(info(&app, &st))
 }
 
 /// Stop the managed server and its engine workers (they are its child processes).
 pub fn stop(st: &Backend) {
-    let mut guard = st.child.lock().unwrap();
+    let mut guard = lock(&st.child);
     if let Some(mut c) = guard.take() {
         #[cfg(windows)]
         {
@@ -294,7 +303,7 @@ fn run_logged(app: &AppHandle, log: &Path, step: u32, steps: u32, label: &str, c
                 }
                 let short: String = line.chars().take(110).collect();
                 emit(&app, step, steps, &format!("{label}: {short}"), "running", None);
-                let mut t = tail.lock().unwrap();
+                let mut t = lock(&tail);
                 t.push(line);
                 let k = t.len().saturating_sub(6);
                 t.drain(..k);
@@ -308,7 +317,7 @@ fn run_logged(app: &AppHandle, log: &Path, step: u32, steps: u32, label: &str, c
     if status.success() {
         Ok(())
     } else {
-        Err(format!("{label} failed ({status}): {}", tail.lock().unwrap().join(" | ")))
+        Err(format!("{label} failed ({status}): {}", lock(&tail).join(" | ")))
     }
 }
 
@@ -333,12 +342,12 @@ fn setup_steps(app: &AppHandle, r: &Recipe, res: &Path) -> Result<(), String> {
         c
     };
     let _ = fs::remove_file(rt.join("installed.json"));
-    emit(app, 0, steps, &format!("Getting Python {}", r.python), "running", None);
-    run_logged(app, &log, 0, steps, "Python", &mut uv_cmd(&["venv", "--allow-existing", "--python", &r.python, &venv.display().to_string()]))?;
-    emit(app, 1, steps, "Installing GPU support (PyTorch, about 3 GB the first time)", "running", None);
+    emit(app, 0, steps, "Getting the runtime FireVoice needs", "running", None);
+    run_logged(app, &log, 0, steps, "Runtime", &mut uv_cmd(&["venv", "--allow-existing", "--python", &r.python, &venv.display().to_string()]))?;
+    emit(app, 1, steps, "Installing GPU support (about 3 GB the first time)", "running", None);
     let pyarg = py.display().to_string();
-    run_logged(app, &log, 1, steps, "PyTorch", &mut uv_cmd(&["pip", "install", "--python", &pyarg, &torch[0], &torch[1], "--index-url", &r.torch_index]))?;
-    emit(app, 2, steps, "Installing the FireVoice backend", "running", None);
+    run_logged(app, &log, 1, steps, "GPU support", &mut uv_cmd(&["pip", "install", "--python", &pyarg, &torch[0], &torch[1], "--index-url", &r.torch_index]))?;
+    emit(app, 2, steps, "Installing FireVoice's voice engine", "running", None);
     let spec = format!("{}[{}]", wheel.display(), r.extras.join(","));
     let overrides = rt.join("overrides.txt");
     fs::write(&overrides, r.overrides.join("\n")).map_err(|e| e.to_string())?;
@@ -354,39 +363,64 @@ fn setup_steps(app: &AppHandle, r: &Recipe, res: &Path) -> Result<(), String> {
             "--index-strategy", "unsafe-best-match",
         ]),
     )?;
-    emit(app, 3, steps, "Checking the backend", "running", None);
+    emit(app, 3, steps, "Checking that everything works", "running", None);
     let mut check = Command::new(&py);
     check.args(["-X", "utf8", "-c", "import firevoice, firevoice.server, torch; print('firevoice', firevoice.__version__, 'cuda', torch.cuda.is_available())"]);
     run_logged(app, &log, 3, steps, "Check", &mut check)?;
     let done = Installed { version: r.version.clone(), wheel: r.wheel.clone() };
-    fs::write(rt.join("installed.json"), serde_json::to_string_pretty(&done).unwrap()).map_err(|e| e.to_string())?;
+    let done = serde_json::to_string_pretty(&done).map_err(|e| e.to_string())?;
+    fs::write(rt.join("installed.json"), done).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Clears `setup_running` when setup ends, however it ends (success, error or a panic in the setup thread), and
+/// reports a setup that ended without saying so as failed.
+struct SetupGuard {
+    app: AppHandle,
+    reported: bool,
+}
+
+impl Drop for SetupGuard {
+    fn drop(&mut self) {
+        *lock(&self.app.state::<Backend>().setup_running) = false;
+        if !self.reported {
+            log::error!("backend setup stopped unexpectedly");
+            emit(&self.app, 0, 4, "Setup failed", "failed", Some("Setup stopped unexpectedly. Please try again.".into()));
+        }
+    }
 }
 
 /// Build (or update) the bundled backend runtime in the background. Progress arrives as `backend-setup` events.
 #[tauri::command]
 pub fn backend_setup(app: AppHandle, st: State<Backend>) -> Result<(), String> {
-    let r = recipe(&app).ok_or("This build of the app has no bundled backend; run `firevoice serve` yourself and connect to it.")?;
-    let res = resources_dir(&app).unwrap();
+    const NO_BUNDLE: &str = "This copy of FireVoice does not include its voice engine, so it cannot be set up from here. Connect to a FireVoice server in Settings instead.";
+    let r = recipe(&app).ok_or(NO_BUNDLE)?;
+    let res = resources_dir(&app).ok_or(NO_BUNDLE)?;
     {
-        let mut running = st.setup_running.lock().unwrap();
+        let mut running = lock(&st.setup_running);
         if *running {
-            return Err("setup is already running".into());
+            return Err("Setup is already running.".into());
         }
         *running = true;
     }
+    let mut guard = SetupGuard { app: app.clone(), reported: false };
     stop(&st); // an old runtime must not hold files that the update replaces
     let app2 = app.clone();
-    thread::spawn(move || {
+    let spawned = thread::Builder::new().name("firevoice-setup".into()).spawn(move || {
         let result = setup_steps(&app2, &r, &res);
-        *app2.state::<Backend>().setup_running.lock().unwrap() = false;
+        guard.reported = true;
+        drop(guard); // clears setup_running before the result goes out
         match result {
-            Ok(()) => emit(&app2, 4, 4, "FireVoice backend ready", "done", None),
+            Ok(()) => emit(&app2, 4, 4, "FireVoice is ready", "done", None),
             Err(e) => {
                 log::error!("backend setup failed: {e}");
                 emit(&app2, 0, 4, "Setup failed", "failed", Some(e));
             }
         }
     });
+    if let Err(e) = spawned {
+        // the closure (and its guard) was dropped without running, which already cleared the flag
+        return Err(format!("Could not start setup ({e})."));
+    }
     Ok(())
 }

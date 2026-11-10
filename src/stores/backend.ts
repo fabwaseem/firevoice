@@ -9,6 +9,10 @@ interface BackendState {
   phase: Phase;
   setup: SetupEvent | null;
   error: string | null;
+  /** start() has handed the process over (so a "not running" answer now means it exited) */
+  launched: boolean;
+  /** the user asked to stop it, so its exit is not a crash */
+  stopRequested: boolean;
   refresh: () => Promise<BackendInfo | null>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
@@ -23,12 +27,23 @@ export const useBackend = create<BackendState>()((set, get) => ({
   phase: "idle",
   setup: null,
   error: null,
+  launched: false,
+  stopRequested: false,
   set: (p) => set(p),
   refresh: async () => {
     if (!inTauri()) return null;
     try {
       const info = await backend.info();
+      const prev = get();
       set({ info });
+      // A managed backend that exits on its own is reported right away instead of after the start timeout.
+      if (!info.running && !info.setup_running && !prev.stopRequested) {
+        if (prev.phase === "starting" && prev.launched) {
+          set({ phase: "failed", launched: false, error: "FireVoice's voice engine stopped while starting. The log usually says why." });
+        } else if (prev.phase === "idle" && prev.info?.running) {
+          set({ phase: "failed", launched: false, error: "FireVoice's voice engine stopped unexpectedly. The log usually says why." });
+        }
+      }
       return info;
     } catch (e) {
       set({ error: String(e) });
@@ -37,15 +52,17 @@ export const useBackend = create<BackendState>()((set, get) => ({
   },
   start: async () => {
     const port = localPort(useSettings.getState().serverUrl) ?? 8787;
-    set({ phase: "starting", error: null });
+    set({ phase: "starting", error: null, launched: false, stopRequested: false });
     try {
       // stays "starting" until /health answers (BackendManager watches that)
-      set({ info: await backend.start(port) });
+      const info = await backend.start(port);
+      set({ info, launched: true });
     } catch (e) {
       set({ phase: "failed", error: String(e) });
     }
   },
   stop: async () => {
+    set({ stopRequested: true, launched: false });
     try {
       set({ info: await backend.stop() });
     } catch (e) {
@@ -59,7 +76,7 @@ export const useBackend = create<BackendState>()((set, get) => ({
         if (ev.status === "done") {
           void get().refresh().then(() => get().start());
         } else if (ev.status === "failed") {
-          set({ phase: "failed", error: ev.error ?? "setup failed" });
+          set({ phase: "failed", error: ev.error ?? "Setup did not finish. Please try again." });
         }
       });
     }

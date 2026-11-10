@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { Copy, Lock, Play, Save, Trash2 } from "lucide-react";
 import type { Style } from "@/lib/api/types";
 import { useDeleteStyle, usePutStyle } from "@/lib/api/hooks";
 import { useStudio } from "@/stores/studio";
-import { Badge, Button, ConfirmDialog, Input, Label } from "@/components/ui";
+import { Badge, Button, ConfirmDialog, Dialog, Input, Label } from "@/components/ui";
 import { EmotionFields, SampleField, SliderFields, TextFields } from "./StyleFields";
 import { isDirty, slugify, toBody, toDraft, type StyleDraft } from "./helpers";
 
@@ -27,8 +27,24 @@ export function StyleEditor({ target, onSaved, onDeleted }: { target: EditorTarg
   const base = useMemo(() => toDraft(target.style), [target.style]);
   const [draft, setDraft] = useState<StyleDraft>(() => ({ ...base, name: target.newName ?? base.name }));
   const [confirm, setConfirm] = useState(false);
+  const [askReplace, setAskReplace] = useState(false);
 
-  useEffect(() => setDraft({ ...base, name: target.newName ?? base.name }), [base, target.newName]);
+  // A different style (or a new one) starts from its saved values. A refetch of the same style only refreshes the
+  // form when it holds no unsaved edits, so typing is never wiped by a background update.
+  const targetKey = `${target.newName ?? ""}|${target.style.name}`;
+  const prev = useRef({ base, key: targetKey });
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = { base, key: targetKey };
+    if (before.base === base && before.key === targetKey) return;
+    const fresh = { ...base, name: target.newName ?? base.name };
+    if (before.key !== targetKey) {
+      setDraft(fresh);
+      return;
+    }
+    const savedBefore = { ...before.base, name: target.newName ?? before.base.name };
+    setDraft((d) => (isDirty(d, savedBefore) ? d : fresh));
+  }, [base, targetKey, target.newName]);
 
   const patch = (p: Partial<StyleDraft>) => setDraft((d) => ({ ...d, ...p }));
   const dirty = isNew || isDirty(draft, base);
@@ -39,9 +55,20 @@ export function StyleEditor({ target, onSaved, onDeleted }: { target: EditorTarg
     put.mutate({ name: draft.name, body: toBody(draft) }, { onSuccess: () => onSaved(draft.name) });
   };
 
-  const tryIt = () => {
-    setStudio({ style: isNew ? base.name : draft.name, text: draft.sample || currentText });
+  const styleForSpeak = isNew ? base.name : draft.name;
+  const goTry = (useSample: boolean) => {
+    setStudio(useSample ? { style: styleForSpeak, text: draft.sample } : { style: styleForSpeak });
+    setAskReplace(false);
     navigate("/speak");
+  };
+  const tryIt = () => {
+    const sample = draft.sample.trim();
+    // never silently replace a script the user wrote in Speak
+    if (sample && currentText.trim() && currentText.trim() !== sample) {
+      setAskReplace(true);
+      return;
+    }
+    goTry(!!sample);
   };
 
   const duplicate = () => onSaved(`__dup__:${slugify("my-" + draft.name)}`);
@@ -56,7 +83,7 @@ export function StyleEditor({ target, onSaved, onDeleted }: { target: EditorTarg
                 Name
               </Label>
               <Input id="st-name" value={draft.name} onChange={(e) => patch({ name: slugify(e.target.value) || e.target.value.toLowerCase() })} aria-invalid={!nameValid} className="h-8 w-48 font-mono text-[13px]" placeholder="my-style" />
-              {!nameValid && <span className="text-[12px] text-bad">lowercase letters, digits, dashes</span>}
+              {!nameValid && <span className="text-[12px] text-bad">Use lowercase letters, digits and dashes</span>}
             </div>
           ) : (
             <>
@@ -64,10 +91,10 @@ export function StyleEditor({ target, onSaved, onDeleted }: { target: EditorTarg
               <code className="font-mono text-[12px] text-muted">{draft.name}</code>
               {readOnly ? (
                 <Badge>
-                  <Lock className="size-3" /> built-in
+                  <Lock className="size-3" /> Built-in
                 </Badge>
               ) : (
-                <Badge tone="fire">custom</Badge>
+                <Badge tone="fire">Custom</Badge>
               )}
             </>
           )}
@@ -106,11 +133,29 @@ export function StyleEditor({ target, onSaved, onDeleted }: { target: EditorTarg
         open={confirm}
         onOpenChange={setConfirm}
         title={`Delete “${draft.title || draft.name}”?`}
-        description={`The custom style file is removed from ~/.firevoice/styles. ${target.style.builtin ? "" : "Renders that used it are kept."}`}
+        description={`This custom style is deleted.${target.style.builtin ? " The built-in style with the same name comes back." : " Renders that used it are kept."}`}
         confirmLabel="Delete style"
         destructive
         loading={del.isPending}
         onConfirm={() => del.mutate(draft.name, { onSuccess: () => { setConfirm(false); onDeleted(); } })}
+      />
+
+      <Dialog
+        open={askReplace}
+        onOpenChange={setAskReplace}
+        title="Replace your Speak script?"
+        description="This style has a showcase paragraph. You can try the style on it, or keep the script you already have in Speak."
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => goTry(false)}>
+              Keep my script
+            </Button>
+            <Button variant="primary" onClick={() => goTry(true)}>
+              Use the showcase
+            </Button>
+          </>
+        }
       />
     </div>
   );

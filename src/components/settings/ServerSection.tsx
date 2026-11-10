@@ -30,7 +30,7 @@ export function ServerSection() {
       <CardHeader title="Server" description="Where the app sends its requests." />
       <CardBody className="space-y-5">
         <div>
-          <Label htmlFor="server-url">Server URL</Label>
+          <Label htmlFor="server-url">Server address</Label>
           <Input
             id="server-url"
             value={draftUrl}
@@ -45,8 +45,8 @@ export function ServerSection() {
         </div>
 
         <div>
-          <Label htmlFor="server-token" hint="only if the server was started with --token">
-            API token
+          <Label htmlFor="server-token" hint="only if the server asks for one">
+            Access key
           </Label>
           <Input
             id="server-token"
@@ -59,7 +59,7 @@ export function ServerSection() {
             trailing={
               <button
                 type="button"
-                aria-label={showToken ? "Hide token" : "Show token"}
+                aria-label={showToken ? "Hide access key" : "Show access key"}
                 onClick={() => setShowToken((v) => !v)}
                 className="flex size-7 items-center justify-center rounded-sm text-muted hover:text-ink"
               >
@@ -81,7 +81,7 @@ export function ServerSection() {
             <span className="font-medium text-ink capitalize">{status}</span>
             {online && (
               <span className="text-muted">
-                · FireVoice {health.data.version} · auth {health.data.auth ? "on" : "off"}
+                · FireVoice {health.data.version}{health.data.auth ? " · access key required" : ""}
               </span>
             )}
             {health.isError && <span className="text-muted">· no response from {serverUrl}</span>}
@@ -91,10 +91,6 @@ export function ServerSection() {
           </Button>
         </div>
 
-        <p className="text-[12.5px] leading-relaxed text-muted">
-          In development the app talks to <code className="rounded-sm bg-surface-3 px-1 py-0.5 font-mono text-[12px] text-ink-2">firevoice serve</code> from the
-          sibling firevoice repo. Packaged builds will embed the server.
-        </p>
       </CardBody>
     </Card>
   );

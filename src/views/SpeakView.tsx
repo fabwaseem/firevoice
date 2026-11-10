@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { AudioLines, Clock, Gauge, Layers, ListPlus, Radio, Repeat, Square, Zap } from "lucide-react";
 import { useCreateJob, useEngines, useHealth, useOptions, useStyles, useEngineName } from "@/lib/api/hooks";
@@ -17,7 +17,12 @@ import { TakesPanel, SubtitleButtons } from "@/components/speak/TakesPanel";
 import { fmtDuration, truncate } from "@/lib/utils";
 
 export function SpeakView() {
-  const s = useStudio();
+  // Only what this view shows; the full request is read from the store when a render starts.
+  const hasText = useStudio((x) => !!x.text.trim());
+  const studioEngine = useStudio((x) => x.engine);
+  const voice = useStudio((x) => x.voice);
+  const styleName = useStudio((x) => x.style);
+  const setStudio = useStudio((x) => x.set);
   const health = useHealth();
   const options = useOptions();
   const enginesQ = useEngines();
@@ -31,60 +36,70 @@ export function SpeakView() {
   const engines = enginesQ.data ?? options.data?.engines ?? [];
   const styles = stylesQ.data ?? options.data?.styles ?? [];
   const nameOf = useEngineName();
-  const engineName = s.engine ?? options.data?.default_engine ?? null;
+  const engineName = studioEngine ?? options.data?.default_engine ?? null;
   const engine = engines.find((e) => e.name === engineName);
-  const style = styles.find((x) => x.name === s.style);
+  const style = styles.find((x) => x.name === styleName);
   const offline = health.isError;
 
   // Drop params that the newly chosen engine doesn't know.
   useEffect(() => {
     if (!engine) return;
-    const known = new Set(engine.params.map((p) => p.name));
-    const extra = Object.keys(s.params).filter((k) => !known.has(k));
-    if (extra.length) s.set({ params: Object.fromEntries(Object.entries(s.params).filter(([k]) => known.has(k))) });
+    const known = new Set((engine.params ?? []).map((p) => p.name));
+    const params = useStudio.getState().params;
+    const extra = Object.keys(params).filter((k) => !known.has(k));
+    if (extra.length) setStudio({ params: Object.fromEntries(Object.entries(params).filter(([k]) => known.has(k))) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine?.name]);
 
-  const request = useMemo<TTSRequest>(() => ({
-    text: s.text,
-    engine: s.engine,
-    voice: s.voice,
-    style: s.style,
-    pace: s.pace,
-    seed: s.seed,
-    language: s.language,
-    instruct: s.instruct,
-    params: s.params,
-    style_overrides: s.styleOverrides,
-    candidates: s.candidates,
-    accept: s.accept,
-    validate: s.validate,
-    lufs: s.lufs,
-    lead_ms: s.leadMs,
-    tail_ms: s.tailMs,
-    format,
-    sample_rate: s.sampleRate,
-    keep_takes: s.keepTakes,
-  }), [s, format]);
-
-  const canRender = !!s.text.trim() && !offline && !busy;
-  const go = () => (stream ? renderStream(request) : renderWhole(request));
-  const queueJob = () => {
-    const { format: f, sample_rate, ...req } = request;
-    createJob.mutate({ kind: "tts", payload: { request: req, format: f, sample_rate }, title: truncate(s.text.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim(), 60) });
+  const buildRequest = (): TTSRequest => {
+    const s = useStudio.getState();
+    return {
+      text: s.text,
+      engine: s.engine,
+      voice: s.voice,
+      style: s.style,
+      pace: s.pace,
+      seed: s.seed,
+      language: s.language,
+      instruct: s.instruct,
+      params: s.params,
+      style_overrides: s.styleOverrides,
+      candidates: s.candidates,
+      accept: s.accept,
+      validate: s.validate,
+      lufs: s.lufs,
+      lead_ms: s.leadMs,
+      tail_ms: s.tailMs,
+      format,
+      sample_rate: s.sampleRate,
+      keep_takes: s.keepTakes,
+    };
   };
 
-  // Ctrl/Cmd+Enter renders.
+  const canRender = hasText && !offline && !busy;
+  const go = () => {
+    const request = buildRequest();
+    return stream ? renderStream(request) : renderWhole(request);
+  };
+  const queueJob = () => {
+    const { format: f, sample_rate, ...req } = buildRequest();
+    createJob.mutate({ kind: "tts", payload: { request: req, format: f, sample_rate }, title: truncate(req.text.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim(), 60) });
+  };
+
+  // Ctrl/Cmd+Enter renders, Esc stops. Bound once; the handler reads the latest state through a ref.
+  const keys = useRef({ canRender, busy, go, stop });
+  keys.current = { canRender, busy, go, stop };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const k = keys.current;
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        if (canRender) go();
-      } else if (e.key === "Escape" && busy) stop();
+        if (k.canRender) void k.go();
+      } else if (e.key === "Escape" && k.busy) k.stop();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -108,19 +123,18 @@ export function SpeakView() {
         {/* Left: voice, style, script, render */}
         <div className="flex min-w-0 flex-col gap-4">
           <Card className="p-4">
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+            <div className="grid gap-4 xl:grid-cols-2">
               <div>
                 <Label>Voice</Label>
-                <VoicePicker value={s.voice} onChange={(voice) => s.set({ voice })} engine={engine} disabled={busy} />
+                <VoicePicker value={voice} onChange={(v) => setStudio({ voice: v })} engine={engine} disabled={busy} />
               </div>
               <div className="min-w-0">
-                <Label hint={style?.builtin === false ? "custom" : undefined}>Style</Label>
+                <Label>Style</Label>
                 {stylesQ.isLoading && !styles.length ? (
-                  <div className="flex gap-2"><Skeleton className="h-8 w-24 rounded-full" /><Skeleton className="h-8 w-20 rounded-full" /><Skeleton className="h-8 w-28 rounded-full" /></div>
+                  <Skeleton className="h-[62px] w-full rounded-xl" />
                 ) : (
-                  <StylePicker styles={styles} value={s.style} onChange={(st) => s.set({ style: st, instruct: null })} disabled={busy} />
+                  <StylePicker styles={styles} value={styleName} onChange={(st) => setStudio({ style: st, instruct: null })} disabled={busy} />
                 )}
-                <p className="mt-1.5 line-clamp-1 text-[12px] text-muted">{style?.description || style?.instruct || " "}</p>
               </div>
             </div>
           </Card>
@@ -143,7 +157,7 @@ export function SpeakView() {
               </Tooltip>
             )}
             <Tooltip content="Queue as a background job; it is kept in Jobs history">
-              <Button size="lg" variant="outline" onClick={queueJob} disabled={!s.text.trim() || offline} loading={createJob.isPending} leading={<ListPlus className="size-[18px]" />}>
+              <Button size="lg" variant="outline" onClick={queueJob} disabled={!hasText || offline} loading={createJob.isPending} leading={<ListPlus className="size-[18px]" />}>
                 Render as job
               </Button>
             </Tooltip>
@@ -158,8 +172,8 @@ export function SpeakView() {
                 <div className="flex flex-wrap gap-2">
                   <Stat icon={<Clock className="size-3.5" />} label="Duration" value={fmtDuration(state.stats.duration)} />
                   {state.stats.seconds != null && <Stat icon={<Zap className="size-3.5" />} label="Rendered in" value={fmtDuration(state.stats.seconds)} />}
-                  {state.stats.rtf != null && <Stat icon={<Gauge className="size-3.5" />} label="Speed" value={state.stats.rtf > 0 ? `${(1 / state.stats.rtf).toFixed(1)}× realtime` : "–"} />}
-                  {state.stats.takes != null && <Stat icon={<Repeat className="size-3.5" />} label="Takes / retries" value={`${state.stats.takes} / ${state.stats.retries ?? 0}`} />}
+                  {state.stats.rtf != null && <Stat icon={<Gauge className="size-3.5" />} label="Speed" value={state.stats.rtf > 0 ? `${(1 / state.stats.rtf).toFixed(1)}× real time` : "–"} />}
+                  {state.stats.takes != null && <Stat icon={<Repeat className="size-3.5" />} label="Takes / redone" value={`${state.stats.takes} / ${state.stats.retries ?? 0}`} />}
                   {state.stats.engine && <Stat label="Engine" value={nameOf(state.stats.engine)} />}
                   {state.stats.warnings.map((w) => <Badge key={w} tone="warn">{w}</Badge>)}
                 </div>

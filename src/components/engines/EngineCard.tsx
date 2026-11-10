@@ -17,7 +17,9 @@ export function EngineCard({ engine }: { engine: Engine }) {
   const unload = useUnloadEngine();
   const [schemaOpen, setSchemaOpen] = useState(false);
 
-  const langs = engine.languages.includes("*") ? "Many languages" : `${engine.languages.length} language${engine.languages.length === 1 ? "" : "s"}`;
+  const languages = engine.languages ?? [];
+  const params = engine.params ?? [];
+  const langs = languages.includes("*") ? "Many languages" : `${languages.length} language${languages.length === 1 ? "" : "s"}`;
   const busy = (engine.active_requests ?? 0) > 0;
   const loading = load.isPending && load.variables?.name === engine.name;
 
@@ -39,14 +41,14 @@ export function EngineCard({ engine }: { engine: Engine }) {
         )}
         {engine.clone && <Badge tone="neutral">Clones voices</Badge>}
         {engine.design && <Badge tone="neutral">Designs voices</Badge>}
-        {engine.task !== "sfx" && engine.task !== "tool" && <Badge tone="neutral">{langs}</Badge>}
+        {engine.task !== "sfx" && engine.task !== "tool" && languages.length > 0 && <Badge tone="neutral">{langs}</Badge>}
       </div>
 
       <InstallPanel engine={engine} />
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
         {engine.loaded ? (
-          <Tooltip content={busy ? "Busy with requests; wait for them to finish" : "Free its VRAM"}>
+          <Tooltip content={busy ? "Busy with requests; wait for them to finish" : "Free up its GPU memory"}>
             <span>
               <Button size="sm" leading={<PowerOff className="size-4" />} disabled={busy} loading={unload.isPending && unload.variables === engine.name} onClick={() => unload.mutate(engine.name)}>
                 Unload
@@ -77,7 +79,7 @@ export function EngineCard({ engine }: { engine: Engine }) {
         >
           Use in Speak
         </Button>
-        {engine.params.length > 0 && (
+        {params.length > 0 && (
           <button
             type="button"
             aria-expanded={schemaOpen}
@@ -99,7 +101,7 @@ export function EngineCard({ engine }: { engine: Engine }) {
             transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
             className="overflow-hidden"
           >
-            <ParamSchema params={engine.params} />
+            <ParamSchema params={params} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -115,8 +117,9 @@ function StatusBadge({ engine }: { engine: Engine }) {
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60" />
           <span className="relative inline-flex size-1.5 rounded-full bg-current" />
         </span>
-        Loaded · {engine.workers ?? 1} worker{(engine.workers ?? 1) === 1 ? "" : "s"}
-        {(engine.active_requests ?? 0) > 0 && ` · ${engine.active_requests} active`}
+        Loaded
+        {(engine.workers ?? 1) > 1 && ` · ${engine.workers} copies`}
+        {(engine.active_requests ?? 0) > 0 && ` · ${engine.active_requests} busy`}
       </Badge>
     );
   }

@@ -86,7 +86,22 @@ export function Welcome() {
         </>
       }
     >
-      {!r ? (
+      {!r && report.isError ? (
+        <div className="space-y-3 py-4 text-[13px]">
+          <p className="text-ink">We couldn’t check this computer just now.</p>
+          <p className="text-muted">
+            That’s fine: you can try again, or skip this and pick an engine later on the Engines page.
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="soft" loading={report.isFetching} onClick={() => void report.refetch()}>
+              Try again
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSettings({ onboarded: true })}>
+              Continue without it
+            </Button>
+          </div>
+        </div>
+      ) : !r ? (
         <div className="flex items-center gap-2 py-6 text-[13px] text-muted">
           <Loader2 className="size-4 animate-spin" /> Checking this computer…
         </div>
@@ -97,10 +112,10 @@ export function Welcome() {
             <div className="text-[13px]">
               <p className="font-medium text-ink">{r.gpu?.name ?? "No NVIDIA GPU found"}</p>
               <p className="text-muted">
-                {r.vram_gb ? `${r.vram_gb.toFixed(1)} GB of video memory` : "FireVoice will use the CPU, which suits the smallest engine."}
+                {r.vram_gb ? `${r.vram_gb.toFixed(1)} GB of GPU memory` : "FireVoice will use the CPU, which suits the smallest engine."}
                 {" · "}
                 {r.voices} voices in your library
-                {r.ffmpeg ? "" : " · ffmpeg missing"}
+                {r.ffmpeg ? "" : " · audio converter missing"}
               </p>
             </div>
           </section>
@@ -122,7 +137,7 @@ export function Welcome() {
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] font-medium text-ink">{o.title}</span>
                     {i === 0 && <Badge tone="fire">Recommended</Badge>}
-                    {o.ready ? <Badge tone="ok">ready</Badge> : o.installable ? <Badge tone="neutral">download</Badge> : <Badge tone="warn">manual install</Badge>}
+                    {o.ready ? <Badge tone="ok">Ready</Badge> : o.installable ? <Badge tone="neutral">Download</Badge> : <Badge tone="warn">Not available here</Badge>}
                   </div>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-muted">{o.reason}</p>
                 </button>

@@ -1,7 +1,6 @@
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { RefreshCw, TriangleAlert } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useHealth } from "@/lib/api/hooks";
 import { useSettings } from "@/stores/settings";
 
@@ -10,7 +9,6 @@ export function OfflineBanner() {
   const health = useHealth();
   const server = useSettings((s) => s.serverUrl);
   const { pathname } = useLocation();
-  const qc = useQueryClient();
   const show = health.isError && pathname !== "/";
 
   return (
@@ -26,15 +24,12 @@ export function OfflineBanner() {
           <div className="flex items-center gap-3 rounded-xl bg-bad-soft px-4 py-3 text-[13px] text-bad">
             <TriangleAlert className="size-4 shrink-0" />
             <span className="min-w-0 flex-1">
-              Can’t reach the FireVoice server at <span className="font-mono">{server}</span>. Start it with{" "}
-              <code className="font-mono">firevoice serve</code> in the backend folder.
+              Can’t reach FireVoice at <span className="font-mono">{server}</span>. It may still be starting; try again in a moment, or
+              open Settings to start it.
             </span>
             <button
               type="button"
-              onClick={() => {
-                void health.refetch();
-                void qc.invalidateQueries();
-              }}
+              onClick={() => void health.refetch()}
               className="flex items-center gap-1.5 font-medium hover:underline"
             >
               <RefreshCw className="size-3.5" /> Retry

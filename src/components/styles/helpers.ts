@@ -51,13 +51,13 @@ export function isDirty(a: StyleDraft, b: StyleDraft): boolean {
 }
 
 export const SLIDERS: { key: keyof Pick<StyleDraft, "pace" | "pause" | "temperature" | "top_p" | "repetition_penalty" | "cfg" | "exaggeration" | "cfg_weight" | "emo_alpha">; label: string; min: number; max: number; step: number; hint: string; group: "delivery" | "sampling" | "engine" }[] = [
-  { key: "pace", label: "Pace", min: 0.5, max: 2, step: 0.05, hint: "Tempo multiplier", group: "delivery" },
-  { key: "pause", label: "Pause scale", min: 0, max: 3, step: 0.05, hint: "Length of pauses between sentences and paragraphs", group: "delivery" },
-  { key: "temperature", label: "Temperature", min: 0.05, max: 1.5, step: 0.05, hint: "Randomness of the delivery; lower is steadier", group: "sampling" },
-  { key: "top_p", label: "Top-p", min: 0.1, max: 1, step: 0.01, hint: "Nucleus sampling cut-off", group: "sampling" },
-  { key: "repetition_penalty", label: "Repetition penalty", min: 1, max: 2, step: 0.05, hint: "Discourages repeated tokens", group: "sampling" },
-  { key: "cfg", label: "Guidance (CFG)", min: 0.5, max: 6, step: 0.1, hint: "Inferno, Hearth and Flicker", group: "engine" },
+  { key: "pace", label: "Pace", min: 0.5, max: 2, step: 0.05, hint: "How fast the voice speaks", group: "delivery" },
+  { key: "pause", label: "Pause length", min: 0, max: 3, step: 0.05, hint: "Length of pauses between sentences and paragraphs", group: "delivery" },
+  { key: "temperature", label: "Variety", min: 0.05, max: 1.5, step: 0.05, hint: "How much each take varies; lower is steadier", group: "sampling" },
+  { key: "top_p", label: "Range of choices", min: 0.1, max: 1, step: 0.01, hint: "Lower keeps the delivery safer and more predictable", group: "sampling" },
+  { key: "repetition_penalty", label: "Avoid repeats", min: 1, max: 2, step: 0.05, hint: "Higher stops the voice repeating sounds or words", group: "sampling" },
+  { key: "cfg", label: "Follow the style", min: 0.5, max: 6, step: 0.1, hint: "Inferno, Hearth and Flicker: how closely they stick to the style", group: "engine" },
   { key: "exaggeration", label: "Exaggeration", min: 0.25, max: 2, step: 0.05, hint: "Torch and Flash: emotional intensity", group: "engine" },
-  { key: "cfg_weight", label: "CFG weight", min: 0, max: 1, step: 0.05, hint: "Torch and Flash: pacing weight", group: "engine" },
-  { key: "emo_alpha", label: "Emotion strength", min: 0, max: 1, step: 0.05, hint: "Firebrand and Firestorm: emotion vector weight", group: "engine" },
+  { key: "cfg_weight", label: "Pacing control", min: 0, max: 1, step: 0.05, hint: "Torch and Flash: how strongly pacing follows the style", group: "engine" },
+  { key: "emo_alpha", label: "Emotion strength", min: 0, max: 1, step: 0.05, hint: "Firebrand and Firestorm: how strongly the emotions below apply", group: "engine" },
 ];

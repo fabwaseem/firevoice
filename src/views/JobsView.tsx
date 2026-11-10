@@ -4,11 +4,12 @@ import { ListChecks } from "lucide-react";
 import { useCancelJob, useDeleteJob, useJob, useJobs, errMessage } from "@/lib/api/hooks";
 import type { Job, JobKind } from "@/lib/api/types";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";
-import { Chip, ConfirmDialog, EmptyState, Segmented, Skeleton } from "@/components/ui";
+import { Chip, ConfirmDialog, EmptyState, Select, Skeleton } from "@/components/ui";
 import { JobRow } from "@/components/jobs/JobRow";
 import { JobDetail } from "@/components/jobs/JobDetail";
+import { KIND_LABEL, jobTitle } from "@/components/jobs/jobUtils";
 
-type StatusFilter = "all" | "running" | "queued" | "done" | "failed";
+type StatusFilter = "all" | "running" | "queued" | "done" | "failed" | "cancelled";
 type KindFilter = "all" | JobKind;
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -17,6 +18,12 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "queued", label: "Queued" },
   { value: "done", label: "Done" },
   { value: "failed", label: "Failed" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const KIND_FILTERS: { value: KindFilter; label: string }[] = [
+  { value: "all", label: "Any kind" },
+  ...(Object.entries(KIND_LABEL) as [JobKind, string][]).map(([value, label]) => ({ value, label })),
 ];
 
 export function JobsView() {
@@ -51,20 +58,9 @@ export function JobsView() {
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Jobs"
-        subtitle="Long scripts, batches and voice designs, with history kept on disk."
+        subtitle="Long scripts, batches, voice designs, dubs and installs, with their history kept."
         actions={
-          <Segmented
-            size="sm"
-            ariaLabel="Filter by kind"
-            value={kind}
-            onChange={setKind}
-            options={[
-              { value: "all", label: "Any kind" },
-              { value: "tts", label: "Speech" },
-              { value: "batch", label: "Batch" },
-              { value: "design", label: "Design" },
-            ]}
-          />
+          <Select size="sm" ariaLabel="Filter by kind" value={kind} onChange={(v) => setKind(v as KindFilter)} options={KIND_FILTERS} className="w-44" />
         }
       />
 
@@ -129,7 +125,7 @@ export function JobsView() {
         open={!!pendingDelete}
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title="Delete this job?"
-        description={pendingDelete ? `“${pendingDelete.title || pendingDelete.kind}” and its rendered files will be removed from disk. This cannot be undone.` : undefined}
+        description={pendingDelete ? `“${jobTitle(pendingDelete)}” and its files will be deleted. This cannot be undone.` : undefined}
         confirmLabel="Delete"
         destructive
         loading={del.isPending}

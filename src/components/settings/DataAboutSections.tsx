@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { BookOpen, Eraser, RotateCcw, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Eraser, RotateCcw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, CardBody, CardHeader, ConfirmDialog, Skeleton } from "@/components/ui";
 import { Logo } from "@/components/shell/Logo";
@@ -7,7 +7,8 @@ import { useSystem } from "@/lib/api/hooks";
 import { useSettings } from "@/stores/settings";
 import { SAMPLE_TEXT, useStudio } from "@/stores/studio";
 import { fmtDuration } from "@/lib/utils";
-import { openExternal } from "@/lib/external";
+import { inTauri } from "@/lib/backend";
+import pkg from "../../../package.json";
 
 function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
@@ -43,7 +44,7 @@ export function DataSection() {
 
   return (
     <Card>
-      <CardHeader title="Data" description="Where the server keeps voices, styles and renders." />
+      <CardHeader title="Data" description="Where FireVoice keeps your voices, styles and renders." />
       <CardBody>
         {system.isLoading ? (
           <div className="space-y-3 py-1">
@@ -52,13 +53,13 @@ export function DataSection() {
           </div>
         ) : s ? (
           <dl className="divide-y divide-line">
-            <Row label="Home" value={s.home} mono />
-            <Row label="Voices" value={s.voices_dir} mono />
-            <Row label="Server version" value={s.version} />
-            <Row label="Uptime" value={fmtDuration(s.uptime_seconds)} />
+            <Row label="Data folder" value={s.home} mono />
+            <Row label="Voices folder" value={s.voices_dir} mono />
+            <Row label="Voice engine version" value={s.version} />
+            <Row label="Running for" value={fmtDuration(s.uptime_seconds)} />
           </dl>
         ) : (
-          <p className="py-1 text-[13px] text-muted">Connect to the server to see its data folders.</p>
+          <p className="py-1 text-[13px] text-muted">Connect to FireVoice to see where your data is kept.</p>
         )}
         <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
           <Button variant="outline" size="sm" leading={<RotateCcw className="size-3.5" />} onClick={() => setConfirmDraft(true)}>
@@ -76,7 +77,7 @@ export function DataSection() {
         open={confirmDraft}
         onOpenChange={setConfirmDraft}
         title="Reset the Speak draft?"
-        description="Your script, voice, style and engine settings in Speak go back to their defaults. Nothing on the server changes."
+        description="Your script, voice, style and engine settings in Speak go back to their defaults. Your voices and renders are not touched."
         confirmLabel="Reset draft"
         onConfirm={resetDraft}
       />
@@ -84,7 +85,7 @@ export function DataSection() {
         open={confirmClear}
         onOpenChange={setConfirmClear}
         title="Clear local settings?"
-        description="Server URL, token, theme and the Speak draft are removed from this device and the app reloads. Voices and renders stay on the server."
+        description="The server address, access key, theme and the Speak draft are removed from this device and the app reloads. Your voices and renders are kept."
         confirmLabel="Clear and reload"
         destructive
         onConfirm={clearLocal}
@@ -94,18 +95,28 @@ export function DataSection() {
 }
 
 export function AboutSection() {
-  const serverUrl = useSettings((s) => s.serverUrl);
+  const [version, setVersion] = useState<string>(pkg.version);
+  useEffect(() => {
+    if (!inTauri()) return;
+    let alive = true;
+    import("@tauri-apps/api/app")
+      .then(({ getVersion }) => getVersion())
+      .then((v) => alive && v && setVersion(v))
+      .catch(() => {
+        /* keep the package version */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
   return (
     <Card>
       <CardBody className="flex items-center gap-4 pt-5">
         <Logo size={44} />
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice Desktop 1.2.0</p>
-          <p className="text-[12.5px] text-muted">MIT licence. Model weights carry their own licences.</p>
+          <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice {version}</p>
+          <p className="text-[12.5px] text-muted">Natural voices, made on your own computer.</p>
         </div>
-        <Button variant="ghost" size="sm" leading={<BookOpen className="size-4" />} onClick={() => void openExternal(`${serverUrl}/docs`)}>
-          API docs
-        </Button>
       </CardBody>
     </Card>
   );

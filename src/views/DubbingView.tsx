@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, Languages, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api/client";
+import { api, downloadFile } from "@/lib/api/client";
+import { statusLabel } from "@/components/jobs/jobUtils";
 import { errMessage, useJob, useVoices } from "@/lib/api/hooks";
 import type { DubLine } from "@/lib/api/types";
-import { openExternal } from "@/lib/external";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Badge, Button, Card, Label, NativeSelect, ProgressBar, Switch } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
@@ -48,9 +48,9 @@ export function DubbingView() {
 
   useEffect(() => {
     if (job?.status === "done" && jobId) {
-      fetch(api.jobFileUrl(jobId, "lines.json"))
-        .then((r) => r.json())
-        .then((d) => setLines(d.lines ?? []))
+      api
+        .jobFile<{ lines?: DubLine[] }>(jobId, "lines.json")
+        .then((d) => setLines(d?.lines ?? []))
         .catch(() => setLines([]));
     }
   }, [job?.status, jobId]);
@@ -76,7 +76,7 @@ export function DubbingView() {
       <PageHeader title="Dubbing" subtitle="A recording or video in another language, on the original timeline. Speech to text, translation and voices all run on this machine." />
       {langs.isError && (
         <p className="mb-4 rounded-xl bg-warn-soft px-4 py-3 text-[13px] text-warn">
-          This backend has no dubbing yet (it is older than the app). Restart or update the backend, then reload this page.
+          Dubbing is not available yet. Restart FireVoice (or update it), then open this page again.
         </p>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -143,11 +143,11 @@ export function DubbingView() {
       {job && (
         <Card className="mt-4 p-5">
           <div className="flex items-center gap-2">
-            <Badge tone={job.status === "done" ? "ok" : job.status === "failed" ? "bad" : "info"}>{job.status}</Badge>
+            <Badge tone={job.status === "done" ? "ok" : job.status === "failed" ? "bad" : "info"}>{statusLabel(job.status)}</Badge>
             <span className="truncate text-[13px] text-muted">{job.message}</span>
             <div className="flex-1" />
             {live && (
-              <Button size="sm" variant="ghost" leading={<X className="size-4" />} onClick={() => api.cancelJob(job.id)}>
+              <Button size="sm" variant="ghost" leading={<X className="size-4" />} onClick={() => api.cancelJob(job.id).catch((e) => toast.error(errMessage(e)))}>
                 Cancel
               </Button>
             )}
@@ -163,12 +163,12 @@ export function DubbingView() {
               )}
               <div className="flex flex-wrap items-center gap-2">
                 {result.files.filter((n) => n !== "lines.json").map((n) => (
-                  <Button key={n} size="sm" variant="ghost" leading={<Download className="size-4" />} onClick={() => openExternal(api.jobFileUrl(jobId, n))}>
+                  <Button key={n} size="sm" variant="ghost" leading={<Download className="size-4" />} onClick={() => void downloadFile(api.jobFileUrl(jobId, n), n).catch((e) => toast.error(`Download failed: ${errMessage(e)}`))}>
                     {n}
                   </Button>
                 ))}
                 <span className="text-[12.5px] text-muted">
-                  {result.source_language} → {result.target_language} · {result.lines} lines · {result.duration}s{result.voices_kept ? " · original voices kept" : ""}
+                  {NAMES[result.source_language] ?? result.source_language} → {NAMES[result.target_language] ?? result.target_language} · {result.lines} lines · {result.duration}s{result.voices_kept ? " · original voices kept" : ""}
                 </span>
               </div>
               {lines.length > 0 && (

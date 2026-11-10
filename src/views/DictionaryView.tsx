@@ -8,21 +8,34 @@ import type { DictRule, DictRuleInput } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { useStudio } from "@/stores/studio";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";
-import { Button, Card, EmptyState, Input, Label, Skeleton, Switch, Tooltip } from "@/components/ui";
+import { Button, Card, ConfirmDialog, EmptyState, Input, Label, Skeleton, Switch, Tooltip } from "@/components/ui";
 
 /** Pronunciation dictionary: your rules for how names, brands and acronyms are said. */
 export function DictionaryView() {
   const qc = useQueryClient();
   const q = useDictionary();
   const options = useOptions();
-  const studio = useStudio();
+  const studioEngine = useStudio((s) => s.engine);
+  const studioVoice = useStudio((s) => s.voice);
+  const studioStyle = useStudio((s) => s.style);
   const fileRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<DictRuleInput>({ match: "", say: "", case: false, whole_word: true });
   const [adding, setAdding] = useState(false);
   const [test, setTest] = useState("");
   const [spoken, setSpoken] = useState("");
   const [hearing, setHearing] = useState(false);
-  const engine = studio.engine ?? options.data?.default_engine ?? null;
+  const [pendingImport, setPendingImport] = useState<{ name: string; rules: DictRuleInput[] } | null>(null);
+  const [importing, setImporting] = useState(false);
+  // the "Hear it" clip: one at a time, its object URL released when replaced or when the page closes
+  const clip = useRef<{ audio: HTMLAudioElement; url: string } | null>(null);
+  const releaseClip = () => {
+    if (!clip.current) return;
+    clip.current.audio.pause();
+    URL.revokeObjectURL(clip.current.url);
+    clip.current = null;
+  };
+  useEffect(() => releaseClip, []);
+  const engine = studioEngine ?? options.data?.default_engine ?? null;
 
   const refresh = () => qc.invalidateQueries({ queryKey: qk.dictionary });
 
@@ -60,9 +73,12 @@ export function DictionaryView() {
     }
     setHearing(true);
     try {
-      const r = await api.tts({ text: test, engine, voice: studio.voice, style: studio.style, format: "mp3" });
-      const a = new Audio(URL.createObjectURL(r.blob));
-      await a.play();
+      const r = await api.tts({ text: test, engine, voice: studioVoice, style: studioStyle, format: "mp3" });
+      releaseClip();
+      const url = URL.createObjectURL(r.blob);
+      const audio = new Audio(url);
+      clip.current = { audio, url };
+      await audio.play();
     } catch (e) {
       toast.error(errMessage(e));
     } finally {
@@ -80,12 +96,24 @@ export function DictionaryView() {
       const data = JSON.parse(await f.text());
       let rules = Array.isArray(data) ? data : data.rules ?? data;
       if (!Array.isArray(rules)) rules = Object.entries(rules as Record<string, string>).map(([match, say]) => ({ match, say }));
-      if (!window.confirm(`Replace your ${q.data?.rules.length ?? 0} rule(s) with ${rules.length} from ${f.name}?`)) return;
-      await api.replaceRules(rules);
-      toast.success(`Imported ${rules.length} rule(s)`);
+      setPendingImport({ name: f.name, rules });
+    } catch (e) {
+      toast.error(e instanceof SyntaxError ? "That file is not a dictionary FireVoice can read." : errMessage(e));
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!pendingImport) return;
+    setImporting(true);
+    try {
+      await api.replaceRules(pendingImport.rules);
+      toast.success(`Imported ${pendingImport.rules.length} rule${pendingImport.rules.length === 1 ? "" : "s"}`);
       refresh();
+      setPendingImport(null);
     } catch (e) {
       toast.error(errMessage(e));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -158,6 +186,21 @@ export function DictionaryView() {
           ))}
         </div>
       </details>
+
+      <ConfirmDialog
+        open={!!pendingImport}
+        onOpenChange={(v) => !v && setPendingImport(null)}
+        title="Replace your dictionary?"
+        description={
+          pendingImport
+            ? `Your ${q.data?.rules.length ?? 0} rule${(q.data?.rules.length ?? 0) === 1 ? "" : "s"} will be replaced with ${pendingImport.rules.length} from ${pendingImport.name}.`
+            : undefined
+        }
+        confirmLabel="Replace"
+        destructive
+        loading={importing}
+        onConfirm={() => void confirmImport()}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { Heart, Search, X } from "lucide-react";
 import { Chip, Input, Select } from "@/components/ui";
 import { langName } from "@/lib/utils";
-import { GENDERS } from "./helpers";
+import { GENDER_FILTERS } from "./helpers";
 
 export interface VoiceFilterState {
   q: string;
@@ -54,7 +54,7 @@ export function VoiceFilters({
       <Select
         value={value.gender}
         onChange={(gender) => set({ gender })}
-        options={GENDERS}
+        options={GENDER_FILTERS}
         ariaLabel="Gender"
         size="sm"
         className="w-[136px]"

@@ -4,10 +4,16 @@ import { usePaths, useSaveSettings } from "@/lib/api/hooks";
 import { Button, Card, CardBody, CardHeader, Input, Label, Skeleton, Switch } from "@/components/ui";
 
 const FIELDS: { key: Exclude<PathSettingKey, "watermark">; label: string; hint: string }[] = [
-  { key: "engines_dir", label: "Engine folder", hint: "Python environments, one per engine (about 5 GB each)" },
-  { key: "weights_dir", label: "Model weights", hint: "Downloaded models (3 to 8 GB each)" },
-  { key: "ffmpeg", label: "ffmpeg", hint: "Full path to ffmpeg.exe" },
+  { key: "engines_dir", label: "Engine folder", hint: "Installed engines (about 5 GB each)" },
+  { key: "weights_dir", label: "Voice models", hint: "Downloaded voice models (3 to 8 GB each)" },
+  { key: "ffmpeg", label: "Audio converter (ffmpeg)", hint: "Where ffmpeg.exe is on this computer" },
 ];
+
+/** Where a folder setting comes from, in plain words. */
+function sourceLabel(source: string, exists: boolean): string {
+  const s = source === "default" ? "Default" : source === "settings" ? "Your choice" : source === "env" || source === "environment" ? "Set outside the app" : source ? source.charAt(0).toUpperCase() + source.slice(1) : "";
+  return exists ? s : `${s}${s ? ", " : ""}not found`;
+}
 
 /** Where the backend keeps engines, models and ffmpeg. Stored by the backend (settings.json in its data folder), so
  * the CLI and any other client see the same settings. */
@@ -27,7 +33,7 @@ export function PathsSection() {
 
   return (
     <Card>
-      <CardHeader title="Engines and storage" description="Where the backend keeps engine environments, models and ffmpeg. Leave a field empty for the default." />
+      <CardHeader title="Engines and storage" description="Where FireVoice keeps its engines, voice models and audio converter. Leave a field empty for the default." />
       <CardBody>
         {paths.isLoading ? (
           <div className="space-y-3 py-1">
@@ -37,12 +43,12 @@ export function PathsSection() {
         ) : p ? (
           <div className="space-y-4">
             <div>
-              <Label hint="FIREVOICE_HOME">Data folder</Label>
+              <Label>Data folder</Label>
               <Input value={p.home.path ?? ""} disabled />
             </div>
             {FIELDS.map(({ key, label, hint }) => (
               <div key={key}>
-                <Label htmlFor={`path-${key}`} hint={`${p[key].source}${p[key].exists ? "" : ", missing"}`}>
+                <Label htmlFor={`path-${key}`} hint={sourceLabel(p[key].source, p[key].exists)}>
                   {label}
                 </Label>
                 <Input id={`path-${key}`} value={draft[key] ?? ""} placeholder={p[key].path ?? hint} title={hint} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
@@ -54,18 +60,18 @@ export function PathsSection() {
                 disabled={!p.watermark.available || save.isPending}
                 onChange={(v) => save.mutate({ watermark: v ? "all" : "off" })}
                 label="Mark every output as AI speech"
-                description={p.watermark.available ? "An inaudible watermark (AudioSeal) that detectors can find, even after MP3 and edits." : "Needs the audioseal package in the backend."}
+                description={p.watermark.available ? "An inaudible watermark that detectors can find, even after MP3 conversion and edits." : "The watermark is not available in this copy of FireVoice."}
               />
             )}
             <div className="flex items-center gap-3">
               <Button size="sm" disabled={!Object.keys(changes).length} loading={save.isPending} onClick={() => save.mutate(changes)}>
                 Save
               </Button>
-              <span className="text-[12px] text-faint">Environment variables override these. Engine folders apply after the backend restarts.</span>
+              <span className="text-[12px] text-faint">New folders take effect after FireVoice restarts.</span>
             </div>
           </div>
         ) : (
-          <p className="text-[13px] text-muted">Connect to a backend to see its folders.</p>
+          <p className="text-[13px] text-muted">Connect to FireVoice to see its folders.</p>
         )}
       </CardBody>
     </Card>

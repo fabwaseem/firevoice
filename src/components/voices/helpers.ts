@@ -7,12 +7,23 @@ export function initials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+/** Gender choices for forms that describe one voice. */
 export const GENDERS = [
-  { value: "", label: "Any gender" },
+  { value: "", label: "Not set" },
   { value: "female", label: "Female" },
   { value: "male", label: "Male" },
   { value: "neutral", label: "Neutral" },
 ];
+
+/** Gender choices for filtering the library. */
+export const GENDER_FILTERS = [{ value: "", label: "Any gender" }, ...GENDERS.slice(1)];
+
+/** "cloned" -> "Cloned", "designed" -> "Designed". */
+export function kindLabel(kind: string | undefined): string {
+  if (kind === "designed") return "Designed";
+  if (kind === "cloned") return "Cloned";
+  return kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "";
+}
 
 export function genderLabel(g: string | undefined): string {
   if (!g) return "";

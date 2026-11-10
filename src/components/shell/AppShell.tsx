@@ -48,7 +48,10 @@ export function AppShell() {
             <Welcome />
             <OfflineBanner />
             <Suspense fallback={<PageLoading />}>
-              <Outlet />
+              {/* keyed by page: each page (and its sections, staggered) eases in when opened */}
+              <div key={pathname.split("/")[1] || "home"} className="page-enter">
+                <Outlet />
+              </div>
             </Suspense>
           </main>
           <PlayerBar />

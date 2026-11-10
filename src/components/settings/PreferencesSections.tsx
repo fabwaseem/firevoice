@@ -58,7 +58,7 @@ export function RenderingSection() {
         </div>
         <Switch checked={stream} onChange={(v) => set({ streamByDefault: v })} label="Stream renders" description="Start playback as the first sentence lands." />
         <Switch checked={autoPlay} onChange={(v) => set({ autoPlay: v })} label="Auto-play finished renders" />
-        <Switch checked={advanced} onChange={(v) => set({ showAdvanced: v })} label="Show advanced engine settings" description="Expose every engine parameter in Speak." />
+        <Switch checked={advanced} onChange={(v) => set({ showAdvanced: v })} label="Open Quality and Output in Speak" description="Show these sections of Speak's settings expanded instead of folded away." />
       </CardBody>
     </Card>
   );

@@ -11,7 +11,7 @@ function VramRing({ used, total }: { used: number; total: number }) {
   const c = 2 * Math.PI * r;
   const tone = pct > 0.9 ? "var(--bad)" : pct > 0.7 ? "var(--warn)" : "var(--ok)";
   return (
-    <div className="relative size-[88px] shrink-0" role="img" aria-label={`${Math.round(pct * 100)}% of VRAM in use`}>
+    <div className="relative size-[88px] shrink-0" role="img" aria-label={`${Math.round(pct * 100)}% of GPU memory in use`}>
       <svg viewBox="0 0 80 80" className="size-full -rotate-90">
         <circle cx="40" cy="40" r={r} fill="none" stroke="var(--surface-3)" strokeWidth="7" />
         <circle
@@ -29,7 +29,7 @@ function VramRing({ used, total }: { used: number; total: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-[17px] font-semibold tabular text-ink">{Math.round(pct * 100)}%</span>
-        <span className="text-[10px] font-medium tracking-wider text-faint uppercase">vram</span>
+        <span className="text-[10px] font-medium tracking-wider text-faint uppercase">memory</span>
       </div>
     </div>
   );
@@ -73,11 +73,11 @@ export function GpuCard() {
               </dd>
               <dt className="text-muted">Default</dt>
               <dd className="truncate font-medium text-ink">{s?.default_engine ? engineName(s.default_engine) : "–"}</dd>
-              <dt className="text-muted">ASR</dt>
+              <dt className="text-muted">Speech check</dt>
               <dd className="flex items-center gap-1.5 truncate font-medium text-ink">
                 <Ear className="size-3.5 text-muted" />
-                <span className="truncate">{s?.asr.model ?? "–"}</span>
-                <span className={cn("size-1.5 rounded-full", s?.asr.loaded ? "bg-ok" : "bg-faint")} aria-label={s?.asr.loaded ? "loaded" : "not loaded"} />
+                <span className="truncate">{s?.asr?.loaded ? "Ready" : s ? "Loads when needed" : "–"}</span>
+                <span className={cn("size-1.5 rounded-full", s?.asr?.loaded ? "bg-ok" : "bg-faint")} aria-hidden />
               </dd>
             </dl>
           </div>
@@ -85,11 +85,11 @@ export function GpuCard() {
 
         <div>
           <p className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">Loaded engines</p>
-          {s && s.loaded_engines.length === 0 ? (
+          {s && (s.loaded_engines ?? []).length === 0 ? (
             <p className="text-[13px] text-muted">Nothing loaded. An engine loads on its first render.</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
-              {s?.loaded_engines.map((name) => {
+              {(s?.loaded_engines ?? []).map((name) => {
                 const busy = unload.isPending && unload.variables === name;
                 return (
                   <Badge key={name} tone="ok" className="h-7 pr-1 pl-2.5">

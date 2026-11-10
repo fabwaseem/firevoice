@@ -46,6 +46,14 @@ export function BackendManager() {
     }
   }, [active, health.isSuccess, info, phase]);
 
+  // Watch the process the app started: one that exits (crashes) is reported within seconds, not at the timeout below.
+  const watching = active && (phase === "starting" || (phase === "idle" && !!info?.running));
+  useEffect(() => {
+    if (!watching) return;
+    const t = setInterval(() => void useBackend.getState().refresh(), phase === "starting" ? 2000 : 5000);
+    return () => clearInterval(t);
+  }, [watching, phase]);
+
   // "starting" lasts until the server answers; a backend that never does is reported with its log.
   useEffect(() => {
     if (phase !== "starting") return;
@@ -55,7 +63,7 @@ export function BackendManager() {
     }
     const t = setTimeout(() => {
       if (useBackend.getState().phase === "starting")
-        useBackend.getState().set({ phase: "failed", error: "The backend started but did not answer within 3 minutes. The log usually says why." });
+        useBackend.getState().set({ phase: "failed", error: "FireVoice's voice engine started but did not answer within 3 minutes. The log usually says why." });
     }, 180_000);
     return () => clearTimeout(t);
   }, [phase, health.isSuccess]);
@@ -77,16 +85,16 @@ export function BackendManager() {
           <span className="flex-1">
             {compat === "server-too-old"
               ? info?.running
-                ? "The backend this app started is running older code than the app. Restart it to load the new features (Dubbing, Sound and more)."
-                : `The FireVoice server at ${serverUrl} is older than this app needs; some pages will not work. Restart or update it.`
-              : `The FireVoice server at ${serverUrl} needs a newer app. Update FireVoice Desktop.`}
+                ? "FireVoice's voice engine is older than the app. Restart it to get the new features (Dubbing, Sound and more)."
+                : `The FireVoice server at ${serverUrl} is older than this app needs, so some pages will not work. Restart or update it.`
+              : `The FireVoice server at ${serverUrl} needs a newer app. Update FireVoice.`}
           </span>
           {active && compat === "server-too-old" && info?.running && info.mode !== "bundled" && (
             <Button size="sm" variant="soft" loading={phase === "starting"} onClick={async () => {
               await useBackend.getState().stop();
               await useBackend.getState().start();
             }}>
-              Restart backend
+              Restart
             </Button>
           )}
           {active && info?.mode === "bundled" && compat === "server-too-old" && (
@@ -101,10 +109,10 @@ export function BackendManager() {
         <div className="mx-auto mb-4 flex max-w-[1400px] items-center gap-3 rounded-xl bg-surface-2 px-4 py-3 text-[13px] text-ink-2">
           <Server className="size-4 shrink-0 text-fire" />
           <span className="flex-1">
-            This app ships backend {info?.bundled_version}; the one running is {info?.installed_version}. Updating takes a minute and keeps your voices and projects.
+            A newer voice engine came with this update ({info?.bundled_version}; you have {info?.installed_version}). Updating takes a minute and keeps your voices and projects.
           </span>
           <Button size="sm" onClick={() => useBackend.getState().runSetup()}>
-            Update backend
+            Update now
           </Button>
           <Button size="sm" variant="ghost" onClick={() => useBackend.getState().set({ phase: "idle" })}>
             Later
@@ -126,8 +134,8 @@ export function BackendManager() {
               <>
                 <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Set up FireVoice on this computer</h1>
                 <p className="mt-2 text-[14px] leading-relaxed text-muted">
-                  FireVoice runs entirely on your machine. The first start builds its private engine room: Python, GPU support and the FireVoice backend
-                  (about 4 GB to download, once). Your voices and projects stay in your FireVoice folder.
+                  FireVoice runs entirely on your computer. The first start downloads what it needs to make voices, including GPU support
+                  (about 4 GB, only once). Your voices and projects stay on this computer.
                 </p>
                 <div className="mt-6 flex justify-center gap-2">
                   <Button onClick={() => useBackend.getState().runSetup()}>Set up now</Button>
@@ -139,7 +147,7 @@ export function BackendManager() {
             )}
             {phase === "setting-up" && setup && (
               <>
-                <h1 className="text-[20px] font-semibold text-ink">{updating ? "Updating the backend" : "Setting up FireVoice"}</h1>
+                <h1 className="text-[20px] font-semibold text-ink">{updating ? "Updating FireVoice" : "Setting up FireVoice"}</h1>
                 <p className="mt-1 text-[13px] text-faint">
                   Step {Math.min(setup.step + 1, setup.steps)} of {setup.steps}
                 </p>
@@ -151,7 +159,7 @@ export function BackendManager() {
             )}
             {phase === "failed" && (
               <>
-                <h1 className="text-[20px] font-semibold text-ink">The backend did not start</h1>
+                <h1 className="text-[20px] font-semibold text-ink">FireVoice could not start</h1>
                 <p className="mt-2 break-words text-[13px] text-bad">{error}</p>
                 <div className="mt-5 flex justify-center gap-2">
                   <Button onClick={() => (info?.ready ? useBackend.getState().start() : useBackend.getState().runSetup())}>Try again</Button>
@@ -168,7 +176,7 @@ export function BackendManager() {
         </div>
       )}
 
-      <Dialog open={logOpen} onOpenChange={setLogOpen} title="Backend log" description={info?.log_path} size="xl">
+      <Dialog open={logOpen} onOpenChange={setLogOpen} title="Engine log" description="Technical details that help explain what went wrong." size="xl">
         <pre className="max-h-[60vh] overflow-auto rounded-md bg-surface-2 p-3 font-mono text-[11.5px] leading-relaxed text-ink-2">{log || "(empty)"}</pre>
       </Dialog>
     </>

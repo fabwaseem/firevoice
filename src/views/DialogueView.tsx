@@ -164,7 +164,7 @@ export function DialogueView() {
                 {result.turns.map((t, i) => {
                   const on = now >= t.start && (i === result.turns.length - 1 || now < result.turns[i + 1].start);
                   return (
-                    <button key={i} type="button" onClick={() => { if (player.current) { player.current.currentTime = t.start; void player.current.play(); } }}
+                    <button key={i} type="button" onClick={() => { if (player.current) { player.current.currentTime = t.start; player.current.play().catch(() => undefined); } }}
                       className={cn("block w-full rounded-lg px-2.5 py-1.5 text-left text-[13.5px] leading-relaxed text-ink-2 hover:bg-surface-2", on && "bg-fire-soft text-ink")}>
                       <Badge>{t.speaker}</Badge> {t.text} <span className="text-[11.5px] text-muted">{fmtTime(t.start)}</span>
                     </button>

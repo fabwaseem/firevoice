@@ -7,7 +7,7 @@ import type { WatermarkResult } from "@/lib/api/types";
 import { Badge, Button, Card } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
 
-/** Is a file AI speech? Every FireVoice output carries an inaudible AudioSeal watermark; this finds it again. */
+/** Is a file AI speech? Every FireVoice output carries an inaudible watermark; this finds it again. */
 export function WatermarkCheck() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,11 +48,11 @@ export function WatermarkCheck() {
       {r && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[12.5px]">
           {r.firevoice ? (
-            <Badge tone="ok">made by FireVoice{r.kind ? ` · ${r.kind}` : ""}</Badge>
+            <Badge tone="ok">Made by FireVoice{r.kind === "render" ? " · speech" : r.kind === "convert" ? " · voice changer" : ""}</Badge>
           ) : r.watermarked ? (
             <Badge tone="warn">AI watermark, not FireVoice's</Badge>
           ) : (
-            <Badge>no watermark found</Badge>
+            <Badge>No watermark found</Badge>
           )}
           <span className="text-muted">
             {Math.round(r.probability * 100)}% of {r.seconds}s carries a mark

@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { ClipboardPaste, Eraser, FileText, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { Button, Tooltip } from "@/components/ui";
 import { SAMPLE_TEXT, useStudio } from "@/stores/studio";
 import { cn } from "@/lib/utils";
@@ -93,7 +94,7 @@ export function ScriptEditor({ supportsTags, disabled, className }: { supportsTa
                 const t = await navigator.clipboard.readText();
                 if (t) set({ text: text ? text + (text.endsWith("\n") ? "" : "\n\n") + t : t });
               } catch {
-                /* permission denied */
+                toast.error("Could not read the clipboard. Paste with Ctrl+V instead.");
               }
             }}
           >

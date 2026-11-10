@@ -10,6 +10,7 @@ import { saveBlob } from "@/lib/audio";
 import { usePlayer } from "@/stores/player";
 import { Badge, Button, Card, Dialog, Skeleton, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { WordDownloads } from "@/components/tools/WordDownloads";
 
 /** Download subtitles for the result: from the kept render when there is one, else from the word times. */
 export function SubtitleButtons({ renderId, words }: { renderId: string | null; words: WordTime[] }) {
@@ -26,6 +27,8 @@ export function SubtitleButtons({ renderId, words }: { renderId: string | null; 
     <div className="flex flex-wrap gap-2">
       <Button size="sm" variant="ghost" leading={<Captions className="size-4" />} onClick={() => save("srt")}>Subtitles (SRT)</Button>
       <Button size="sm" variant="ghost" leading={<Captions className="size-4" />} onClick={() => save("vtt")}>Subtitles (VTT)</Button>
+      {/* the kept render's own word times when there is one (they follow any take swapped in), else these */}
+      <WordDownloads variant="ghost" baseName="speech" words={renderId ? async () => (await api.keptRenderWords(renderId)).words : words} />
     </div>
   );
 }
@@ -93,9 +96,9 @@ export function TakesPanel({ renderId, format, onAudio }: {
         <span className="text-[12.5px] text-muted">
           {m.chunks.length} passage{m.chunks.length === 1 ? "" : "s"}
         </span>
-        {m.flagged ? <Badge tone="warn">{m.flagged} to check</Badge> : <Badge tone="ok">all passed the speech check</Badge>}
+        {m.flagged ? <Badge tone="warn">{m.flagged} to check</Badge> : <Badge tone="ok">All passed the speech check</Badge>}
         <div className="flex-1" />
-        <Tooltip content="Similarity to the voice, DNSMOS scores and drift of the stitched audio">
+        <Tooltip content="How much it sounds like the voice, its sound quality, and how that holds over the whole render">
           <Button size="sm" variant="ghost" leading={<Gauge className="size-4" />} loading={qBusy} disabled={!!busy}
             onClick={async () => {
               setQBusy(true);

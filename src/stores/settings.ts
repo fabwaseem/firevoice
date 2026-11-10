@@ -28,6 +28,23 @@ export interface Settings {
 
 export const DEFAULT_SERVER = "http://127.0.0.1:8787";
 
+/**
+ * Turn whatever the user typed into a usable server address: add http:// when the scheme is
+ * missing, drop trailing slashes, and fall back to the default when it still is not a valid URL.
+ */
+export function normaliseServerUrl(raw: string | null | undefined): string {
+  let v = (raw ?? "").trim().replace(/\/+$/, "");
+  if (!v) return DEFAULT_SERVER;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(v)) v = "http://" + v;
+  try {
+    const u = new URL(v);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return DEFAULT_SERVER;
+    return u.toString().replace(/\/+$/, "");
+  } catch {
+    return DEFAULT_SERVER;
+  }
+}
+
 export const useSettings = create<Settings>()(
   persist(
     (set) => ({
@@ -41,12 +58,20 @@ export const useSettings = create<Settings>()(
       sidebarCollapsed: false,
       manageBackend: true,
       onboarded: false,
-      setServerUrl: (serverUrl) => set({ serverUrl: serverUrl.replace(/\/+$/, "") || DEFAULT_SERVER }),
+      setServerUrl: (serverUrl) => set({ serverUrl: normaliseServerUrl(serverUrl) }),
       setToken: (token) => set({ token }),
       setTheme: (theme) => set({ theme }),
-      set: (patch) => set(patch),
+      set: (patch) => set(patch.serverUrl !== undefined ? { ...patch, serverUrl: normaliseServerUrl(patch.serverUrl) } : patch),
     }),
-    { name: "firevoice.settings", version: 1 },
+    {
+      name: "firevoice.settings",
+      version: 1,
+      // a bad address saved by an older version must not break the app on launch
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<Settings>;
+        return { ...current, ...p, serverUrl: normaliseServerUrl(p.serverUrl ?? current.serverUrl) };
+      },
+    },
   ),
 );
 

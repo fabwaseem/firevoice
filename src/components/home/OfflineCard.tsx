@@ -13,22 +13,20 @@ export function OfflineCard({ onRetry, retrying }: { onRetry: () => void; retryi
           <PlugZap className="size-7" />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[19px] font-semibold tracking-[-0.01em] text-ink">The FireVoice server is offline</h2>
+          <h2 className="text-[19px] font-semibold tracking-[-0.01em] text-ink">FireVoice is not running yet</h2>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
-            The app renders through the local HTTP API. Start it in the backend folder, then come back here.
+            The part of FireVoice that makes the voices is not answering. It normally starts with the app, so give it a moment and press Retry.
+            If it still does not come up, open Settings to start or repair it.
           </p>
-          <pre className="mt-4 overflow-x-auto rounded-lg border border-line bg-surface-2 px-4 py-3 font-mono text-[12.5px] text-ink-2">
-            firevoice serve
-          </pre>
           <p className="mt-3 text-[12.5px] text-muted">
-            Waiting on <span className="font-mono text-ink-2">{serverUrl}</span>
+            Trying to reach <span className="font-mono text-ink-2">{serverUrl}</span>
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <Button variant="primary" onClick={onRetry} loading={retrying} leading={<RefreshCw className="size-4" />}>
               Retry
             </Button>
             <Button variant="outline" leading={<Settings className="size-4" />} onClick={() => navigate("/settings")}>
-              Server settings
+              Open Settings
             </Button>
           </div>
         </div>

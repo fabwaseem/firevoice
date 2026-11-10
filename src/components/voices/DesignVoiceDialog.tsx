@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Play, Shuffle } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
-import type { DesignBatch } from "@/lib/api/types";
+import type { DesignBatch, Voice } from "@/lib/api/types";
 import { Link } from "react-router";
 import { Sparkles } from "lucide-react";
 import { useDesignVoice, useEngines } from "@/lib/api/hooks";
@@ -14,7 +14,9 @@ import { DESIGN_EXAMPLES, GENDERS } from "./helpers";
 
 const LANGS = ["en", "ur", "hi", "ar", "zh", "ja", "ko", "de", "fr", "es", "it", "pt", "ru", "tr"];
 
-export function DesignVoiceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+/** Design a voice from a description: three candidates to hear, the one you keep is saved to Voices. `onKept`
+ * lets the opener use it straight away (Speak selects it). */
+export function DesignVoiceDialog({ open, onOpenChange, onKept }: { open: boolean; onOpenChange: (v: boolean) => void; onKept?: (voice: Voice) => void }) {
   const engines = useEngines();
   const design = useDesignVoice();
   const [name, setName] = useState("");
@@ -48,7 +50,8 @@ export function DesignVoiceDialog({ open, onOpenChange }: { open: boolean; onOpe
     setKeeping(n);
     try {
       const v = await api.keepDesignCandidate(batch.batch, n, { name: name.trim(), gender: gender || undefined, language: language || undefined });
-      toast.success(`Kept “${v.name || v.voice_id}”`);
+      toast.success(`Saved “${v.name || v.voice_id}” to Voices`);
+      onKept?.(v);
       qc.invalidateQueries({ queryKey: ["voices"] });
       setBatch(null);
       setName("");
@@ -76,11 +79,13 @@ export function DesignVoiceDialog({ open, onOpenChange }: { open: boolean; onOpe
         text: text.trim() || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (job) => {
           setName("");
           setDescription("");
           setText("");
           onOpenChange(false);
+          // follow the job: when the voice is ready it is in Voices, and the opener (Speak) selects it
+          if (onKept) void followDesign(job.id, onKept, () => qc.invalidateQueries({ queryKey: ["voices"] }));
         },
       },
     );
@@ -114,7 +119,7 @@ export function DesignVoiceDialog({ open, onOpenChange }: { open: boolean; onOpe
             {batch.candidates.map((c) => (
               <div key={c.n} className="flex items-center gap-2 py-1">
                 <Button size="icon-sm" variant="ghost" aria-label={`Play version ${c.n}`}
-                  onClick={() => { audioRef.current?.pause(); audioRef.current = new Audio(api.designCandidateUrl(batch.batch, c.n)); void audioRef.current.play(); }}>
+                  onClick={() => { audioRef.current?.pause(); audioRef.current = new Audio(api.designCandidateUrl(batch.batch, c.n)); audioRef.current.play().catch(() => toast.error("Could not play this version")); }}>
                   <Play className="size-4" />
                 </Button>
                 <span className="text-[13px] text-ink">Version {c.n}</span>
@@ -191,4 +196,30 @@ export function DesignVoiceDialog({ open, onOpenChange }: { open: boolean; onOpe
       </div>
     </Dialog>
   );
+}
+
+/** Wait for a background design job; hand over the new voice when it is saved. */
+async function followDesign(jobId: string, onKept: (v: Voice) => void, refresh: () => void) {
+  for (let i = 0; i < 300; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    let job;
+    try {
+      job = await api.job(jobId);
+    } catch {
+      continue;
+    }
+    if (job.status === "done") {
+      const v = (job.result as { voice?: Voice | { voice_id?: string } } | undefined)?.voice;
+      refresh();
+      if (v && "voice_id" in v && v.voice_id) {
+        const voice = await api.voice(v.voice_id).catch(() => null);
+        if (voice) {
+          onKept(voice);
+          toast.success(`“${voice.name}” is ready and selected`);
+        }
+      }
+      return;
+    }
+    if (job.status === "failed" || job.status === "cancelled") return;
+  }
 }

@@ -1,4 +1,5 @@
 import type { Job } from "@/lib/api/types";
+import { api, downloadFile, safeFileName } from "@/lib/api/client";
 
 export type Tone = "neutral" | "fire" | "ok" | "warn" | "bad" | "info";
 
@@ -12,23 +13,50 @@ export function statusTone(status: Job["status"]): Tone {
   }
 }
 
+export const STATUS_LABEL: Record<Job["status"], string> = {
+  queued: "Queued", running: "Running", done: "Done", failed: "Failed", cancelled: "Cancelled",
+};
+/** "running" -> "Running"; unknown values are capitalised. */
+export function statusLabel(status: string): string {
+  return (STATUS_LABEL as Record<string, string>)[status] ?? (status ? status.charAt(0).toUpperCase() + status.slice(1) : "");
+}
+
 export function jobTitle(job: Job): string {
-  return job.title?.trim() || `${job.kind} · ${job.id.slice(0, 8)}`;
+  return job.title?.trim() || kindLabel(job.kind);
 }
 
 export function errorText(job: Job): string | null {
   if (!job.error) return null;
   if (typeof job.error === "string") return job.error;
-  const code = job.error.code ? `${job.error.code}: ` : "";
-  return `${code}${job.error.message ?? "unknown error"}`;
+  return job.error.message || "Something went wrong.";
 }
 
 export function isTerminal(job: Job): boolean {
   return job.status === "done" || job.status === "failed" || job.status === "cancelled";
 }
 
+/** The audio file a finished dub wrote, if any. */
+function dubAudio(job: Job): string | undefined {
+  const a = job.result?.audio;
+  return job.kind === "dub" && typeof a === "string" && a ? a : undefined;
+}
+
 export function hasAudio(job: Job): boolean {
-  return job.status === "done" && (job.kind === "tts" || job.kind === "design");
+  return job.status === "done" && (job.kind === "tts" || job.kind === "design" || !!dubAudio(job));
+}
+
+/** Where to stream a finished job's audio from. */
+export function jobAudioSrc(job: Job): string {
+  const dub = dubAudio(job);
+  return dub ? api.jobFileUrl(job.id, dub) : api.jobAudioUrl(job.id);
+}
+
+/** Download a finished job's audio through the save dialog (fetched with the auth header). */
+export async function downloadJobAudio(job: Job): Promise<void> {
+  const dub = dubAudio(job);
+  const ext = dub ? (dub.split(".").pop() ?? "mp3") : String(job.result?.format ?? "mp3");
+  const name = `${safeFileName(jobTitle(job), job.id)}.${ext}`;
+  await downloadFile(dub ? api.jobFileUrl(job.id, dub) : api.jobAudioUrl(job.id, true), name);
 }
 
 /** Pull a readable summary of the original request out of a job payload. */
@@ -61,9 +89,9 @@ export function resultCount(job: Job, key: string): number | undefined {
 }
 
 export const KIND_LABEL: Record<Job["kind"], string> = {
-  tts: "Speech", batch: "Batch", design: "Voice design", previews: "Voice previews", project: "Project", style_refs: "Style clips",
+  tts: "Speech", batch: "Batch", design: "Voice design", previews: "Previews", project: "Project", style_refs: "Style clips",
   dialogue: "Dialogue", install: "Engine install", dub: "Dubbing",
 };
 export function kindLabel(kind: Job["kind"]): string {
-  return KIND_LABEL[kind] ?? kind;
+  return KIND_LABEL[kind] ?? (kind ? (kind.charAt(0).toUpperCase() + kind.slice(1)).replace(/_/g, " ") : "Job");
 }

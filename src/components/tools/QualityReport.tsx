@@ -17,44 +17,58 @@ function Score({ label, value, hint }: { label: string; value: React.ReactNode; 
   );
 }
 
-/** A quality report: DNSMOS scores, similarity to the voice, and the drift strip over the take. */
+/** A 1-5 listener score in words: "Good (4.1 of 5)". */
+function mosWords(v: number | null | undefined): React.ReactNode {
+  if (v == null || !Number.isFinite(Number(v))) return "–";
+  const n = Number(v);
+  const word = n >= 3.5 ? "Good" : n >= 2.8 ? "Fair" : "Poor";
+  return (
+    <>
+      {word} <span className="text-[12px] font-normal text-muted">{n.toFixed(1)} of 5</span>
+    </>
+  );
+}
+
+/** 0.87 -> "87%" */
+const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(Number(v)) ? "–" : `${Math.round(Number(v) * 100)}%`);
+
+/** A quality report: sound quality scores, how much it sounds like the voice, and how that holds over the take. */
 export function QualityView({ r }: { r: QualityReport }) {
   const d = r.drift;
   const flagged = new Set(d.flags.map((f) => f.start));
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Badge tone={r.verdict === "good" ? "ok" : "warn"}>{r.verdict}</Badge>
+        <Badge tone={r.verdict === "good" ? "ok" : "warn"}>{r.verdict === "good" ? "Sounds good" : "Worth a listen"}</Badge>
         <span className="text-[12.5px] text-muted">{r.duration}s</span>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {r.mos && (
           <>
-            <Score label="Overall" value={r.mos.overall} hint="DNSMOS: predicted listener score, 1-5" />
-            <Score label="Speech" value={r.mos.signal} hint="DNSMOS signal quality" />
-            <Score label="Background" value={r.mos.background} hint="DNSMOS background (higher = quieter)" />
-            <Score label="P.808" value={r.mos.p808} />
+            <Score label="Sound quality" value={mosWords(r.mos.overall)} hint="How a listener would likely rate it, from 1 to 5" />
+            <Score label="Speech clarity" value={mosWords(r.mos.signal)} hint="How clear the voice itself sounds" />
+            <Score label="Background" value={mosWords(r.mos.background)} hint="Higher means a quieter background" />
           </>
         )}
         {r.similarity && (
           <Score
-            label="Sounds like the voice"
+            label="Voice match"
             value={
               <>
-                {r.similarity.value} <span className="text-[12px] font-normal text-muted">{r.similarity.same_speaker ? "same speaker" : "different"}</span>
+                {pct(r.similarity.value)} <span className="text-[12px] font-normal text-muted">{r.similarity.same_speaker ? "Same speaker" : "Different speaker"}</span>
               </>
             }
-            hint={`${r.similarity.backend}; same speaker from about ${r.similarity.backend === "wavlm" ? "0.86" : "0.72"}`}
+            hint="How much it sounds like the chosen voice"
           />
         )}
-        {d.windows.length > 0 && <Score label="Lowest window" value={`${d.min_similarity}`} hint={`compared with ${d.compared_with}`} />}
+        {d.windows.length > 0 && <Score label="Weakest moment" value={pct(d.min_similarity)} hint="The part that sounds least like the voice" />}
       </div>
       {d.windows.length > 1 && (
-        <div className="flex h-12 items-end gap-0.5 rounded-lg bg-surface-2 p-1.5" aria-label="Voice similarity per window">
+        <div className="flex h-12 items-end gap-0.5 rounded-lg bg-surface-2 p-1.5" aria-label="Voice match over the recording">
           {d.windows.map((w) => (
             <div
               key={w.start}
-              title={`${w.start}-${w.end}s: similarity ${w.similarity}${w.f0 ? `, ${Math.round(w.f0)} Hz` : ""}, ${w.level_db} dB`}
+              title={`${Math.round(w.start)}-${Math.round(w.end)}s: ${pct(w.similarity)} match`}
               className={cn("min-w-[3px] flex-1 rounded-sm", flagged.has(w.start) ? "bg-warn" : "bg-ok/80")}
               style={{ height: `${Math.max(8, Math.round((100 * Math.max(0, (w.similarity ?? 0) - 0.5)) / 0.5))}%` }}
             />

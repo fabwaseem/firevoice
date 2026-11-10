@@ -6,16 +6,16 @@ import { useUpdateVoice } from "@/lib/api/hooks";
 import { usePlayer } from "@/stores/player";
 import { cn, langName, truncate } from "@/lib/utils";
 import { ArtTile, Badge, Equalizer, Tooltip } from "@/components/ui";
-import { initials, genderLabel } from "./helpers";
+import { initials, genderLabel, kindLabel } from "./helpers";
 import { QualityBadge } from "./QualityBadge";
 
 export function VoiceCard({ voice, onOpen, index = 0 }: { voice: Voice; onOpen: (v: Voice) => void; index?: number }) {
   const update = useUpdateVoice();
-  const player = usePlayer();
-  const isCurrent = player.track?.id === voice.voice_id;
-  const playing = isCurrent && player.playing;
+  const isCurrent = usePlayer((s) => s.track?.id === voice.voice_id);
+  const playing = usePlayer((s) => s.playing && s.track?.id === voice.voice_id);
 
   const togglePlay = () => {
+    const player = usePlayer.getState();
     if (isCurrent) {
       player.toggle();
       return;
@@ -92,13 +92,13 @@ export function VoiceCard({ voice, onOpen, index = 0 }: { voice: Voice; onOpen: 
       <button type="button" onClick={() => onOpen(voice)} className="min-w-0 text-left">
         <h3 className="truncate text-[14px] font-semibold text-ink">{voice.name}</h3>
         <p className="mt-0.5 min-h-[18px] truncate text-[12.5px] text-muted">
-          {voice.tagline ? truncate(voice.tagline, 64) : voice.description ? truncate(voice.description, 60) : [genderLabel(voice.gender), voice.accent].filter(Boolean).join(" · ") || voice.voice_id}
+          {voice.tagline ? truncate(voice.tagline, 64) : voice.description ? truncate(voice.description, 60) : [genderLabel(voice.gender), voice.accent].filter(Boolean).join(" · ") || langName(voice.language)}
         </p>
       </button>
 
       <div className="flex flex-wrap items-center gap-1.5">
         <QualityBadge voice={voice} />
-        <Badge tone={voice.kind === "designed" ? "info" : "neutral"}>{voice.kind}</Badge>
+        {voice.kind && <Badge tone={voice.kind === "designed" ? "info" : "neutral"}>{kindLabel(voice.kind)}</Badge>}
         <Badge>{langName(voice.language)}</Badge>
         {voice.gender && <Badge>{genderLabel(voice.gender)}</Badge>}
         {clipCount > 0 && (

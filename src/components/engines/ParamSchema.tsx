@@ -1,5 +1,11 @@
 import type { EngineParam } from "@/lib/api/types";
 
+/** "top_p" -> "Top p" for settings without a label. */
+function humanise(name: string): string {
+  const s = name.replace(/[_-]+/g, " ").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : name;
+}
+
 function fmtDefault(p: EngineParam): string {
   const d = p.default;
   if (d == null) return "–";
@@ -24,14 +30,11 @@ export function ParamSchema({ params }: { params: EngineParam[] }) {
         return (
           <li key={p.name} className="py-2.5">
             <div className="flex items-baseline justify-between gap-3">
-              <span className="text-[13px] font-medium text-ink">{p.label ?? p.name}</span>
-              <span className="font-mono text-[11.5px] text-faint">
-                {p.name} · {p.type}
-              </span>
+              <span className="text-[13px] font-medium text-ink">{p.label ?? humanise(p.name)}</span>
             </div>
             <div className="mt-0.5 flex flex-wrap gap-x-4 text-[12.5px] text-muted">
               <span>
-                default <span className="text-ink-2 tabular">{fmtDefault(p)}</span>
+                Default <span className="text-ink-2 tabular">{fmtDefault(p)}</span>
               </span>
               {range && <span className="truncate">{range}</span>}
             </div>

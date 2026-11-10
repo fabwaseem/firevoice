@@ -9,6 +9,8 @@ import { saveBlob } from "@/lib/audio";
 import { cn, fmtTime, relTime } from "@/lib/utils";
 import { usePlayer } from "@/stores/player";
 import { Button, ConfirmDialog, EmptyState, Skeleton, Tooltip } from "@/components/ui";
+import { WordDownloads } from "@/components/tools/WordDownloads";
+import type { TimedWord } from "@/lib/words";
 
 type Icon = ComponentType<{ className?: string }>;
 
@@ -110,6 +112,18 @@ export function HistoryRow({ item, compact }: { item: HistoryItem; compact?: boo
               <Button size="sm" variant="ghost" onClick={() => void downloadText("transcript.srt")}>SRT</Button>
             </Tooltip>
           </>
+        )}
+        {(item.kind === "speech" || item.kind === "transcript") && (
+          <WordDownloads
+            variant="ghost"
+            label="Words"
+            baseName={item.title}
+            words={async (): Promise<TimedWord[]> => {
+              if (item.source === "render") return (await api.keptRenderWords(item.id)).words;
+              const blob = await api.historyFile(item, "transcript.json");
+              return (JSON.parse(await blob.text()) as { words?: TimedWord[] }).words ?? [];
+            }}
+          />
         )}
         {tracks(item).length > 0 && (
           <Tooltip content="Download">
