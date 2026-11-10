@@ -37,18 +37,21 @@ export function AppShell() {
     <TooltipProvider>
       <div className="ambient relative flex h-full w-full overflow-hidden">
         <Sidebar />
-        <main
-          ref={mainRef}
-          id="main"
-          className="relative min-w-0 flex-1 overflow-y-auto px-6 pt-6 pb-6 transition-[padding] duration-300"
-          style={{ paddingBottom: hasTrack ? 112 : 24 }}
-        >
-          <BackendManager />
-          <Welcome />
-          <OfflineBanner />
-          <Outlet />
-        </main>
-        <PlayerBar />
+        {/* content column: the player floats over it, never over the sidebar */}
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          <main
+            ref={mainRef}
+            id="main"
+            className="main-scroll relative min-h-0 flex-1 overflow-y-auto px-8 pt-7 pb-6 transition-[padding] duration-300"
+            style={{ paddingBottom: hasTrack ? 116 : 28 }}
+          >
+            <BackendManager />
+            <Welcome />
+            <OfflineBanner />
+            <Outlet />
+          </main>
+          <PlayerBar />
+        </div>
         <Toaster
           position="top-right"
           offset={16}

@@ -44,7 +44,14 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
     <div className={cn("text-ink", disabled && "pointer-events-none opacity-60")}>
       <Section title="Engine" right={engine && (engine.loaded ? <Badge tone="ok" dot>loaded</Badge> : <Badge>loads on first use</Badge>)}>
         <Select value={s.engine ?? engine?.name ?? ""} onChange={(v) => s.set({ engine: v, params: {} })} options={engineOptions} placeholder="Server default" ariaLabel="Engine" />
-        {engine?.notes && <p className="-mt-2 text-[12px] leading-snug text-muted">{engine.notes}</p>}
+        {engine?.tagline && (
+          <p className="-mt-2 text-[12px] leading-snug text-muted">
+            {engine.tagline}
+            {engine.tier && engine.tier.quality !== "-" && (
+              <span className="text-faint"> · {engine.tier.quality} · size {engine.tier.size} · {engine.tier.speed}</span>
+            )}
+          </p>
+        )}
         {engine && engine.params.length > 0 && (
           <div className="space-y-4 rounded-xl bg-surface-2/70 p-3">
             <div className="flex items-center justify-between">

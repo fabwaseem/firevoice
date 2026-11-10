@@ -72,7 +72,7 @@ export function GpuCard() {
                 {fmtGB(used)} <span className="text-faint">of {fmtGB(total)}</span>
               </dd>
               <dt className="text-muted">Default</dt>
-              <dd className="truncate font-medium text-ink">{s?.default_engine ?? "–"}</dd>
+              <dd className="truncate font-medium text-ink">{s?.default_engine ? engineName(s.default_engine) : "–"}</dd>
               <dt className="text-muted">ASR</dt>
               <dd className="flex items-center gap-1.5 truncate font-medium text-ink">
                 <Ear className="size-3.5 text-muted" />

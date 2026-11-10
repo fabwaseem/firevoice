@@ -6,66 +6,70 @@
 /* ------------------------------------------------------------------ tokens */
 :root {
   color-scheme: light;
-  --bg: #f2f3f7;
-  --bg-elev: #f8f9fc;
+  --bg: #f3f4f7;
+  --bg-elev: #f9fafb;
   --surface: #ffffff;
-  --surface-2: #f5f6fa;
-  --surface-3: #eceef4;
-  --ink: #13151b;
-  --ink-2: #3d4250;
-  --muted: #6c7281;
-  --faint: #9aa0ae;
-  --line: rgba(19, 21, 27, 0.08);
-  --line-strong: rgba(19, 21, 27, 0.14);
+  --surface-2: #f6f7f9;
+  --surface-3: #eceef3;
+  --ink: #111318;
+  --ink-2: #3a3f4b;
+  --muted: #676d7b;
+  --faint: #979dab;
+  --line: rgba(17, 19, 24, 0.075);
+  --line-strong: rgba(17, 19, 24, 0.13);
   --fire: #ff5a2d;
   --fire-2: #ff8a4c;
-  --fire-soft: rgba(255, 90, 45, 0.12);
-  --ok: #1f9d6a;
-  --ok-soft: rgba(31, 157, 106, 0.12);
-  --warn: #d7970b;
-  --warn-soft: rgba(215, 151, 11, 0.14);
-  --bad: #e24b4b;
-  --bad-soft: rgba(226, 75, 75, 0.12);
-  --info: #3b7ddd;
-  --info-soft: rgba(59, 125, 221, 0.12);
-  --shadow-sm: 0 1px 2px rgba(19, 21, 27, 0.04), 0 1px 1px rgba(19, 21, 27, 0.03);
-  --shadow-md: 0 8px 24px -12px rgba(19, 21, 27, 0.18), 0 2px 6px rgba(19, 21, 27, 0.04);
-  --shadow-lg: 0 24px 60px -24px rgba(19, 21, 27, 0.28), 0 6px 18px -8px rgba(19, 21, 27, 0.08);
-  --blob-a: rgba(255, 138, 76, 0.22);
-  --blob-b: rgba(96, 196, 170, 0.18);
-  --blob-c: rgba(144, 132, 255, 0.16);
+  --fire-soft: rgba(255, 90, 45, 0.1);
+  --ok: #17935f;
+  --ok-soft: rgba(23, 147, 95, 0.11);
+  --warn: #c98a06;
+  --warn-soft: rgba(215, 151, 11, 0.13);
+  --bad: #dc4444;
+  --bad-soft: rgba(220, 68, 68, 0.11);
+  --info: #3473d6;
+  --info-soft: rgba(52, 115, 214, 0.11);
+  /* a top edge that catches light on raised surfaces (dark mode only) */
+  --edge: inset 0 0 0 0 transparent;
+  --shadow-sm: 0 1px 2px rgba(17, 19, 24, 0.04), 0 1px 1px rgba(17, 19, 24, 0.02);
+  --shadow-md: 0 10px 28px -14px rgba(17, 19, 24, 0.2), 0 2px 6px rgba(17, 19, 24, 0.04);
+  --shadow-lg: 0 28px 64px -28px rgba(17, 19, 24, 0.3), 0 8px 20px -10px rgba(17, 19, 24, 0.1);
+  --blob-a: rgba(255, 138, 76, 0.18);
+  --blob-b: rgba(96, 196, 170, 0.12);
+  --blob-c: rgba(144, 132, 255, 0.12);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0d0f14;
-  --bg-elev: #12151c;
-  --surface: #161a22;
-  --surface-2: #1c212b;
-  --surface-3: #232935;
-  --ink: #eef0f5;
-  --ink-2: #c6cbd6;
-  --muted: #8e95a5;
-  --faint: #5f6675;
-  --line: rgba(238, 240, 245, 0.08);
-  --line-strong: rgba(238, 240, 245, 0.14);
-  --fire: #ff6a3d;
-  --fire-2: #ff9a5c;
-  --fire-soft: rgba(255, 106, 61, 0.16);
-  --ok: #3cc58a;
-  --ok-soft: rgba(60, 197, 138, 0.14);
-  --warn: #e7b23a;
-  --warn-soft: rgba(231, 178, 58, 0.16);
-  --bad: #f06a6a;
-  --bad-soft: rgba(240, 106, 106, 0.16);
-  --info: #6aa3ff;
-  --info-soft: rgba(106, 163, 255, 0.16);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 8px 24px -12px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.7), 0 6px 18px -8px rgba(0, 0, 0, 0.4);
-  --blob-a: rgba(255, 106, 61, 0.14);
-  --blob-b: rgba(60, 197, 138, 0.1);
-  --blob-c: rgba(120, 110, 255, 0.12);
+  /* layered neutrals with a faint cool tint: page < sidebar < card < control < raised control */
+  --bg: #0a0b0f;
+  --bg-elev: #0f1116;
+  --surface: #14161d;
+  --surface-2: #191c24;
+  --surface-3: #21252f;
+  --ink: #f3f4f7;
+  --ink-2: #cdd1db;
+  --muted: #9aa0ae;
+  --faint: #6b7180;
+  --line: rgba(255, 255, 255, 0.065);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --fire: #ff6b3d;
+  --fire-2: #ff9c5e;
+  --fire-soft: rgba(255, 107, 61, 0.14);
+  --ok: #3dd08f;
+  --ok-soft: rgba(61, 208, 143, 0.13);
+  --warn: #f0b93f;
+  --warn-soft: rgba(240, 185, 63, 0.14);
+  --bad: #ff6f6f;
+  --bad-soft: rgba(255, 111, 111, 0.14);
+  --info: #74aaff;
+  --info-soft: rgba(116, 170, 255, 0.14);
+  --edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.045);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 12px 32px -14px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 30px 70px -26px rgba(0, 0, 0, 0.8), 0 8px 22px -10px rgba(0, 0, 0, 0.5);
+  --blob-a: rgba(255, 107, 61, 0.09);
+  --blob-b: rgba(61, 208, 143, 0.05);
+  --blob-c: rgba(120, 110, 255, 0.08);
 }
 
 @theme inline {
@@ -134,6 +138,17 @@
   ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
   ::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: padding-box; border: 3px solid transparent; }
   ::-webkit-scrollbar-track { background: transparent; }
+  /* the sidebar's scrollbar only shows while the pointer is over it */
+  .sidebar-scroll {
+    scrollbar-width: thin; scrollbar-color: transparent transparent;
+    mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 14px), transparent);
+  }
+  .sidebar-scroll:hover { scrollbar-color: var(--line-strong) transparent; }
+  .sidebar-scroll::-webkit-scrollbar { width: 6px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: transparent; border: 0; }
+  .sidebar-scroll:hover::-webkit-scrollbar-thumb { background: var(--line-strong); }
+  .no-scrollbar, .no-scrollbar:hover { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
@@ -143,15 +158,16 @@
 @utility surface {
   background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--edge), var(--shadow-sm);
 }
 @utility surface-raised {
   background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--edge), var(--shadow-md);
 }
 @utility glass {
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: var(--edge);
   backdrop-filter: blur(18px) saturate(1.4);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
   border: 1px solid var(--line);
