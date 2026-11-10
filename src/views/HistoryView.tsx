@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { History as HistoryIcon, Search } from "lucide-react";
+import { ChevronDown, History as HistoryIcon, Search } from "lucide-react";
 import { useHistory } from "@/lib/api/hooks";
 import type { HistoryKind } from "@/lib/api/types";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";
@@ -63,7 +63,7 @@ export function HistoryView() {
       )}
       {more && (
         <div className="mt-4 flex justify-center">
-          <Button variant="outline" loading={h.isFetching} onClick={() => setLimit((n) => n + 60)}>
+          <Button variant="outline" loading={h.isFetching} onClick={() => setLimit((n) => n + 60)} leading={<ChevronDown className="size-4" />}>
             Show more
           </Button>
         </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Dices, RotateCcw } from "lucide-react";
+import { AudioWaveform, ChevronDown, Dices, FileAudio, Languages, MessageSquareText, RotateCcw } from "lucide-react";
 import type { Engine, Style } from "@/lib/api/types";
 import { useShallow } from "zustand/react/shallow";
 import { useStudio } from "@/stores/studio";
@@ -101,13 +101,13 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
       <Section title="Delivery">
         <LabeledSlider label="Pace" value={s.pace} min={0.5} max={2} step={0.05} onChange={(pace) => s.set({ pace })} onReset={s.pace !== 1 ? () => s.set({ pace: 1 }) : undefined} hint="Tempo on top of the style's own pacing" />
         <div>
-          <Label hint={languages.length ? `${languages.length} supported` : undefined}>Language</Label>
+          <Label hint={languages.length ? `${languages.length} supported` : undefined} icon={<Languages />}>Language</Label>
           <Select size="sm" value={s.language ?? "auto"} onChange={(v) => s.set({ language: v === "auto" ? null : v })} ariaLabel="Language"
             options={[{ value: "auto", label: "Detect from script" }, ...languages.map((l) => ({ value: l, label: langName(l) }))]} />
         </div>
         {(engine?.instruct ?? true) && (
           <div>
-            <Label hint={s.instruct === null ? "from style" : s.instruct === "" ? "none" : "custom"}>Instruction</Label>
+            <Label hint={s.instruct === null ? "from style" : s.instruct === "" ? "none" : "custom"} icon={<MessageSquareText />}>Instruction</Label>
             <Textarea
               rows={3}
               value={s.instruct ?? style?.instruct ?? ""}
@@ -131,7 +131,7 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
         <Switch checked={s.keepTakes} onChange={(keepTakes) => s.set({ keepTakes })} label="Keep every take" description="Compare, re-take and lock passages after a render" />
         {s.validate && <LabeledSlider label="How closely it must match" value={s.accept} min={0.5} max={1} step={0.01} onChange={(accept) => s.set({ accept })} />}
         <div>
-          <Label>Seed</Label>
+          <Label icon={<Dices />}>Seed</Label>
           <div className="flex gap-2">
             <input type="number" value={s.seed} onChange={(e) => s.set({ seed: Number(e.target.value) || 0 })} aria-label="Seed"
               className="h-8 w-full rounded-md border border-line bg-surface-2 px-2.5 text-[13px] tabular focus:border-fire/60 focus:outline-none" />
@@ -147,12 +147,12 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
       <Section title="Output" defaultOpen={showAdvanced}>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>Format</Label>
+            <Label icon={<FileAudio />}>Format</Label>
             <Select size="sm" value={format} onChange={(v) => setSettings({ format: v as typeof format })} ariaLabel="Output format"
               options={["mp3", "wav", "flac", "ogg", "opus", "m4a"].map((f) => ({ value: f, label: f.toUpperCase() }))} />
           </div>
           <div>
-            <Label>Sample rate</Label>
+            <Label icon={<AudioWaveform />}>Sample rate</Label>
             <Select size="sm" value={String(s.sampleRate ?? "native")} onChange={(v) => s.set({ sampleRate: v === "native" ? null : Number(v) })} ariaLabel="Sample rate"
               options={[{ value: "native", label: engine ? `Native ${engine.sample_rate / 1000} kHz` : "Native" }, ...[22050, 24000, 44100, 48000].map((r) => ({ value: String(r), label: `${r / 1000} kHz` }))]} />
           </div>

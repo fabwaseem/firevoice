@@ -32,10 +32,11 @@ export function CardBody({ className, ...rest }: HTMLAttributes<HTMLDivElement>)
 }
 
 /** Uppercase micro label used above groups of controls. */
-export function Label({ className, children, htmlFor, hint }: { className?: string; children: ReactNode; htmlFor?: string; hint?: ReactNode }) {
+export function Label({ className, children, htmlFor, hint, icon }: { className?: string; children: ReactNode; htmlFor?: string; hint?: ReactNode; icon?: ReactNode }) {
   return (
     <div className={cn("mb-1.5 flex items-baseline justify-between gap-3", className)}>
-      <label htmlFor={htmlFor} className="text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">
+      <label htmlFor={htmlFor} className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-faint">
+        {icon}
         {children}
       </label>
       {hint && <span className="text-[12px] text-faint tabular">{hint}</span>}

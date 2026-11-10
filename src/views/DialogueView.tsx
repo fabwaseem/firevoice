@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, MessagesSquare, Play, Search } from "lucide-react";
+import { Download, FileText, Lightbulb, MessagesSquare, Play, Search, Timer, Users } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, useStyles, useVoices } from "@/lib/api/hooks";
 import type { DialogueResult } from "@/lib/api/types";
@@ -105,9 +105,9 @@ export function DialogueView() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <Card className="p-4">
           <div className="mb-2 flex items-center gap-2">
-            <h3 className="text-[14px] font-semibold text-ink">Script</h3>
+            <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><FileText className="size-4 shrink-0 text-fire" />Script</h3>
             <div className="flex-1" />
-            <Button size="sm" variant="ghost" onClick={() => { setScript(EXAMPLE); void detect(EXAMPLE); }}>Example</Button>
+            <Button size="sm" variant="ghost" onClick={() => { setScript(EXAMPLE); void detect(EXAMPLE); }} leading={<Lightbulb className="size-3.5" />}>Example</Button>
           </div>
           <Textarea rows={14} value={script} onChange={(e) => setScript(e.target.value)} aria-label="Dialogue script"
             placeholder={"Evelyn: Hello, and welcome to the show.\nArthur: Thanks for having me. (laughs)\nNarrator: And so it began."} />
@@ -121,7 +121,7 @@ export function DialogueView() {
           </div>
         </Card>
         <Card className="p-4">
-          <h3 className="mb-2 text-[14px] font-semibold text-ink">Cast</h3>
+          <h3 className="mb-2 text-[14px] font-semibold text-ink flex items-center gap-2"><Users className="size-4 shrink-0 text-fire" />Cast</h3>
           {speakers.length === 0 ? (
             <EmptyState icon={<MessagesSquare className="size-5" />} title="No speakers yet" description="Write a script and press Find speakers." />
           ) : (
@@ -152,7 +152,7 @@ export function DialogueView() {
             </div>
           )}
           <div className="mt-4">
-            <Label hint={`${gap} ms`}>Pause between speakers</Label>
+            <Label hint={`${gap} ms`} icon={<Timer />}>Pause between speakers</Label>
             <Slider value={gap} min={0} max={1500} step={50} onChange={setGap} />
           </div>
           <Button className="mt-3" variant="primary" leading={<Play className="size-4" />} onClick={render} disabled={!speakers.length || !!busy} loading={busy === "render"}>

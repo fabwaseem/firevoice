@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Download, Languages, Upload, X } from "lucide-react";
+import { Download, FileAudio, Globe, Languages, Mic2, Music, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "@/lib/api/client";
@@ -82,7 +82,7 @@ export function DubbingView() {
       )}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
-          <h3 className="mb-3 text-[14px] font-semibold text-ink">Original</h3>
+          <h3 className="mb-3 text-[14px] font-semibold text-ink flex items-center gap-2"><FileAudio className="size-4 shrink-0 text-fire" />Original</h3>
           <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-line-strong bg-surface-2 px-4 py-8 text-center hover:border-fire">
             <Upload className="size-6 text-fire" />
             <span className="text-[13.5px] font-medium text-ink">{file ? file.name : "Choose a recording or video"}</span>
@@ -95,7 +95,7 @@ export function DubbingView() {
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="db-from">From</Label>
+              <Label htmlFor="db-from" icon={<Globe />}>From</Label>
               <NativeSelect id="db-from" value={from} onChange={(e) => setFrom(e.target.value)}>
                 <option value="auto">Detect</option>
                 {sorted.map((c) => (
@@ -104,7 +104,7 @@ export function DubbingView() {
               </NativeSelect>
             </div>
             <div>
-              <Label htmlFor="db-to">Into</Label>
+              <Label htmlFor="db-to" icon={<Languages />}>Into</Label>
               <NativeSelect id="db-to" value={to} onChange={(e) => setTo(e.target.value)}>
                 {sorted.map((c) => (
                   <option key={c} value={c}>{label(c)}</option>
@@ -115,10 +115,10 @@ export function DubbingView() {
         </Card>
 
         <Card className="p-5">
-          <h3 className="mb-3 text-[14px] font-semibold text-ink">Voices</h3>
+          <h3 className="mb-3 text-[14px] font-semibold text-ink flex items-center gap-2"><Mic2 className="size-4 shrink-0 text-fire" />Voices</h3>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="db-voice">Voice</Label>
+              <Label htmlFor="db-voice" icon={<Mic2 />}>Voice</Label>
               <NativeSelect id="db-voice" value={voice} onChange={(e) => setVoice(e.target.value)} disabled={keep}>
                 <option value="">Default voice</option>
                 {(voices.data ?? []).map((v) => (
@@ -129,7 +129,7 @@ export function DubbingView() {
             <Switch checked={keep} onChange={setKeep} label="Keep the original voices" description="Clones each speaker for the dub; the clones are deleted afterwards" />
             {keep && <Switch checked={consent} onChange={setConsent} label="I have the rights to clone the voices in this recording" />}
             <div>
-              <Label htmlFor="db-bg" hint={`${Math.round(background * 100)}%`}>Original audio underneath</Label>
+              <Label htmlFor="db-bg" hint={`${Math.round(background * 100)}%`} icon={<Music />}>Original audio underneath</Label>
               <input id="db-bg" type="range" min={0} max={0.5} step={0.05} value={background} onChange={(e) => setBackground(Number(e.target.value))} className="w-full accent-[var(--fire)]" />
             </div>
             <Switch checked={music} onChange={setMusic} label="Keep the music and effects" description="Separates them from the original voices (needs the voice separator from Engines)" />

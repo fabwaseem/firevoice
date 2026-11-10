@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { AudioLines, ImageOff, ImagePlus, Pause, Play, Star, Trash2 } from "lucide-react";
+import { AudioLines, Hammer, ImageOff, ImagePlus, Pause, Play, Save, Star, Trash2, Undo2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Voice } from "@/lib/api/types";
 import { api } from "@/lib/api/client";
@@ -206,7 +206,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
           <Textarea id="vd-notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-[60px]" />
         </div>
         <div className="flex justify-end md:col-span-2">
-          <Button variant="secondary" size="sm" disabled={!dirty} loading={update.isPending} onClick={save}>
+          <Button variant="secondary" size="sm" disabled={!dirty} loading={update.isPending} onClick={save} leading={<Save className="size-3.5" />}>
             Save changes
           </Button>
         </div>
@@ -219,7 +219,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
           </Label>
           <Textarea id="vd-transcript" value={transcript} onChange={(e) => setTranscript(e.target.value)} className="min-h-[72px]" />
           <div className="mt-2 flex justify-end">
-            <Button size="sm" disabled={transcript === (voice.transcript ?? "")} loading={savingTranscript} onClick={saveTranscript}>
+            <Button size="sm" disabled={transcript === (voice.transcript ?? "")} loading={savingTranscript} onClick={saveTranscript} leading={<Save className="size-3.5" />}>
               Save transcript
             </Button>
           </div>
@@ -354,8 +354,8 @@ function ClipTools({ voice, isPlaying, onPlay, styleTitle }: { voice: Voice; isP
         {voice.quality_check?.cleaned && <Badge>Cleaned</Badge>}
         <div className="flex-1" />
         <Select value={strength} onChange={(v) => setStrength(v as typeof strength)} options={[{ value: "light", label: "Light" }, { value: "medium", label: "Medium" }, { value: "strong", label: "Strong" }, { value: "neural", label: "Deepest" }]} ariaLabel="Cleaning strength" />
-        <Button size="sm" variant="outline" loading={busy === "clean"} onClick={() => act("clean", () => api.cleanVoice(voice.voice_id, strength), "Clip cleaned")}>Clean</Button>
-        <Button size="sm" variant="ghost" loading={busy === "restore"} onClick={() => act("restore", () => api.restoreVoice(voice.voice_id), "Original clip restored")}>Restore original</Button>
+        <Button size="sm" variant="outline" loading={busy === "clean"} onClick={() => act("clean", () => api.cleanVoice(voice.voice_id, strength), "Clip cleaned")} leading={<Wand2 className="size-3.5" />}>Clean</Button>
+        <Button size="sm" variant="ghost" loading={busy === "restore"} onClick={() => act("restore", () => api.restoreVoice(voice.voice_id), "Original clip restored")} leading={<Undo2 className="size-3.5" />}>Restore original</Button>
       </div>
       <div>
         <p className="mb-1.5 text-[13px] font-medium text-ink">Style clips <span className="font-normal text-muted">the voice's own take per style, so renders keep the voice and the delivery</span></p>
@@ -374,7 +374,7 @@ function ClipTools({ voice, isPlaying, onPlay, styleTitle }: { voice: Voice; isP
           <div className="mt-2 flex items-center gap-2">
             <Select value={style || buildable[0].name} onChange={setStyle} options={buildable.map((s) => ({ value: s.name, label: s.title || s.name }))} />
             <Button size="sm" variant="outline" loading={busy === "build"}
-              onClick={() => act("build", () => api.buildStyleClip(voice.voice_id, style || buildable[0].name), "Style clip built")}>Build clip</Button>
+              onClick={() => act("build", () => api.buildStyleClip(voice.voice_id, style || buildable[0].name), "Style clip built")} leading={<Hammer className="size-3.5" />}>Build clip</Button>
           </div>
         )}
       </div>

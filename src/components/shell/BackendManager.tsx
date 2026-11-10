@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, FileText, Loader2, Server } from "lucide-react";
+import { AlertTriangle, Download, FileText, Loader2, Rocket, RotateCw, Server } from "lucide-react";
 import { useHealth } from "@/lib/api/hooks";
 import { apiCompat, backend, inTauri, localPort } from "@/lib/backend";
 import { useBackend } from "@/stores/backend";
@@ -93,12 +93,12 @@ export function BackendManager() {
             <Button size="sm" variant="soft" loading={phase === "starting"} onClick={async () => {
               await useBackend.getState().stop();
               await useBackend.getState().start();
-            }}>
+            }} leading={<RotateCw className="size-3.5" />}>
               Restart
             </Button>
           )}
           {active && info?.mode === "bundled" && compat === "server-too-old" && (
-            <Button size="sm" variant="soft" onClick={() => useBackend.getState().runSetup()}>
+            <Button size="sm" variant="soft" onClick={() => useBackend.getState().runSetup()} leading={<Download className="size-3.5" />}>
               Update now
             </Button>
           )}
@@ -111,7 +111,7 @@ export function BackendManager() {
           <span className="flex-1">
             A newer voice engine came with this update ({info?.bundled_version}; you have {info?.installed_version}). Updating takes a minute and keeps your voices and projects.
           </span>
-          <Button size="sm" onClick={() => useBackend.getState().runSetup()}>
+          <Button size="sm" onClick={() => useBackend.getState().runSetup()} leading={<Download className="size-3.5" />}>
             Update now
           </Button>
           <Button size="sm" variant="ghost" onClick={() => useBackend.getState().set({ phase: "idle" })}>
@@ -138,8 +138,8 @@ export function BackendManager() {
                   (about 4 GB, only once). Your voices and projects stay on this computer.
                 </p>
                 <div className="mt-6 flex justify-center gap-2">
-                  <Button onClick={() => useBackend.getState().runSetup()}>Set up now</Button>
-                  <Button variant="ghost" onClick={() => useSettings.getState().set({ manageBackend: false })}>
+                  <Button onClick={() => useBackend.getState().runSetup()} leading={<Rocket className="size-4" />}>Set up now</Button>
+                  <Button variant="ghost" onClick={() => useSettings.getState().set({ manageBackend: false })} leading={<Server className="size-4" />}>
                     I run my own server
                   </Button>
                 </div>
@@ -162,7 +162,7 @@ export function BackendManager() {
                 <h1 className="text-[20px] font-semibold text-ink">FireVoice could not start</h1>
                 <p className="mt-2 break-words text-[13px] text-bad">{error}</p>
                 <div className="mt-5 flex justify-center gap-2">
-                  <Button onClick={() => (info?.ready ? useBackend.getState().start() : useBackend.getState().runSetup())}>Try again</Button>
+                  <Button onClick={() => (info?.ready ? useBackend.getState().start() : useBackend.getState().runSetup())} leading={<RotateCw className="size-4" />}>Try again</Button>
                   <Button variant="ghost" leading={<FileText className="size-4" />} onClick={showLog}>
                     Show log
                   </Button>

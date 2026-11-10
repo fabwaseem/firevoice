@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Palette, Plus } from "lucide-react";
+import { ArrowLeft, Palette, Plus } from "lucide-react";
 import { errMessage, useStyles } from "@/lib/api/hooks";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";
@@ -80,7 +80,7 @@ export function StylesView() {
             ) : target ? (
               <StyleEditor key={creating ? `new:${creating.name}` : target.style.name} target={target} onSaved={onSaved} onDeleted={() => navigate("/styles")} />
             ) : (
-              <EmptyState icon={<Palette />} title="Style not found" description={`There is no style named “${selected}”.`} action={<Button onClick={() => navigate("/styles")}>Back to styles</Button>} className="surface rounded-xl" />
+              <EmptyState icon={<Palette />} title="Style not found" description={`There is no style named “${selected}”.`} action={<Button onClick={() => navigate("/styles")} leading={<ArrowLeft className="size-4" />}>Back to styles</Button>} className="surface rounded-xl" />
             )}
           </div>
         </div>

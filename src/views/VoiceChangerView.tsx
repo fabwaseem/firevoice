@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, Mic, Square, Upload, Wand2 } from "lucide-react";
+import { Download, Mic, Mic2, Square, Upload, Wand2 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, useVoices } from "@/lib/api/hooks";
 import type { ClipCheck } from "@/lib/api/types";
@@ -91,7 +91,7 @@ export function VoiceChangerView() {
       <PageHeader title="Voice changer" subtitle="Record or upload a performance: your words, timing and delivery stay, the voice becomes any library voice." />
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="p-4">
-          <h3 className="mb-3 text-[14px] font-semibold text-ink">Your recording</h3>
+          <h3 className="mb-3 text-[14px] font-semibold text-ink flex items-center gap-2"><Mic className="size-4 shrink-0 text-fire" />Your recording</h3>
           <input ref={fileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) use(f, f.name); e.target.value = ""; }} />
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" leading={<Upload className="size-4" />} onClick={() => fileRef.current?.click()}>Choose a file</Button>
@@ -117,8 +117,8 @@ export function VoiceChangerView() {
           )}
         </Card>
         <Card className="p-4">
-          <h3 className="mb-3 text-[14px] font-semibold text-ink">New voice</h3>
-          <Label>Voice</Label>
+          <h3 className="mb-3 text-[14px] font-semibold text-ink flex items-center gap-2"><Wand2 className="size-4 shrink-0 text-fire" />New voice</h3>
+          <Label icon={<Mic2 />}>Voice</Label>
           <NativeSelect value={voice} onChange={(e) => setVoice(e.target.value)}>
             <option value="default">Default voice</option>
             {(voices.data ?? []).map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name || v.voice_id}{v.tagline ? ` · ${v.tagline}` : ""}</option>)}

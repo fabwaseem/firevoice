@@ -44,7 +44,7 @@ export function SeparateCard() {
 
   return (
     <Card className="p-5">
-      <h3 className="text-[14px] font-semibold text-ink">Separate voice and music</h3>
+      <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><Layers className="size-4 shrink-0 text-fire" />Separate voice and music</h3>
       <p className="mt-1 text-[12.5px] text-muted">Pull a voice out of music and effects, noise or room echo. Needs Crucible from Engines. Both tracks are kept in History.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input

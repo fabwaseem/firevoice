@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Library, Plus } from "lucide-react";
+import { FilterX, Library, Plus } from "lucide-react";
 import { errMessage, useOptions, useVoiceCollections, useVoices } from "@/lib/api/hooks";
 import type { Voice } from "@/lib/api/types";
 import { Button, Chip, EmptyState } from "@/components/ui";
@@ -87,7 +87,7 @@ export function VoicesView() {
           description={hasAny ? "Try a different search or clear the filters." : "Add a voice from a short reference clip, or design one from a description."}
           action={
             hasAny ? (
-              <Button onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>
+              <Button onClick={() => setFilters(EMPTY_FILTERS)} leading={<FilterX className="size-4" />}>Clear filters</Button>
             ) : (
               <Button variant="primary" leading={<Plus className="size-4" />} onClick={() => setAddOpen(true)}>
                 Add voice

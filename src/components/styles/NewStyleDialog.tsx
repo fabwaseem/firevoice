@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import type { Style } from "@/lib/api/types";
 import { Button, Dialog, Input, Label, Select } from "@/components/ui";
@@ -32,7 +33,7 @@ export function NewStyleDialog({ open, onOpenChange, styles, onCreate }: { open:
               setName("");
               onOpenChange(false);
             }}
-          >
+           trailing={<ArrowRight className="size-4" />}>
             Continue
           </Button>
         </>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BookA, Download, Play, Plus, Trash2, Upload } from "lucide-react";
+import { BookA, Download, Eye, Play, Plus, Trash2, Type, Upload, Volume2 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useDictionary, useOptions } from "@/lib/api/hooks";
 import type { DictRule, DictRuleInput } from "@/lib/api/types";
@@ -135,11 +135,11 @@ export function DictionaryView() {
       <Card className="mb-4 p-4">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <div>
-            <Label htmlFor="d-match">Written</Label>
+            <Label htmlFor="d-match" icon={<Type />}>Written</Label>
             <Input id="d-match" value={draft.match} placeholder="Siobhan, SQL, Nguyen" onChange={(e) => setDraft({ ...draft, match: e.target.value })} />
           </div>
           <div>
-            <Label htmlFor="d-say">Say it as</Label>
+            <Label htmlFor="d-say" icon={<Volume2 />}>Say it as</Label>
             <Input id="d-say" value={draft.say} placeholder="Aa-ye-sha, sequel, Win" onChange={(e) => setDraft({ ...draft, say: e.target.value })}
               onKeyDown={(e) => { if (e.key === "Enter") void add(); }} />
           </div>
@@ -166,11 +166,11 @@ export function DictionaryView() {
       </Card>
 
       <Card className="mb-4 p-4">
-        <Label>Try it</Label>
+        <Label icon={<Play />}>Try it</Label>
         <div className="flex gap-2">
           <Input value={test} placeholder="Type a sentence to see what the engine will read" onChange={(e) => setTest(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") void show(); }} />
-          <Button variant="outline" onClick={show}>Show</Button>
+          <Button variant="outline" onClick={show} leading={<Eye className="size-4" />}>Show</Button>
           <Button variant="outline" leading={<Play className="size-4" />} onClick={hear} loading={hearing}>Hear it</Button>
         </div>
         {spoken && <p className="mt-3 font-mono text-[14px] text-ink">{spoken}</p>}

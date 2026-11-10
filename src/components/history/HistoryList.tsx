@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { AudioLines, Download, FileText, History, Layers, Mic, MessagesSquare, Music, Pause, Play, Repeat2, Sparkles, Trash2, Waves } from "lucide-react";
+import { AudioLines, Captions, Download, FileText, History, Layers, MessagesSquare, Mic, Music, Pause, Play, Repeat2, Sparkles, Trash2, Waves } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useDeleteHistory, useHistory } from "@/lib/api/hooks";
@@ -109,7 +109,7 @@ export function HistoryRow({ item, compact }: { item: HistoryItem; compact?: boo
               </Button>
             </Tooltip>
             <Tooltip content="Download subtitles (SRT)">
-              <Button size="sm" variant="ghost" onClick={() => void downloadText("transcript.srt")}>SRT</Button>
+              <Button size="sm" variant="ghost" onClick={() => void downloadText("transcript.srt")} leading={<Captions className="size-3.5" />}>SRT</Button>
             </Tooltip>
           </>
         )}

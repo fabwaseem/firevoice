@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Music, Sparkles, Waves } from "lucide-react";
+import { Dices, Music, PenLine, Sparkles, Timer, Waves } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useEngines } from "@/lib/api/hooks";
@@ -79,7 +79,7 @@ export function SoundView() {
           </p>
         )}
         <div className="mt-4">
-          <Label htmlFor="snd-prompt">Describe it</Label>
+          <Label htmlFor="snd-prompt" icon={<PenLine />}>Describe it</Label>
           <textarea
             id="snd-prompt"
             value={prompt}
@@ -100,11 +100,11 @@ export function SoundView() {
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_160px_auto] sm:items-end">
           <div>
-            <Label htmlFor="snd-len" hint={seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")} min` : `${seconds}s`}>Length</Label>
+            <Label htmlFor="snd-len" hint={seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")} min` : `${seconds}s`} icon={<Timer />}>Length</Label>
             <input id="snd-len" type="range" min={1} max={kind === "music" ? 180 : 30} step={kind === "music" ? 1 : 0.5} value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} className="w-full accent-[var(--fire)]" />
           </div>
           <div>
-            <Label htmlFor="snd-seed" hint="empty = new">Seed</Label>
+            <Label htmlFor="snd-seed" hint="empty = new" icon={<Dices />}>Seed</Label>
             <input id="snd-seed" value={seed} onChange={(e) => setSeed(e.target.value.replace(/\D/g, ""))} className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-[13px] text-ink outline-none focus:border-fire" />
           </div>
           <Button leading={<Sparkles className="size-4" />} loading={busy} disabled={!engine?.ready} onClick={make}>

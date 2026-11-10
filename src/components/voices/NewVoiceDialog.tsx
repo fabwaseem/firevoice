@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, FileAudio, Mic, Pause, Play, Shuffle, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileAudio, FolderOpen, Mic, Pause, Play, Plus, Shuffle, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, useAddVoice, useDesignVoice, useEngines, useOptions } from "@/lib/api/hooks";
 import type { DesignBatch, Voice } from "@/lib/api/types";
@@ -233,7 +233,7 @@ export function NewVoiceDialog({
                 </Button>
               </>
             ) : (
-              <Button variant="primary" onClick={createClone} disabled={!canCreate} loading={add.isPending}>
+              <Button variant="primary" onClick={createClone} disabled={!canCreate} loading={add.isPending} leading={<Plus className="size-4" />}>
                 Add voice
               </Button>
             )}
@@ -287,7 +287,7 @@ export function NewVoiceDialog({
                     <Upload className="size-8 text-muted" />
                     <p className="text-[14px] font-medium text-ink">Drop a 7 to 14 second clip here</p>
                     <p className="text-[12px] text-muted">One speaker, little background noise. WAV, MP3, FLAC, M4A…</p>
-                    <Button size="sm" className="mt-1" onClick={() => fileInput.current?.click()}>
+                    <Button size="sm" className="mt-1" onClick={() => fileInput.current?.click()} leading={<FolderOpen className="size-3.5" />}>
                       Choose file
                     </Button>
                   </>
@@ -365,7 +365,7 @@ export function NewVoiceDialog({
                     <span className="text-[13px] text-ink">Version {c.n}</span>
                     <span className="text-[12px] text-muted">{c.duration}s</span>
                     <div className="flex-1" />
-                    <Button size="sm" variant="primary" onClick={() => void keep(c.n)} loading={keeping === c.n} disabled={!name.trim()}>
+                    <Button size="sm" variant="primary" onClick={() => void keep(c.n)} loading={keeping === c.n} disabled={!name.trim()} leading={<Check className="size-3.5" />}>
                       Keep this one
                     </Button>
                   </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Cpu, Download, Loader2, Play } from "lucide-react";
+import { ArrowRight, Check, Cpu, Download, Loader2, Play, RotateCw, Sparkles } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
@@ -80,7 +80,7 @@ export function Welcome() {
           <Button variant="ghost" onClick={() => setSettings({ onboarded: true })}>
             Skip
           </Button>
-          <Button onClick={finish} disabled={!!installing}>
+          <Button onClick={finish} disabled={!!installing} leading={<Sparkles className="size-4" />}>
             {heard ? "Start creating" : "Done"}
           </Button>
         </>
@@ -93,10 +93,10 @@ export function Welcome() {
             That’s fine: you can try again, or skip this and pick an engine later on the Engines page.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" variant="soft" loading={report.isFetching} onClick={() => void report.refetch()}>
+            <Button size="sm" variant="soft" loading={report.isFetching} onClick={() => void report.refetch()} leading={<RotateCw className="size-3.5" />}>
               Try again
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSettings({ onboarded: true })}>
+            <Button size="sm" variant="ghost" onClick={() => setSettings({ onboarded: true })} trailing={<ArrowRight className="size-3.5" />}>
               Continue without it
             </Button>
           </div>

@@ -2,7 +2,7 @@ import { QualityView } from "@/components/tools/QualityReport";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Captions, Gauge, Lock, LockOpen, PencilLine, Plus, Shuffle } from "lucide-react";
+import { Captions, Gauge, ListOrdered, Lock, LockOpen, PencilLine, Plus, RefreshCw, Scissors, Shuffle } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useKeptRender } from "@/lib/api/hooks";
 import type { KeptRender, QualityReport, RenderChunk, RenderTake, WordTime } from "@/lib/api/types";
@@ -92,7 +92,7 @@ export function TakesPanel({ renderId, format, onAudio }: {
   return (
     <Card className="p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="text-[14px] font-semibold text-ink">Passages and takes</h3>
+        <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><ListOrdered className="size-4 shrink-0 text-fire" />Passages and takes</h3>
         <span className="text-[12.5px] text-muted">
           {m.chunks.length} passage{m.chunks.length === 1 ? "" : "s"}
         </span>
@@ -181,10 +181,10 @@ function PassageRow({ c, busy, playing, onPlay, onChoose, onNew, onLock, onEdit 
             />
             <div className="flex flex-wrap gap-2">
               <Tooltip content="Keep the original recording; only the words you changed are new (Ctrl+Enter)">
-                <Button size="sm" onClick={() => submit("splice")}>Splice in</Button>
+                <Button size="sm" onClick={() => submit("splice")} leading={<Scissors className="size-3.5" />}>Splice in</Button>
               </Tooltip>
               <Tooltip content="Use the whole re-recorded passage">
-                <Button size="sm" variant="ghost" onClick={() => submit("passage")}>Re-record passage</Button>
+                <Button size="sm" variant="ghost" onClick={() => submit("passage")} leading={<RefreshCw className="size-3.5" />}>Re-record passage</Button>
               </Tooltip>
               <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>Cancel</Button>
             </div>

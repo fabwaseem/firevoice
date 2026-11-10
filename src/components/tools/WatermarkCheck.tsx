@@ -1,4 +1,4 @@
-import { ScanSearch } from "lucide-react";
+import { ScanSearch, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
@@ -27,7 +27,7 @@ export function WatermarkCheck() {
 
   return (
     <Card className="p-5">
-      <h3 className="text-[14px] font-semibold text-ink">Is it AI speech?</h3>
+      <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><ShieldCheck className="size-4 shrink-0 text-fire" />Is it AI speech?</h3>
       <p className="mt-1 text-[12.5px] text-muted">Everything FireVoice makes carries an inaudible watermark that survives MP3 and editing. Check any file for it.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input

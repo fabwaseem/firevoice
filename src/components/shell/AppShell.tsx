@@ -10,6 +10,7 @@ import { OfflineBanner } from "./OfflineBanner";
 import { BackendManager } from "./BackendManager";
 import { Welcome } from "@/components/onboarding/Welcome";
 import { usePlayer } from "@/stores/player";
+import { useStagger } from "@/lib/stagger";
 
 export function AppShell() {
   const theme = useSettings((s) => s.theme);
@@ -28,6 +29,10 @@ export function AppShell() {
   // Each view starts at the top; the scroll container is <main>, not the window.
   const { pathname } = useLocation();
   const mainRef = useRef<HTMLElement>(null);
+  // each page eases in part by part (cards, rows, tiles), including content that loads after it opens
+  const pageKey = pathname.split("/")[1] || "home";
+  const pageRef = useRef<HTMLDivElement>(null);
+  useStagger(pageRef, pageKey);
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
@@ -49,7 +54,7 @@ export function AppShell() {
             <OfflineBanner />
             <Suspense fallback={<PageLoading />}>
               {/* keyed by page: each page (and its sections, staggered) eases in when opened */}
-              <div key={pathname.split("/")[1] || "home"} className="page-enter">
+              <div key={pageKey} ref={pageRef} className="page-enter">
                 <Outlet />
               </div>
             </Suspense>

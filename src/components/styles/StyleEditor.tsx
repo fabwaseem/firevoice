@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Copy, Lock, Play, Save, Trash2 } from "lucide-react";
+import { Copy, FileText, Lock, Play, Save, Sparkles, Trash2 } from "lucide-react";
 import type { Style } from "@/lib/api/types";
 import { useDeleteStyle, usePutStyle } from "@/lib/api/hooks";
 import { useStudio } from "@/stores/studio";
@@ -148,10 +148,10 @@ export function StyleEditor({ target, onSaved, onDeleted }: { target: EditorTarg
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => goTry(false)}>
+            <Button variant="ghost" onClick={() => goTry(false)} leading={<FileText className="size-4" />}>
               Keep my script
             </Button>
-            <Button variant="primary" onClick={() => goTry(true)}>
+            <Button variant="primary" onClick={() => goTry(true)} leading={<Sparkles className="size-4" />}>
               Use the showcase
             </Button>
           </>

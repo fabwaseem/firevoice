@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Check, Download, Layers, Lock, LockOpen, Package, Pause, Play, Plus, RotateCcw, Trash2, Zap } from "lucide-react";
+import { ArrowLeft, Check, ClipboardCheck, Download, Layers, Lock, LockOpen, Mic2, Package, Palette, Pause, Play, Plus, RotateCcw, Timer, Trash2, Zap } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useJob, useProject, useStyles, useVoices } from "@/lib/api/hooks";
 import type { AudiobookCheck, ChapterEdit, Paragraph, ParagraphStatus, Project } from "@/lib/api/types";
@@ -289,18 +289,18 @@ export function ProjectEditorView() {
           Defaults <span className="ml-2 text-[12.5px] font-normal text-muted">voice {voiceName(p.defaults.voice)} · style {p.defaults.style ?? "conversational"} · used by every paragraph without its own</span>
         </summary>
         <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <div><Label>Voice</Label>
+          <div><Label icon={<Mic2 />}>Voice</Label>
             <NativeSelect value={p.defaults.voice ?? "default"} onChange={(e) => void setDefaults({ voice: e.target.value })}>
               <option value="default">Default voice</option>
               {(voices.data ?? []).map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name || v.voice_id}</option>)}
             </NativeSelect></div>
-          <div><Label>Style</Label>
+          <div><Label icon={<Palette />}>Style</Label>
             <NativeSelect value={p.defaults.style ?? "conversational"} onChange={(e) => void setDefaults({ style: e.target.value })}>
               {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
             </NativeSelect></div>
-          <div><Label>Pause between paragraphs (ms)</Label>
+          <div><Label icon={<Timer />}>Pause between paragraphs (ms)</Label>
             <Input type="number" min={0} max={30000} defaultValue={p.defaults.paragraph_gap_ms ?? 700} onBlur={(e) => void setDefaults({ paragraph_gap_ms: Number(e.target.value) })} /></div>
-          <div><Label>Pause between chapters (ms)</Label>
+          <div><Label icon={<Timer />}>Pause between chapters (ms)</Label>
             <Input type="number" min={0} max={30000} defaultValue={p.defaults.chapter_gap_ms ?? 2500} onBlur={(e) => void setDefaults({ chapter_gap_ms: Number(e.target.value) })} /></div>
         </div>
       </details>
@@ -439,7 +439,7 @@ function CheckCard({ check }: { check: AudiobookCheck }) {
   return (
     <Card className="mb-4 overflow-x-auto p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="text-[14px] font-semibold text-ink">Audiobook check</h3>
+        <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><ClipboardCheck className="size-4 shrink-0 text-fire" />Audiobook check</h3>
         <Badge tone={check.pass ? "ok" : "warn"}>{check.pass ? "Every chapter passes" : "Some checks fail"}</Badge>
         <span className="text-[12px] text-muted">{check.master ? "with the audiobook master" : "as rendered; turn on Audiobook master to fix loudness and peaks on export"}</span>
       </div>

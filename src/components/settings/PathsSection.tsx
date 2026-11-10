@@ -1,3 +1,4 @@
+import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { PathSettingKey } from "@/lib/api/types";
 import { usePaths, useSaveSettings } from "@/lib/api/hooks";
@@ -64,7 +65,7 @@ export function PathsSection() {
               />
             )}
             <div className="flex items-center gap-3">
-              <Button size="sm" disabled={!Object.keys(changes).length} loading={save.isPending} onClick={() => save.mutate(changes)}>
+              <Button size="sm" disabled={!Object.keys(changes).length} loading={save.isPending} onClick={() => save.mutate(changes)} leading={<Save className="size-3.5" />}>
                 Save
               </Button>
               <span className="text-[12px] text-faint">New folders take effect after FireVoice restarts.</span>

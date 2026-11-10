@@ -111,7 +111,7 @@ export function QualityCheck() {
 
   return (
     <Card className="p-5">
-      <h3 className="text-[14px] font-semibold text-ink">Quality report</h3>
+      <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><Gauge className="size-4 shrink-0 text-fire" />Quality report</h3>
       <p className="mt-1 text-[12.5px] text-muted">Does it sound like the voice, how clean is it, and does the voice wander over a long take?</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input

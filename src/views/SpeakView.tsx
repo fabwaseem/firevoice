@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
-import { AudioLines, Clock, Gauge, Layers, ListPlus, Radio, Repeat, Square, Zap } from "lucide-react";
+import { AudioLines, Clock, Gauge, Layers, ListPlus, Mic2, Palette, Radio, Repeat, Square, Zap } from "lucide-react";
 import { useCreateJob, useEngines, useHealth, useOptions, useStyles, useEngineName } from "@/lib/api/hooks";
 import type { TTSRequest } from "@/lib/api/types";
 import { useStudio } from "@/stores/studio";
@@ -125,11 +125,11 @@ export function SpeakView() {
           <Card className="p-4">
             <div className="grid gap-4 xl:grid-cols-2">
               <div>
-                <Label>Voice</Label>
+                <Label icon={<Mic2 />}>Voice</Label>
                 <VoicePicker value={voice} onChange={(v) => setStudio({ voice: v })} engine={engine} disabled={busy} />
               </div>
               <div className="min-w-0">
-                <Label>Style</Label>
+                <Label icon={<Palette />}>Style</Label>
                 {stylesQ.isLoading && !styles.length ? (
                   <Skeleton className="h-[62px] w-full rounded-xl" />
                 ) : (

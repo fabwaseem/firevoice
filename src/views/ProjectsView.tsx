@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BookOpen, Plus, Upload } from "lucide-react";
+import { BookOpen, FileText, Mic2, Palette, Plus, Type, Upload } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useOptions, useProjects, useStyles, useVoices } from "@/lib/api/hooks";
 import type { ProjectSummary } from "@/lib/api/types";
@@ -136,17 +136,17 @@ function NewProjectDialog({ open, onOpenChange, onCreated }: { open: boolean; on
         <Button variant="primary" leading={<Plus className="size-4" />} loading={busy} onClick={create}>Create</Button>
       </>}>
       <div className="space-y-3">
-        <div><Label htmlFor="np-title">Title</Label><Input id="np-title" value={title} placeholder="The Lighthouse Keeper" onChange={(e) => setTitle(e.target.value)} /></div>
-        <div><Label htmlFor="np-text">Script</Label>
+        <div><Label htmlFor="np-title" icon={<Type />}>Title</Label><Input id="np-title" value={title} placeholder="The Lighthouse Keeper" onChange={(e) => setTitle(e.target.value)} /></div>
+        <div><Label htmlFor="np-text" icon={<FileText />}>Script</Label>
           <Textarea id="np-text" rows={10} value={text} onChange={(e) => setText(e.target.value)}
             placeholder={"# Chapter One\nThe keeper climbed the stairs every evening at dusk.\n\nHe counted each step out loud..."} /></div>
         <div className="grid gap-3 md:grid-cols-2">
-          <div><Label>Voice</Label>
+          <div><Label icon={<Mic2 />}>Voice</Label>
             <NativeSelect value={voice} onChange={(e) => setVoice(e.target.value)}>
               <option value="default">Default voice</option>
               {(voices.data ?? []).map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name || v.voice_id}{v.tagline ? ` · ${v.tagline}` : ""}</option>)}
             </NativeSelect></div>
-          <div><Label>Style</Label>
+          <div><Label icon={<Palette />}>Style</Label>
             <NativeSelect value={style} onChange={(e) => setStyle(e.target.value)}>
               {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
             </NativeSelect></div>

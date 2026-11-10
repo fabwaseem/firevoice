@@ -1,4 +1,4 @@
-import { Ear, Mic, Square } from "lucide-react";
+import { Ear, Languages, Mic, Square, Tags } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
@@ -77,12 +77,12 @@ export function TranscribeView() {
             <CardHeader title="Options" />
             <CardBody className="space-y-4">
               <div>
-                <Label htmlFor="stt-lang">Language</Label>
+                <Label htmlFor="stt-lang" icon={<Languages />}>Language</Label>
                 <Select value={language} onChange={setLanguage} options={LANG_OPTIONS} ariaLabel="Language" disabled={busy} />
               </div>
               <LabeledSlider label="Accuracy" value={beam} onChange={setBeam} min={1} max={10} step={1} hint="Higher is more careful and slower" disabled={busy} onReset={() => setBeam(5)} />
               <div>
-                <Label htmlFor="stt-keys" hint="comma-separated">Key terms</Label>
+                <Label htmlFor="stt-keys" hint="comma-separated" icon={<Tags />}>Key terms</Label>
                 <Input id="stt-keys" value={keyterms} onChange={(e) => setKeyterms(e.target.value)} placeholder="FireVoice, Siobhan, Inferno" disabled={busy} />
               </div>
               <Switch checked={diarize} onChange={setDiarize} label="Label who speaks" description="Speaker 1, Speaker 2… for interviews and podcasts" disabled={busy} />
