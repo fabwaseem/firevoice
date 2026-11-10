@@ -972,9 +972,9 @@ class FireVoice:
                 row["name"] = "Designed on the fly"
             else:
                 try:                                   # older renders kept the voice by name, newer ones by id
-                    row["name"] = names.get(self.voices.canonical(k), names.get(k, k))
+                    row["name"] = names.get(self.voices.canonical(k)) or names.get(k) or "Removed voice"
                 except Exception:
-                    row["name"] = names.get(k, k)
+                    row["name"] = names.get(k) or "Removed voice"
         for row in s["engines"]:
             row["name"] = _nm(row["key"])
         style_titles = {st["name"]: st.get("title") or st["name"] for st in styles}
@@ -982,8 +982,8 @@ class FireVoice:
             row["name"] = style_titles.get(row["key"], row["key"])
         speech_engines = [e for e in engines if e.get("task", "tts") == "tts"]
         library = {
-            "voices": len(voices), "cloned": sum(1 for v in voices if v.get("category") == "cloned"),
-            "designed": sum(1 for v in voices if v.get("category") == "designed"),
+            "voices": len(voices), "cloned": sum(1 for v in voices if not _is_designed(v)),
+            "designed": sum(1 for v in voices if _is_designed(v)),
             "favorites": sum(1 for v in voices if v.get("favorite")),
             "voice_languages": len({v.get("language") or "en" for v in voices}),
             "styles": len(styles), "custom_styles": sum(1 for st in styles if not st.get("builtin", True)),
@@ -2354,6 +2354,11 @@ def _nm(engine: str) -> str:
     """An engine's FireVoice name for messages ("voxcpm2" -> "Inferno")."""
     from .core.brands import name_of
     return name_of(engine)
+
+
+def _is_designed(v: dict) -> bool:
+    """A voice designed from a description (stored as a clone of its locked reference take)."""
+    return v.get("category") == "designed" or "designed" in (v.get("tags") or []) or str(v.get("voice_id", "")).startswith("dsg-")
 
 
 _STORAGE: dict = {}
