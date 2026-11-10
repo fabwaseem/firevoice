@@ -19,7 +19,7 @@ function drawKind() {
   $("#sn-ideas").innerHTML = SN_IDEAS[SN.kind].map(t => `<button class="pill" data-idea="${esc(t)}">${esc(t)}</button>`).join("");
   $$("#sn-ideas [data-idea]").forEach(b => b.onclick = () => { $("#sn-prompt").value = b.dataset.idea; });
   const e = SN.engines.find(x => x.name === (SN.kind === "music" ? "musicgen" : "audioldm2"));
-  $("#sn-engine").innerHTML = e ? (e.ready ? `${esc(e.title)} · ${esc(e.license)}` : `${esc(e.title)} is not installed: <a href="#engines">install it on Engines</a>`) : "";
+  $("#sn-engine").innerHTML = e ? (e.ready ? `${esc(e.title)}${e.tagline ? ` · ${esc(e.tagline)}` : ""}` : `${esc(e.title)} is not installed: <a href="#engines">install it on Engines</a>`) : "";
   $("#sn-go").disabled = !(e && e.ready);
 }
 

@@ -25,6 +25,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterator, Optional
 
+from .core.brands import name_of
+
 TERMINAL = ("done", "failed", "cancelled")
 KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install", "dub")
 OWN_THREAD = ("install",)   # long, GPU-free work that must not hold up renders queued behind it
@@ -145,7 +147,7 @@ class JobManager:
             except (KeyError, ValueError) as e:
                 raise FireVoiceError("not_found", str(e).strip("'\""))
             if not m.auto:
-                raise FireVoiceError("bad_request", f"{m.engine} cannot be installed automatically: {m.manual}")
+                raise FireVoiceError("bad_request", f"{name_of(m.engine)} cannot be installed automatically: {m.manual}")
             if not installer.uv():
                 raise FireVoiceError("unavailable", "uv not found: install uv or the backend's server extra, which includes it")
             busy = [x for x in self.jobs.values() if x.kind == "install" and x.status not in TERMINAL
@@ -153,7 +155,7 @@ class JobManager:
             if busy:
                 raise FireVoiceError("conflict", f"{m.venv} is already being installed (job {busy[0].id})")
             payload = {**payload, "engine": m.engine}
-            title = title or f"install {m.engine}"
+            title = title or f"install {name_of(m.engine)}"
         job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload)
         with self.lock:
             self.jobs[job.id] = job

@@ -104,7 +104,8 @@ async function poll() {
     $("#gpu-mem").textContent = g.vram_total_gb ? `${(used ?? 0).toFixed(1)} / ${g.vram_total_gb.toFixed(1)} GB` : "no GPU info";
     $("#gpu-temp").textContent = g.temperature_c != null ? `${g.temperature_c}°C · ${g.utilization ?? 0}%` : "";
     $("#gpu-bar").style.width = g.vram_total_gb ? `${Math.min(100, (100 * (used ?? 0)) / g.vram_total_gb)}%` : "0%";
-    $("#gpu-loaded").textContent = s.loaded_engines.length ? "loaded: " + s.loaded_engines.join(", ") : "no engine loaded";
+    if (s.engine_names) S.names = s.engine_names;
+    $("#gpu-loaded").textContent = s.loaded_engines.length ? "loaded: " + s.loaded_engines.map(engName).join(", ") : "no engine loaded";
     const active = (s.jobs.running || 0) + (s.jobs.queued || 0); const nj = $("#n-jobs");
     nj.textContent = active ? active : ""; nj.classList.toggle("live", !!active);
     S.sys = s;
@@ -148,7 +149,7 @@ window.trySample = async function trySample(inputId, name) {
 async function init() {
   checkServerVersion();
   const [opt, vs] = await Promise.all([API.req("/api/v1/options"), API.req("/api/v1/voices")]);
-  S.opt = opt; S.engines = opt.engines; S.styles = opt.styles; S.voices = vs.voices;
+  S.opt = opt; S.engines = opt.engines; S.styles = opt.styles; S.voices = vs.voices; S.names = opt.engine_names || {};
   if (!S.engine || !S.engines.some(e => e.name === S.engine && e.ready)) S.engine = opt.default_engine;
   if (!S.styles.some(s => s.name === S.style)) S.style = "conversational";
   $("#n-voices").textContent = S.voices.length; $("#n-styles").textContent = S.styles.length;
@@ -254,15 +255,18 @@ function bindPreview(root) {
 
 // engine
 function engine() { return S.engines.find(e => e.name === S.engine) || S.engines[0]; }
+// an engine's FireVoice name ("voxcpm2" -> "Inferno") wherever only its id is at hand
+function engName(id) { return (S.names && S.names[id]) || (S.engines || []).find(e => e.name === id)?.title || id || ""; }
+window.engName = engName;
 function renderEngineSelect() {
   $("#engine").innerHTML = S.engines.map(e => `<option value="${e.name}" ${e.ready ? "" : "disabled"}>${esc(e.title)}${e.tier ? ` · ${e.tier.quality} · ${e.tier.speed}` : ""}${e.loaded ? "  ● loaded" : ""}${e.ready ? "" : "  (not installed)"}</option>`).join("");
   $("#engine").value = S.engine; renderEngineInfo();
 }
 function renderEngineInfo() {
   const e = engine(); if (!e) return;
-  $("#engine-badges").innerHTML = [e.loaded ? `<span class="tag ok">loaded</span>` : `<span class="tag">idle</span>`, e.commercial ? "" : `<span class="tag warn">non-commercial</span>`].join("");
+  $("#engine-badges").innerHTML = e.loaded ? `<span class="tag ok">loaded</span>` : `<span class="tag">idle</span>`;
   const caps = ["clone", "design", "instruct", "tags"].filter(k => e[k]);
-  $("#engine-note").innerHTML = `${e.sample_rate / 1000} kHz · ${esc(e.license)} · can ${caps.join(", ") || "speak"}${e.speed_rtf ? ` · RTF ${e.speed_rtf}` : ""}${e.notes ? "<br>" + esc(e.notes) : ""}`;
+  $("#engine-note").innerHTML = `${e.tagline ? esc(e.tagline) + "<br>" : ""}${e.tier && e.tier.quality !== "-" ? `${esc(e.tier.quality)} · size ${esc(e.tier.size)} · ${esc(e.tier.speed)} · ` : ""}can ${caps.join(", ") || "speak"}`;
   $("#tag-chips").innerHTML = e.tags ? ["laugh", "chuckle", "giggle", "sigh", "gasp", "cough", "clear throat", "sniff", "groan", "hmm"].map(t => `<button class="chip" data-ins="[${t}]">[${t}]</button>`).join("") : "";
   $$("#tag-chips [data-ins]").forEach(b => b.onclick = () => insert(b.dataset.ins));
   checkCompat();
@@ -447,7 +451,7 @@ async function blobPeaks(blob, n = 220) {
 }
 function showResult(item, autoplay) {
   const j = item.info; const url = item.url || (item.url = URL.createObjectURL(item.blob));
-  $("#res-tags").innerHTML = `<span class="tag">${esc(vName(item.voice).slice(0, 40))}</span><span class="tag acc">${esc(item.engine)}</span><span class="tag">${esc(item.style)}</span>${item.streamed ? '<span class="tag info">streamed</span>' : ""}`;
+  $("#res-tags").innerHTML = `<span class="tag">${esc(vName(item.voice).slice(0, 40))}</span><span class="tag acc">${esc(engName(item.engine))}</span><span class="tag">${esc(item.style)}</span>${item.streamed ? '<span class="tag info">streamed</span>' : ""}`;
   const warns = j.warnings || [];
   $("#result").innerHTML = `<div class="player"><button class="pp" id="pp">${icon("play")}</button><div class="wave" id="wave"><canvas></canvas></div><span class="time" id="ptime">0:00 / ${fmtTime(j.duration)}</span></div>
     <audio id="player" src="${url}" preload="auto"></audio>
@@ -638,7 +642,7 @@ window.addEventListener("resize", debounce(() => { const cv = $("#wave canvas");
 function renderHistory() {
   if (!S.history.length) { $("#history").innerHTML = `<span class="small dim">Renders from this session appear here.</span>`; return; }
   $("#history").innerHTML = S.history.slice(0, 30).map((h, i) => `<div class="h-row"><button class="playbtn" data-h="${i}">${icon("play")}</button>
-    <div class="meta"><div class="t">${esc(h.text.replace(/\[[^\]]*\]/g, "").slice(0, 110))}</div><div class="s">${esc(vName(h.voice).slice(0, 50))} · ${esc(h.style)} · ${esc(h.engine)} · ${(+h.info.duration).toFixed(1)}s${h.streamed ? " · streamed" : ""}</div></div>
+    <div class="meta"><div class="t">${esc(h.text.replace(/\[[^\]]*\]/g, "").slice(0, 110))}</div><div class="s">${esc(vName(h.voice).slice(0, 50))} · ${esc(h.style)} · ${esc(engName(h.engine))} · ${(+h.info.duration).toFixed(1)}s${h.streamed ? " · streamed" : ""}</div></div>
     <a class="btn sm icon ghost" title="Download" download="firevoice-${h.id}.${h.format}" href="${h.url || (h.url = URL.createObjectURL(h.blob))}">${icon("download", "sm")}</a></div>`).join("");
   $$("#history [data-h]").forEach(b => b.onclick = () => { showResult(S.history[+b.dataset.h], true); $("#result").scrollIntoView({ behavior: "smooth", block: "center" }); });
 }
@@ -873,7 +877,7 @@ function renderStyles() {
   $$("#scards .scard").forEach(c => c.onclick = () => editStyle(c.dataset.s));
 }
 const STYLE_FIELDS = [["title", "Title", "text"], ["description", "Description", "text"], ["instruct", "Delivery instruction", "area"], ["pace", "Pace", "num"], ["pause", "Pause scale", "num"],
-  ["temperature", "Temperature", "num"], ["top_p", "Top-p", "num"], ["cfg", "Guidance (cfg)", "num"], ["exaggeration", "Exaggeration (Chatterbox)", "num"], ["desc", "Designed-voice description add-on", "text"], ["sample", "Showcase paragraph", "area"]];
+  ["temperature", "Temperature", "num"], ["top_p", "Top-p", "num"], ["cfg", "Guidance (cfg)", "num"], ["exaggeration", "Exaggeration (Torch, Flash)", "num"], ["desc", "Designed-voice description add-on", "text"], ["sample", "Showcase paragraph", "area"]];
 function editStyle(name) {
   const s = name ? S.styles.find(x => x.name === name) : null; const isNew = !s;
   Drawer.open(isNew ? "New style" : `Style: ${s.title || s.name}`, `<div class="field"><label class="f">Name <span class="hint">(letters, digits, - and _)</span></label><input class="inp" id="sx-name" value="${esc(s?.name || "")}" ${isNew ? "" : "readonly"}></div>
@@ -916,14 +920,14 @@ async function loadEngines() {
     $$("#ecards [data-install]").forEach(b => b.onclick = () => installEngine(b.dataset.install, b));
     $$("#ecards [data-howto]").forEach(b => b.onclick = async () => { try { const p = await API.req(`/api/v1/engines/${b.dataset.howto}/install?sizes=false`); $(`#inst-${b.dataset.howto}`).innerHTML = `<div class="notes">${esc(p.manual || "Not installable from here.")}</div>`; } catch (e) { toast(e.message, "bad"); } });
     $$("#ecards [data-uninstall]").forEach(b => b.onclick = async () => {
-      const keep = !confirm(`Remove ${b.dataset.uninstall}'s Python environment?\n\nOK also deletes its downloaded weights; Cancel keeps the weights.`);
-      if (!confirm(`Remove ${b.dataset.uninstall} now?`)) return;
-      try { const r = await API.req(`/api/v1/engines/${b.dataset.uninstall}/install?weights=${!keep}`, { method: "DELETE" }); toast(`Removed ${r.removed.length} folder(s)${r.also_affects.length ? "; also used by " + r.also_affects.join(", ") : ""}`, "ok"); } catch (e) { toast(e.message, "bad"); }
+      const keep = !confirm(`Remove ${engName(b.dataset.uninstall)}'s Python environment?\n\nOK also deletes its downloaded weights; Cancel keeps the weights.`);
+      if (!confirm(`Remove ${engName(b.dataset.uninstall)} now?`)) return;
+      try { const r = await API.req(`/api/v1/engines/${b.dataset.uninstall}/install?weights=${!keep}`, { method: "DELETE" }); toast(`Removed ${r.removed.length} folder(s)${r.also_affects.length ? "; also used by " + r.also_affects.map(engName).join(", ") : ""}`, "ok"); } catch (e) { toast(e.message, "bad"); }
       loadEngines(); });
     Object.entries(S.installing || {}).forEach(([name, j]) => drawInstall(name, j));
     loadPaths();
-    $$("#ecards [data-load]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Loading…"); try { await API.req(`/api/v1/engines/${b.dataset.load}/load`, { method: "POST", json: {}, timeout: 0 }); toast(`${b.dataset.load} loaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
-    $$("#ecards [data-unload]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Unloading…"); try { await API.req(`/api/v1/engines/${b.dataset.unload}/unload`, { method: "POST", timeout: 60000 }); toast(`${b.dataset.unload} unloaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
+    $$("#ecards [data-load]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Loading…"); try { await API.req(`/api/v1/engines/${b.dataset.load}/load`, { method: "POST", json: {}, timeout: 0 }); toast(`${engName(b.dataset.load)} loaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
+    $$("#ecards [data-unload]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Unloading…"); try { await API.req(`/api/v1/engines/${b.dataset.unload}/unload`, { method: "POST", timeout: 60000 }); toast(`${engName(b.dataset.unload)} unloaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
     $$("#ecards [data-use-engine]").forEach(b => b.onclick = () => { S.engine = b.dataset.useEngine; renderEngineSelect(); renderKnobs(); saveForm(); location.hash = "#speak"; });
   } catch (e) { toast(e.message, "bad"); }
 }
@@ -935,7 +939,7 @@ async function installEngine(name, btn) {
     const code = plan.repo_code ? `
 
 This engine runs code from its own repository (pinned to a fixed version). Install only engines you trust.` : "";
-    if (!confirm(`Install ${name}?\n\n${todo}\n\nAbout ${plan.estimated_gb ?? "?"} GB to download (less when another engine already fetched the same torch).${code}`)) return;
+    if (!confirm(`Install ${engName(name)}?\n\n${todo}\n\nAbout ${plan.estimated_gb ?? "?"} GB to download (less when another engine already fetched the same torch).${code}`)) return;
     busyBtn(btn, true, "Starting…");
     const j = await API.req(`/api/v1/engines/${name}/install`, { method: "POST" });
     S.installing = { ...(S.installing || {}), [name]: j }; drawInstall(name, j);
@@ -944,7 +948,7 @@ This engine runs code from its own repository (pinned to a fixed version). Insta
       S.installing[name] = v; drawInstall(name, v);
       if (["queued", "running"].includes(v.status)) return setTimeout(tick, 1500);
       delete S.installing[name];
-      v.status === "done" ? toast(`${name} installed`, "ok") : toast(`${name}: ${v.error?.message || v.status}`, "bad");
+      v.status === "done" ? toast(`${engName(name)} installed`, "ok") : toast(`${engName(name)}: ${v.error?.message || v.status}`, "bad");
       refreshEngines(); loadEngines();
     };
     setTimeout(tick, 1000);

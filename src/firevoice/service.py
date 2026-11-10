@@ -196,9 +196,9 @@ class FireVoice:
             raise FireVoiceError("bad_request", "kind must be 'sfx' (effects, ambience) or 'music'")
         eng = self._resolve_engine(engine) if engine else ("musicgen" if kind == "music" else "audioldm2")
         if _task(eng) != "sfx":
-            raise FireVoiceError("bad_request", f"{eng} does not make sound effects or music")
+            raise FireVoiceError("bad_request", f"{_nm(eng)} does not make sound effects or music")
         if not catalog.info(eng).status()["ready"]:
-            raise FireVoiceError("unavailable", f"{eng} is not installed: install it from Engines (POST /api/v1/engines/{eng}/install)")
+            raise FireVoiceError("unavailable", f"{_nm(eng)} is not installed: install it from Engines (POST /api/v1/engines/{eng}/install)")
         seed = int(seed if seed is not None else random.randint(1, 2**31 - 1))
         dp = catalog.info(eng).param("duration")
         top = float(dp.max) if dp is not None and dp.max else 30.0
@@ -219,7 +219,7 @@ class FireVoice:
         except (Cancelled, FireVoiceError):
             raise
         except Exception as e:
-            raise FireVoiceError("internal", f"{eng} failed: {str(e)[:300]}")
+            raise FireVoiceError("internal", f"{_nm(eng)} failed: {str(e)[:300]}")
         finally:
             group.set()
             with self._lock:
@@ -286,7 +286,7 @@ class FireVoice:
         except (KeyError, ValueError) as e:
             raise FireVoiceError("not_found", str(e).strip("'\""))
         if m.venv is None:
-            raise FireVoiceError("bad_request", f"{m.engine} runs inside the backend's own environment")
+            raise FireVoiceError("bad_request", f"{_nm(m.engine)} runs inside the backend's own environment")
         for e, x in installer.MANIFESTS.items():
             if x.venv == m.venv and e in self._loaded:
                 self.unload(e)
@@ -309,7 +309,7 @@ class FireVoice:
             if ld is None:
                 return {"name": n, "loaded": False}
             if ld.active:
-                raise FireVoiceError("conflict", f"engine {n} is busy with {ld.active} request(s)")
+                raise FireVoiceError("conflict", f"{_nm(n)} is busy with {ld.active} request(s)")
             self._loaded.pop(n)
         self._stop(ld)
         return {"name": n, "loaded": False}
@@ -354,7 +354,7 @@ class FireVoice:
             inf = catalog.info(name)
             st = inf.status()
             if not st["ready"]:
-                raise FireVoiceError("unavailable", f"engine {name} is not installed: {'; '.join(st['problems'])}")
+                raise FireVoiceError("unavailable", f"{_nm(name)} is not installed: {'; '.join(st['problems'])}")
             spec = get_engine(name)
             want = workers or self.workers.get(name) or spec.default_workers
             self._make_room(spec.vram_gb * 1 + self.vram_reserve_gb, keep=name)
@@ -366,7 +366,7 @@ class FireVoice:
                     pool.stop()
                 except Exception:
                     pass
-                raise FireVoiceError("unavailable", f"engine {name} failed to start: {str(e)[:400]}")
+                raise FireVoiceError("unavailable", f"{_nm(name)} failed to start: {str(e)[:400]}")
             now = time.time()
             ld = _Loaded(name, pool, now, now)
             with self._lock:
@@ -440,15 +440,15 @@ class FireVoice:
         v = req.voice or "default"
         if v.startswith("design:"):
             if not (inf.design or inf.presets):
-                raise FireVoiceError("bad_request", f"engine {eng} cannot speak from a description; design-capable engines: "
-                                                    f"{', '.join(n for n, e in catalog.CATALOG.items() if e.design and n != 'null')}")
+                raise FireVoiceError("bad_request", f"{_nm(eng)} cannot speak from a description; engines that can: "
+                                                    f"{', '.join(_nm(n) for n, e in catalog.CATALOG.items() if e.design and n != 'null')}")
         else:
             if v != "default" and not self.voices.exists(v):
                 raise FireVoiceError("not_found", f"unknown voice {v!r}")
             if v == "default" and self.voices.default_id() is None and inf.needs_reference:
                 raise FireVoiceError("bad_request", "no default voice set; pass a voice id or set one with `firevoice voices default NAME`")
             if not inf.clone and v != "default":
-                raise FireVoiceError("bad_request", f"engine {eng} cannot clone a voice; use voice 'design:<description>'" +
+                raise FireVoiceError("bad_request", f"{_nm(eng)} cannot clone a voice; use voice 'design:<description>'" +
                                      (f" or a preset ({', '.join(inf.presets[:5])}...)" if inf.presets else ""))
         # params
         try:
@@ -457,12 +457,12 @@ class FireVoice:
             raise FireVoiceError("bad_request", str(e))
         warn += pw
         if req.language and inf.languages and "*" not in inf.languages and req.language.split("-")[0] not in inf.languages:
-            warn.append(f"engine {eng} does not list language {req.language!r} ({', '.join(inf.languages)})")
+            warn.append(f"{_nm(eng)} does not list language {req.language!r} ({', '.join(inf.languages)})")
         fields = dict(req.style_overrides)
         if req.instruct is not None:
             fields["instruct"] = req.instruct
             if req.instruct and not inf.instruct:
-                warn.append(f"engine {eng} ignores delivery instructions")
+                warn.append(f"{_nm(eng)} ignores delivery instructions")
         extra = {**base.extra, **params}
         if req.instruct and "ultimate" not in params and inf.param("ultimate") is not None:
             # an explicit instruction only works in clip-only cloning; style presets' own instructions do not switch it
@@ -1198,7 +1198,7 @@ class FireVoice:
         for i in cues:   # sound cues need their engine; say so before rendering any speech
             eng = "musicgen" if turns[i]["kind"] == "music" else "audioldm2"
             if not catalog.info(eng).status()["ready"]:
-                raise FireVoiceError("unavailable", f"the script has a [{turns[i]['kind']}: ...] cue but {eng} is not installed (Engines)")
+                raise FireVoiceError("unavailable", f"the script has a [{turns[i]['kind']}: ...] cue but {_nm(eng)} is not installed (Engines)")
         reqs = []
         for i in speech:
             t = turns[i]
@@ -1778,7 +1778,7 @@ class FireVoice:
             raise FireVoiceError("conflict", f"voice {name!r} already exists")
         eng = self._resolve_engine(engine or ("voxcpm2" if catalog.info("voxcpm2").status()["ready"] else None))
         if not catalog.info(eng).design:
-            raise FireVoiceError("bad_request", f"engine {eng} cannot design voices")
+            raise FireVoiceError("bad_request", f"{_nm(eng)} cannot design voices")
         line = text or DESIGN_TEXT
         r = self.tts(TTSRequest(text=line, engine=eng, voice="design:" + description, style="neutral", instruct="", seed=seed, lufs=-20.0,
                                 lead_ms=0, tail_ms=0, validate=False))
@@ -1787,7 +1787,7 @@ class FireVoice:
         A.write_audio(tmp, r.audio, r.sr)
         try:
             self.voices.add(name, tmp, consent=True, description=description, gender=gender, tags=["designed", f"designed:{eng}", *(tags or [])],
-                            source=f"designed with {eng}", license="synthetic", transcript=line, transcribe=False,
+                            source=f"designed with {_nm(eng)}", license="synthetic", transcript=line, transcribe=False,
                             extra={"language": language or None, "design_prompt": description})
         finally:
             tmp.unlink(missing_ok=True)
@@ -1806,7 +1806,7 @@ class FireVoice:
         n = max(1, min(6, int(n)))
         eng = self._resolve_engine(engine or ("voxcpm2" if catalog.info("voxcpm2").status()["ready"] else None))
         if not catalog.info(eng).design:
-            raise FireVoiceError("bad_request", f"engine {eng} cannot design voices")
+            raise FireVoiceError("bad_request", f"{_nm(eng)} cannot design voices")
         root = home() / "design"
         root.mkdir(parents=True, exist_ok=True)
         for old in root.glob("*"):                 # candidates older than a day go
@@ -1868,7 +1868,7 @@ class FireVoice:
             raise FireVoiceError("bad_request", f"style {style!r} has no delivery instruction to perform")
         eng = self._resolve_engine(engine or "voxcpm2")
         if not catalog.info(eng).instruct:
-            raise FireVoiceError("bad_request", f"engine {eng} cannot follow delivery instructions")
+            raise FireVoiceError("bad_request", f"{_nm(eng)} cannot follow delivery instructions")
         line = (text or st.sample or DESIGN_TEXT).strip()
         line = re.sub(r"\[[^\]]*\]", "", line).strip()       # tags are not spoken in a reference clip
         # A style clip becomes the prompt for every later render in that style, so a bad one (whispered, shouted
@@ -2044,7 +2044,7 @@ class FireVoice:
         from .core.gpu import gpu_info
         gpu = gpu_info()
         return {"version": __version__, "uptime_seconds": round(time.time() - self.started, 1), "home": str(home()), "voices_dir": str(self.voices.root),
-                "default_engine": self._resolve_engine(None), "loaded_engines": sorted(self._loaded), "gpu": gpu,
+                "default_engine": self._resolve_engine(None), "loaded_engines": sorted(self._loaded), "engine_names": _engine_names(), "gpu": gpu,
                 "asr": {"model": self.asr_model, "loaded": self._aligner is not None},
                 "jobs": self.jobs.counts(), "voices": len(self.voices.list()), "styles": len(all_styles())}
 
@@ -2187,6 +2187,18 @@ def _loop_to(a: np.ndarray, n: int, sr: int, xfade_s: float = 1.5) -> np.ndarray
         out[-x:] = out[-x:] * (1 - ramp) + a[:x] * ramp
         out = np.concatenate([out, a[x:]])
     return out[:n]
+
+
+def _nm(engine: str) -> str:
+    """An engine's FireVoice name for messages ("voxcpm2" -> "Inferno")."""
+    from .core.brands import name_of
+    return name_of(engine)
+
+
+def _engine_names() -> dict:
+    """Engine id -> FireVoice name, for clients that only have ids (render info, loaded engines, jobs)."""
+    from .core.brands import BRANDS
+    return {e: b.name for e, b in BRANDS.items()}
 
 
 def _task(engine: str) -> str:

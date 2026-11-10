@@ -471,7 +471,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         defaults = TTSRequest(text="").to_dict()
         defaults.pop("text")
         return {"engines": svc.engines(), "styles": svc.style_list(), "formats": list(A.FORMATS), "defaults": {**defaults, "format": "mp3"},
-                "default_engine": svc.system()["default_engine"], "voice_count": len(svc.voices.list()),
+                "default_engine": svc.system()["default_engine"], "engine_names": svc.system()["engine_names"], "voice_count": len(svc.voices.list()),
                 "languages": sorted({v.get("language") or "en" for v in svc.voices.list()})}
 
     # ------------------------------------------------------------------ engines

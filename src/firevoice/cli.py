@@ -20,6 +20,12 @@ DEFAULT_ENGINE = os.environ.get("FIREVOICE_ENGINE", "voxcpm2")
 
 
 # ----------------------------------------------------------------------------- shared option groups
+
+def _nm(engine) -> str:
+    """An engine's FireVoice name for output ("voxcpm2" -> "Inferno")."""
+    from .core.brands import name_of
+    return name_of(engine) if engine else "?"
+
 def _tts_options(p: argparse.ArgumentParser, with_output: bool = True) -> None:
     g = p.add_argument_group("voice and delivery")
     g.add_argument("--engine", default=None, help=f"engine (default {DEFAULT_ENGINE}); see `firevoice engines`")
@@ -127,7 +133,9 @@ def cmd_say(a) -> int:
             return _fail(e)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(data)
-        print(f"{out}: {info.get('duration', '?')}s via {a.remote} ({info.get('engine')}, rtf {info.get('rtf')}, {info.get('warnings', 0)} warning(s))")
+        w = info.get("warnings") or []
+        print(f"{out}: {info.get('duration', '?')}s via {a.remote} ({_nm(info.get('engine'))}, rtf {info.get('rtf')}, "
+              f"{len(w) if isinstance(w, list) else w} warning(s))")
         return 0
     svc = _service(a)
     try:
@@ -159,7 +167,7 @@ def cmd_say(a) -> int:
             info.pop("words")
             print(json.dumps({"file": str(out), **info}, indent=1))
         else:
-            print(f"{out}: {r.duration:.1f}s, {info['engine']}, rtf {info['rtf']}, {info['takes']} takes for {info['chunks']} sentence(s), "
+            print(f"{out}: {r.duration:.1f}s, {_nm(info['engine'])}, rtf {info['rtf']}, {info['takes']} takes for {info['chunks']} sentence(s), "
                   f"{len(info['warnings'])} warning(s)")
             for w in info["warnings"]:
                 print("  warn:", w, file=sys.stderr)
@@ -415,7 +423,7 @@ def cmd_sound(a) -> int:
     try:
         audio, sr, info = svc.sound(a.prompt, kind, a.seconds or (8.0 if a.music else 5.0), a.seed)
         out.write_bytes(svc.encode(audio, _fmt_for(out, None), sr=sr))
-        print(f"{out}: {info['duration']}s from {info['engine']} in {info['seconds']}s (seed {info['seed']}; licence {info['license']})")
+        print(f"{out}: {info['duration']}s from {_nm(info['engine'])} in {info['seconds']}s (seed {info['seed']}; licence {info['license']})")
         return 0
     except FireVoiceError as e:
         return _fail(e)
@@ -556,7 +564,7 @@ def cmd_audio(a) -> int:
         if a.action == "urdu-check":
             r = svc.urdu_check(a.engine, [a.voice] if a.voice else None, a.asr_model,
                                on_item=lambda i: print(f"  {i['match']:.2f}  {i['voice']:14} {i['text'][:48]:48} | heard: {i['heard'][:48]}"))
-            print(f"{r['engine']} + Whisper {r['asr_model']}: mean {r['mean']}, lowest {r['min']}, {r['pass_rate']:.0%} pass")
+            print(f"{_nm(r['engine'])} + Whisper {r['asr_model']}: mean {r['mean']}, lowest {r['min']}, {r['pass_rate']:.0%} pass")
             print(r["verdict"])
             return 0
         if a.action == "separate":
@@ -844,7 +852,7 @@ def cmd_engine_install(a) -> int:
             if a.json:
                 print(json.dumps(p, indent=1))
                 return 0
-            print(f"{p['engine']}: {'installed' if p['installed'] else 'not installed'}"
+            print(f"{_nm(p['engine'])}: {'installed' if p['installed'] else 'not installed'}"
                   + (f", about {p['estimated_gb']} GB to download" if p['estimated_gb'] and not p['installed'] else ""))
             for st in p["steps"]:
                 print(f"  [{'x' if st['done'] else ' '}] {st['step']:8} {st['what']}" + (f" ({st['gb']} GB)" if st.get("gb") else ""))
@@ -873,7 +881,7 @@ def cmd_engine_install(a) -> int:
             print("\ncancelled", file=sys.stderr)
             return 1
         print(file=sys.stderr)
-        print(f"{r['engine']} installed in {r['seconds']:.0f}s (log: {log})")
+        print(f"{_nm(r['engine'])} installed in {r['seconds']:.0f}s (log: {log})")
         return 0
     except (KeyError, ValueError) as e:
         print(str(e).strip("'\""), file=sys.stderr)
@@ -1030,7 +1038,7 @@ def cmd_serve(a) -> int:
         svc.load(e)
         print(f"  {e} ready in {time.time() - t0:.0f}s", flush=True)
     app = create_app(svc, token=a.token, cors_origins=a.cors.split(",") if a.cors else None)
-    print(f"FireVoice API on http://{a.host}:{a.port}  (docs: http://{a.host}:{a.port}/docs, default engine {svc.default_engine})", flush=True)
+    print(f"FireVoice API on http://{a.host}:{a.port}  (docs: http://{a.host}:{a.port}/docs, default engine {_nm(svc.default_engine)})", flush=True)
     try:
         uvicorn.run(app, host=a.host, port=a.port, log_level=a.log_level)
     finally:

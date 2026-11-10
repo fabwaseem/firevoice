@@ -132,6 +132,11 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
 ]}
 
 
+def _name(engine: str) -> str:
+    from .core.brands import name_of
+    return name_of(engine)
+
+
 def manifest(engine: str) -> Manifest:
     from .core.registry import get_engine
     name = get_engine(engine).name
@@ -356,7 +361,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
     """Run the plan. `progress(step, steps, message)`; raises InstallCancelled or InstallError."""
     m = manifest(engine)
     if not m.auto:
-        raise InstallError(m.manual or f"{m.engine} cannot be installed automatically")
+        raise InstallError(m.manual or f"{_name(m.engine)} cannot be installed automatically")
     u = uv()
     if not u:
         raise InstallError("uv not found: install it (https://docs.astral.sh/uv/) or the backend's `server` extra, which includes it")
@@ -466,7 +471,7 @@ def uninstall(engine: str, weights: bool = False) -> dict:
     """Remove the engine's venv (shared venvs such as qwen go for every engine that uses them) and, optionally, its weights."""
     m = manifest(engine)
     if m.venv is None:
-        raise InstallError(f"{m.engine} runs inside the backend's own environment and cannot be removed here")
+        raise InstallError(f"{_name(m.engine)} runs inside the backend's own environment and cannot be removed here")
     removed = []
     with _venv_lock(m.venv):
         d = paths.engines_dir() / m.venv
