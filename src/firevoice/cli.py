@@ -1016,9 +1016,14 @@ def cmd_serve(a) -> int:
 
     svc = FireVoice(default_engine=a.engine or DEFAULT_ENGINE, asr_model=a.asr_model, asr_device=a.asr_device,
                     workers={e: a.workers for e in (a.preload or "").split(",") if e} if a.workers else None)
-    if a.host not in ("127.0.0.1", "localhost", "::1") and not (a.token or os.environ.get("FIREVOICE_API_KEY")):
-        print("refusing to listen on a non-local address without --token (or FIREVOICE_API_KEY)", file=sys.stderr)
-        return 2
+    local = a.host in ("127.0.0.1", "localhost", "::1")
+    if not local and not (a.token or os.environ.get("FIREVOICE_API_KEY")):
+        if not a.no_token:
+            print("refusing to listen on a non-local address without --token (or FIREVOICE_API_KEY); "
+                  "--no-token allows it on a network you trust", file=sys.stderr)
+            return 2
+        print(f"WARNING: no token on {a.host}: anyone who can reach this port can use FireVoice "
+              "(renders, voices, cloning, files)", file=sys.stderr, flush=True)
     for e in [x for x in (a.preload or "").split(",") if x]:
         print(f"loading {e}...", flush=True)
         t0 = time.time()
@@ -1524,6 +1529,8 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--preload", default=None, help="comma-separated engines to load at startup")
     sv.add_argument("--workers", type=int, default=None, help="model copies per preloaded engine")
     sv.add_argument("--token", default=None, help="require this API token (also FIREVOICE_API_KEY)")
+    sv.add_argument("--no-token", action="store_true",
+                    help="allow --host on a network address without a token (only on a home network you trust)")
     sv.add_argument("--cors", default=None, help="comma-separated allowed origins (default: localhost and tauri)")
     sv.add_argument("--asr-model", default="auto")
     sv.add_argument("--asr-device", default="auto")

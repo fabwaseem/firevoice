@@ -21,6 +21,9 @@ as the matching `firevoice say` flag. The OpenAPI schema is at `/openapi.json`.
   - `x-api-key: <token>`
   - `xi-api-key: <token>`
   - `?token=<token>`, which works for `<audio src>` and `EventSource`.
+  - On a network address (`--host 0.0.0.0`) the server refuses to start without a token, unless `--no-token` says the
+    network is trusted (a home network): then anyone who can reach the port can use it, so the playground opens at
+    `http://<this PC's address>:8787/playground` on other computers with no password.
 
   `/health` never needs a token. The server refuses a non-local `--host` unless a token is set.
 - **Errors:** every failure is JSON in this shape: `{"error": {"code": "...", "message": "..."}}`.
