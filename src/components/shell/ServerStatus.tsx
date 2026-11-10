@@ -14,7 +14,7 @@ export function ServerStatus({ compact }: { compact?: boolean }) {
   const pct = total && used != null ? used / total : 0;
   const state = online ? "Online" : health.isLoading ? "Connecting" : "Offline";
   const gpuName = gpu?.name?.replace(/^NVIDIA\s+(GeForce\s+)?/i, "") ?? null;
-  const label = online ? (gpu?.name ? `${gpu.name}: ${fmtGB(used)} of ${fmtGB(total)} in use` : "Connected") : "Backend offline";
+  const label = online ? (gpu?.name ? `${gpu.name}: ${fmtGB(used)} of ${fmtGB(total)} in use` : "Connected") : "Voice engine is not running";
   const dot = (
     <span
       className={cn(
@@ -35,7 +35,7 @@ export function ServerStatus({ compact }: { compact?: boolean }) {
   if (compact) {
     return (
       <Tooltip content={`${state} · ${label}`} side="right">
-        <Link to="/settings" aria-label={label} className="mx-auto flex w-10 flex-col items-center gap-1.5 rounded-[10px] py-2 transition-colors hover:bg-surface-3/70">
+        <Link to="/engines" aria-label={label} className="mx-auto flex w-10 flex-col items-center gap-1.5 rounded-[10px] py-2 transition-colors hover:bg-surface-3/70">
           {dot}
           {bar}
         </Link>
@@ -44,7 +44,7 @@ export function ServerStatus({ compact }: { compact?: boolean }) {
   }
   return (
     <Tooltip content={label} side="right">
-      <Link to="/settings" aria-label={label} className="block rounded-[10px] px-3 py-2 transition-colors hover:bg-surface-3/70">
+      <Link to="/engines" aria-label={label} className="block rounded-[10px] px-3 py-2 transition-colors hover:bg-surface-3/70">
         <span className="flex items-center gap-2">
           {dot}
           <span className="text-[12px] font-medium text-ink-2">{state}</span>

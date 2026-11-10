@@ -199,13 +199,13 @@ pub fn backend_start(app: AppHandle, st: State<Backend>, port: Option<u16>) -> R
         }
     }
     let (mode, python, ready) = resolve(&app);
-    let python = python.ok_or("FireVoice's voice engine is not set up on this computer yet. Set it up from Settings, then try again.")?;
+    let python = python.ok_or("FireVoice's voice engine is not set up on this computer yet. Restart FireVoice to set it up.")?;
     if !ready {
         return Err(if mode == "bundled" {
             "FireVoice's voice engine is not set up yet, or this version of the app needs it updated.".into()
         } else {
             log::warn!("backend python missing: {}", python.display());
-            "FireVoice could not find the files it needs to start its voice engine. Try setting it up again from Settings.".into()
+            "FireVoice could not find the files it needs to start its voice engine. Restart FireVoice to set it up again.".into()
         });
     }
     let port = port.unwrap_or(8787);
@@ -393,7 +393,7 @@ impl Drop for SetupGuard {
 /// Build (or update) the bundled backend runtime in the background. Progress arrives as `backend-setup` events.
 #[tauri::command]
 pub fn backend_setup(app: AppHandle, st: State<Backend>) -> Result<(), String> {
-    const NO_BUNDLE: &str = "This copy of FireVoice does not include its voice engine, so it cannot be set up from here. Connect to a FireVoice server in Settings instead.";
+    const NO_BUNDLE: &str = "This copy of FireVoice does not include its voice engine, so it cannot be set up from here. Please reinstall FireVoice.";
     let r = recipe(&app).ok_or(NO_BUNDLE)?;
     let res = resources_dir(&app).ok_or(NO_BUNDLE)?;
     {

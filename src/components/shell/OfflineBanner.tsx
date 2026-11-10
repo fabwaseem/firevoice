@@ -1,13 +1,17 @@
-import { Link, useLocation } from "react-router";
+import { useLocation } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import { useHealth } from "@/lib/api/hooks";
-import { useSettings } from "@/stores/settings";
+import { inTauri } from "@/lib/backend";
+import { useBackend } from "@/stores/backend";
 
 /** Shown at the top of every view except Home (which has its own offline card) while the server is unreachable. */
 export function OfflineBanner() {
+  const retry = async () => {
+    if (inTauri()) await useBackend.getState().start().catch(() => undefined);
+    void health.refetch();
+  };
   const health = useHealth();
-  const server = useSettings((s) => s.serverUrl);
   const { pathname } = useLocation();
   const show = health.isError && pathname !== "/";
 
@@ -24,19 +28,15 @@ export function OfflineBanner() {
           <div className="flex items-center gap-3 rounded-xl bg-bad-soft px-4 py-3 text-[13px] text-bad">
             <TriangleAlert className="size-4 shrink-0" />
             <span className="min-w-0 flex-1">
-              Can’t reach FireVoice at <span className="font-mono">{server}</span>. It may still be starting; try again in a moment, or
-              open Settings to start it.
+              FireVoice’s voice engine isn’t answering yet. It may still be starting; press Retry in a moment.
             </span>
             <button
               type="button"
-              onClick={() => void health.refetch()}
+              onClick={() => void retry()}
               className="flex items-center gap-1.5 font-medium hover:underline"
             >
               <RefreshCw className="size-3.5" /> Retry
             </button>
-            <Link to="/settings" className="font-medium hover:underline">
-              Settings
-            </Link>
           </div>
         </motion.div>
       )}

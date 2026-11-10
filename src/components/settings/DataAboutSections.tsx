@@ -9,6 +9,7 @@ import { SAMPLE_TEXT, useStudio } from "@/stores/studio";
 import { fmtDuration } from "@/lib/utils";
 import { inTauri } from "@/lib/backend";
 import pkg from "../../../package.json";
+import { EngineLogButton } from "./EngineLog";
 
 function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
@@ -117,6 +118,7 @@ export function AboutSection() {
           <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice {version}</p>
           <p className="text-[12.5px] text-muted">Natural voices, made on your own computer.</p>
         </div>
+        <EngineLogButton variant="outline" />
       </CardBody>
     </Card>
   );

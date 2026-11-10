@@ -86,8 +86,8 @@ export function BackendManager() {
             {compat === "server-too-old"
               ? info?.running
                 ? "FireVoice's voice engine is older than the app. Restart it to get the new features (Dubbing, Sound and more)."
-                : `The FireVoice server at ${serverUrl} is older than this app needs, so some pages will not work. Restart or update it.`
-              : `The FireVoice server at ${serverUrl} needs a newer app. Update FireVoice.`}
+                : "FireVoice's voice engine is older than this app needs, so some pages will not work. Restart FireVoice to update it."
+              : "FireVoice's voice engine needs a newer app. Update FireVoice."}
           </span>
           {active && compat === "server-too-old" && info?.running && info.mode !== "bundled" && (
             <Button size="sm" variant="soft" loading={phase === "starting"} onClick={async () => {
@@ -139,9 +139,6 @@ export function BackendManager() {
                 </p>
                 <div className="mt-6 flex justify-center gap-2">
                   <Button onClick={() => useBackend.getState().runSetup()} leading={<Rocket className="size-4" />}>Set up now</Button>
-                  <Button variant="ghost" onClick={() => useSettings.getState().set({ manageBackend: false })} leading={<Server className="size-4" />}>
-                    I run my own server
-                  </Button>
                 </div>
               </>
             )}

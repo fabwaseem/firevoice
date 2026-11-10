@@ -69,7 +69,8 @@ export const useSettings = create<Settings>()(
       // a bad address saved by an older version must not break the app on launch
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<Settings>;
-        return { ...current, ...p, serverUrl: normaliseServerUrl(p.serverUrl ?? current.serverUrl) };
+        // the app always runs and talks to its own engine (older versions let you point it elsewhere or add a key)
+        return { ...current, ...p, serverUrl: DEFAULT_SERVER, token: "", manageBackend: true };
       },
     },
   ),
