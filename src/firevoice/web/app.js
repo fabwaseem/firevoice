@@ -255,6 +255,14 @@ function bindPreview(root) {
 
 // engine
 function engine() { return S.engines.find(e => e.name === S.engine) || S.engines[0]; }
+// where an engine is used, and which page its button opens (only speech engines go to Speak)
+function engineUse(e) {
+  if (e.task === "vc") return { label: "Open Voice changer", hash: "#changer", where: ["Voice changer"] };
+  if (e.name === "musicgen") return { label: "Open Sound", hash: "#sound", where: ["Sound (music)", "Dialogue music beds"] };
+  if (e.task === "sfx") return { label: "Open Sound", hash: "#sound", where: ["Sound (effects)", "Dialogue sound cues"] };
+  if (e.task === "tool") return { label: "Open audio tools", hash: "#changer", where: ["Separate voice and music", "Clean a voice (Best)", "Dubbing (keep the music)"] };
+  return { label: "Use on Speak", hash: "#speak", where: ["Speak", "Dialogue", "Projects", "Dubbing"], speak: true };
+}
 // an engine's FireVoice name ("voxcpm2" -> "Inferno") wherever only its id is at hand
 function engName(id) { return (S.names && S.names[id]) || (S.engines || []).find(e => e.name === id)?.title || id || ""; }
 window.engName = engName;
@@ -910,12 +918,14 @@ async function loadEngines() {
     $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t">${esc(e.title)}</div></div>
         ${e.loaded ? '<span class="tag ok">loaded</span>' : e.ready ? '<span class="tag">ready</span>' : '<span class="tag bad">not installed</span>'}</div>
       ${e.tagline ? `<div class="notes">${esc(e.tagline)}</div>` : ""}
+      <div class="small dim" style="margin:2px 0 6px">Used in ${esc(engineUse(e).where.join(", "))}</div>
       <div class="tags">${e.tier && e.tier.quality !== "-" ? `<span class="tag ${e.tier.quality === "Studio" ? "acc" : ""}">${esc(e.tier.quality)}</span><span class="tag">size ${esc(e.tier.size)}</span><span class="tag">${esc(e.tier.speed)}</span>` : ""}${e.clone ? '<span class="tag">clones voices</span>' : ""}${e.design ? '<span class="tag">designs voices</span>' : ""}${e.task === "tts" ? `<span class="tag">${langs(e)}</span>` : ""}</div>
       <div class="install" id="inst-${e.name}"></div>
       <div class="row">${e.ready ? (e.loaded ? `<button class="btn sm" data-unload="${e.name}">Unload</button>` : `<button class="btn sm primary" data-load="${e.name}">${icon("zap", "sm")}Load now</button>`) : ""}
         ${!e.ready && e.installable ? `<button class="btn sm primary" data-install="${e.name}">${icon("download", "sm")}Install</button>` : ""}
         ${!e.ready && !e.installable ? `<button class="btn sm ghost" data-howto="${e.name}">How to install</button>` : ""}
-        <button class="btn sm ghost" data-use-engine="${e.name}" ${e.ready ? "" : "disabled"}>Use on Speak</button>
+        ${engineUse(e).speak ? `<button class="btn sm ghost" data-use-engine="${e.name}" ${e.ready ? "" : "disabled"}>Use on Speak</button>`
+          : `<button class="btn sm ghost" data-go="${engineUse(e).hash}" data-engine="${e.name}" ${e.ready ? "" : "disabled"}>${engineUse(e).label}</button>`}
         ${e.ready && e.installable && !e.loaded ? `<button class="btn sm ghost" data-uninstall="${e.name}" title="Delete this engine's venv">Remove</button>` : ""}</div></div>`).join("");
     $$("#ecards [data-install]").forEach(b => b.onclick = () => installEngine(b.dataset.install, b));
     $$("#ecards [data-howto]").forEach(b => b.onclick = async () => { try { const p = await API.req(`/api/v1/engines/${b.dataset.howto}/install?sizes=false`); $(`#inst-${b.dataset.howto}`).innerHTML = `<div class="notes">${esc(p.manual || "Not installable from here.")}</div>`; } catch (e) { toast(e.message, "bad"); } });
@@ -928,6 +938,10 @@ async function loadEngines() {
     loadPaths();
     $$("#ecards [data-load]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Loading…"); try { await API.req(`/api/v1/engines/${b.dataset.load}/load`, { method: "POST", json: {}, timeout: 0 }); toast(`${engName(b.dataset.load)} loaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
     $$("#ecards [data-unload]").forEach(b => b.onclick = async () => { busyBtn(b, true, "Unloading…"); try { await API.req(`/api/v1/engines/${b.dataset.unload}/unload`, { method: "POST", timeout: 60000 }); toast(`${engName(b.dataset.unload)} unloaded`, "ok"); } catch (e) { toast(e.message, "bad"); } loadEngines(); poll(); });
+    $$("#ecards [data-go]").forEach(b => b.onclick = () => {
+      if (typeof SN !== "undefined" && (b.dataset.engine === "musicgen" || b.dataset.engine === "audioldm2")) SN.kind = b.dataset.engine === "musicgen" ? "music" : "sfx";
+      location.hash = b.dataset.go;
+    });
     $$("#ecards [data-use-engine]").forEach(b => b.onclick = () => { S.engine = b.dataset.useEngine; renderEngineSelect(); renderKnobs(); saveForm(); location.hash = "#speak"; });
   } catch (e) { toast(e.message, "bad"); }
 }
