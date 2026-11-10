@@ -2,7 +2,7 @@
  * the backend itself (see src-tauri/src/backend.rs). */
 
 /** HTTP contract versions this build of the app understands (the server reports its own in /health). */
-export const SUPPORTED_API = { min: 4, max: 4 } as const;
+export const SUPPORTED_API = { min: 5, max: 5 } as const;
 
 export interface BackendInfo {
   mode: "custom" | "bundled" | "dev" | "none";
