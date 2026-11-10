@@ -5,6 +5,7 @@ import { fmtDuration, relTime, truncate } from "@/lib/utils";
 import { usePlayer } from "@/stores/player";
 import { Badge, Button, Card, CardBody, CardHeader, Equalizer, ProgressBar } from "@/components/ui";
 import { errorText, hasAudio, jobTitle, payloadSummary, resultCount, resultNumber, statusTone } from "./jobUtils";
+import { engineName } from "@/lib/engineNames";
 
 function KV({ rows }: { rows: [string, React.ReactNode][] }) {
   const shown = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
@@ -106,7 +107,7 @@ export function JobDetail({ job, onClose }: { job: Job; onClose: () => void }) {
         <Section title="Request">
           <KV
             rows={[
-              ["Engine", p.engine],
+              ["Engine", p.engine ? engineName(String(p.engine)) : p.engine],
               ["Voice", p.voice],
               ["Style", p.style],
               ["Lines", p.lines],

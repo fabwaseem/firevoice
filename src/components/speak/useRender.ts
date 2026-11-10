@@ -7,6 +7,7 @@ import { audioContext, base64ToBytes, blobFromBase64, ChunkPlayer, chunksToWav }
 import { usePlayer, type Track } from "@/stores/player";
 import { useSettings } from "@/stores/settings";
 import { uid, truncate } from "@/lib/utils";
+import { engineName } from "@/lib/engineNames";
 
 export interface RenderStats {
   duration: number;
@@ -38,7 +39,7 @@ function trackMeta(req: TTSRequest, engine?: string): Pick<Track, "title" | "sub
   const firstLine = req.text.replace(/\[[^\]]*\]/g, " ").replace(/\s+/g, " ").trim();
   return {
     title: truncate(firstLine || "Untitled render", 64),
-    subtitle: [req.voice === "default" ? "Default voice" : req.voice?.startsWith("design:") ? "Designed voice" : req.voice, req.style, engine ?? req.engine]
+    subtitle: [req.voice === "default" ? "Default voice" : req.voice?.startsWith("design:") ? "Designed voice" : req.voice, req.style, engineName(engine ?? req.engine)]
       .filter(Boolean)
       .join(" · "),
   };

@@ -77,7 +77,7 @@ export function TranscribeView() {
               <LabeledSlider label="Beam size" value={beam} onChange={setBeam} min={1} max={10} step={1} hint="Wider beams are more accurate and slower" disabled={busy} onReset={() => setBeam(5)} />
               <div>
                 <Label htmlFor="stt-keys" hint="comma-separated">Key terms</Label>
-                <Input id="stt-keys" value={keyterms} onChange={(e) => setKeyterms(e.target.value)} placeholder="FireVoice, Ayesha, VoxCPM" disabled={busy} />
+                <Input id="stt-keys" value={keyterms} onChange={(e) => setKeyterms(e.target.value)} placeholder="FireVoice, Ayesha, Inferno" disabled={busy} />
               </div>
               <Switch checked={diarize} onChange={setDiarize} label="Label who speaks" description="Speaker 1, Speaker 2… for interviews and podcasts" disabled={busy} />
               <div className="flex items-center gap-2 pt-1">

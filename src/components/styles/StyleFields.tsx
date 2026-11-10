@@ -93,7 +93,7 @@ export function EmotionFields({ draft, patch, readOnly }: { draft: StyleDraft; p
   };
   const any = draft.emo_vector.some((v) => v > 0);
   return (
-    <Section title="Emotion vector" hint={any ? "IndexTTS-2" : "unset — engine default"}>
+    <Section title="Emotion vector" hint={any ? "Firebrand and Firestorm" : "unset — engine default"}>
       <div className="grid gap-x-6 gap-y-3 md:grid-cols-2">
         {EMO_LABELS.map((label, i) => (
           <LabeledSlider key={label} label={label[0].toUpperCase() + label.slice(1)} value={draft.emo_vector[i] ?? 0} min={0} max={1} step={0.05} disabled={readOnly} onChange={(v) => setEmo(i, v)} format={(v) => v.toFixed(2)} />

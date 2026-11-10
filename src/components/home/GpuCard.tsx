@@ -3,6 +3,7 @@ import { Cpu, Ear, Loader2, X } from "lucide-react";
 import { Badge, Card, CardBody, CardHeader, Skeleton, Tooltip } from "@/components/ui";
 import { useSystem, useUnloadEngine } from "@/lib/api/hooks";
 import { cn, fmtGB } from "@/lib/utils";
+import { engineName } from "@/lib/engineNames";
 
 function VramRing({ used, total }: { used: number; total: number }) {
   const pct = total > 0 ? Math.min(1, used / total) : 0;
@@ -93,11 +94,11 @@ export function GpuCard() {
                 return (
                   <Badge key={name} tone="ok" className="h-7 pr-1 pl-2.5">
                     <Cpu className="size-3" />
-                    {name}
-                    <Tooltip content={`Unload ${name}`}>
+                    {engineName(name)}
+                    <Tooltip content={`Unload ${engineName(name)}`}>
                       <button
                         type="button"
-                        aria-label={`Unload ${name}`}
+                        aria-label={`Unload ${engineName(name)}`}
                         disabled={busy}
                         onClick={() => unload.mutate(name)}
                         className="ml-0.5 flex size-5 items-center justify-center rounded-full hover:bg-ok/15 disabled:opacity-50"

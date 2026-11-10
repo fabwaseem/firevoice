@@ -56,8 +56,8 @@ export const SLIDERS: { key: keyof Pick<StyleDraft, "pace" | "pause" | "temperat
   { key: "temperature", label: "Temperature", min: 0.05, max: 1.5, step: 0.05, hint: "Randomness of the delivery; lower is steadier", group: "sampling" },
   { key: "top_p", label: "Top-p", min: 0.1, max: 1, step: 0.01, hint: "Nucleus sampling cut-off", group: "sampling" },
   { key: "repetition_penalty", label: "Repetition penalty", min: 1, max: 2, step: 0.05, hint: "Discourages repeated tokens", group: "sampling" },
-  { key: "cfg", label: "Guidance (CFG)", min: 0.5, max: 6, step: 0.1, hint: "Flow / CFM engines such as VoxCPM2, dots and F5", group: "engine" },
-  { key: "exaggeration", label: "Exaggeration", min: 0.25, max: 2, step: 0.05, hint: "Chatterbox emotional intensity", group: "engine" },
-  { key: "cfg_weight", label: "CFG weight", min: 0, max: 1, step: 0.05, hint: "Chatterbox pacing weight", group: "engine" },
-  { key: "emo_alpha", label: "Emotion strength", min: 0, max: 1, step: 0.05, hint: "IndexTTS-2 emotion vector weight", group: "engine" },
+  { key: "cfg", label: "Guidance (CFG)", min: 0.5, max: 6, step: 0.1, hint: "Inferno, Hearth and Flicker", group: "engine" },
+  { key: "exaggeration", label: "Exaggeration", min: 0.25, max: 2, step: 0.05, hint: "Torch and Flash: emotional intensity", group: "engine" },
+  { key: "cfg_weight", label: "CFG weight", min: 0, max: 1, step: 0.05, hint: "Torch and Flash: pacing weight", group: "engine" },
+  { key: "emo_alpha", label: "Emotion strength", min: 0, max: 1, step: 0.05, hint: "Firebrand and Firestorm: emotion vector weight", group: "engine" },
 ];

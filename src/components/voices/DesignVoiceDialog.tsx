@@ -156,7 +156,7 @@ export function DesignVoiceDialog({ open, onOpenChange }: { open: boolean; onOpe
               <Select
                 value={engineValue}
                 onChange={setEngine}
-                options={designEngines.map((e) => ({ value: e.name, label: e.title, description: [e.tier?.quality, e.tier?.speed, e.model].filter(Boolean).join(" · ") }))}
+                options={designEngines.map((e) => ({ value: e.name, label: e.title, description: [e.tier?.quality, e.tier?.speed, e.tagline].filter(Boolean).join(" · ") }))}
                 ariaLabel="Design engine"
               />
             ) : (

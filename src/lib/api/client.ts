@@ -1,5 +1,6 @@
 import { useSettings } from "@/stores/settings";
 import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
+import { rememberEngineNames } from "@/lib/engineNames";
 
 export class ApiError extends Error {
   code: string;
@@ -66,11 +67,23 @@ const json = (body: unknown) => JSON.stringify(body);
 // ------------------------------------------------------------------ system
 export const api = {
   health: () => request<Health>("/health"),
-  system: () => request<SystemInfo>("/api/v1/system"),
-  options: () => request<Options>("/api/v1/options"),
+  system: async () => {
+    const s = await request<SystemInfo>("/api/v1/system");
+    rememberEngineNames(s.engine_names);
+    return s;
+  },
+  options: async () => {
+    const o = await request<Options>("/api/v1/options");
+    rememberEngineNames(o.engine_names);
+    return o;
+  },
 
   // ---------------------------------------------------------------- engines
-  engines: async (task: "tts" | "sfx" | "vc" | "all" = "tts") => (await request<{ engines: Engine[] }>("/api/v1/engines", {}, { task })).engines,
+  engines: async (task: "tts" | "sfx" | "vc" | "all" = "tts") => {
+    const list = (await request<{ engines: Engine[] }>("/api/v1/engines", {}, { task })).engines;
+    rememberEngineNames(Object.fromEntries(list.map((e) => [e.name, e.title])));
+    return list;
+  },
   sound: async (body: { prompt: string; kind: "sfx" | "music"; duration: number; seed?: number; format?: string }) => {
     const res = await fetch(url("/api/v1/sound"), {
       method: "POST",

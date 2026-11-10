@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api, ApiError, subscribeJobEvents } from "./client";
 import type { Job, Style, Voice } from "./types";
 import { useSettings } from "@/stores/settings";
+import { engineName } from "@/lib/engineNames";
 
 export const qk = {
   health: ["health"] as const,
@@ -50,7 +51,7 @@ export function useUninstallEngine() {
   return useMutation({
     mutationFn: ({ name, weights }: { name: string; weights?: boolean }) => api.uninstallEngine(name, weights),
     onSuccess: (r) => {
-      toast.success(`${r.engine} removed` + (r.also_affects.length ? ` (its environment also served ${r.also_affects.join(", ")})` : ""));
+      toast.success(`${engineName(r.engine)} removed` + (r.also_affects.length ? ` (its environment also served ${r.also_affects.map(engineName).join(", ")})` : ""));
       qc.invalidateQueries({ queryKey: qk.engines });
       qc.invalidateQueries({ queryKey: qk.options });
       qc.invalidateQueries({ queryKey: ["install-plan"] });
@@ -128,7 +129,7 @@ export function useEngines(task: "tts" | "sfx" | "vc" | "all" = "tts") {
 /** Engine id -> its FireVoice name ("voxcpm2" -> "Inferno"); unknown ids come back unchanged. */
 export function useEngineName() {
   const all = useEngines("all");
-  return (id?: string | null) => (id ? (all.data ?? []).find((e) => e.name === id)?.title ?? id : "");
+  return (id?: string | null) => (id ? (all.data ?? []).find((e) => e.name === id)?.title ?? engineName(id) : "");
 }
 
 export function useVoices(filters?: { language?: string; gender?: string; kind?: string; tag?: string; q?: string }) {
@@ -196,7 +197,7 @@ export function useLoadEngine() {
   return useMutation({
     mutationFn: ({ name, workers }: { name: string; workers?: number }) => api.loadEngine(name, workers),
     onSuccess: (_, v) => {
-      toast.success(`${v.name} is loaded`);
+      toast.success(`${engineName(v.name)} is loaded`);
       qc.invalidateQueries({ queryKey: qk.engines });
       qc.invalidateQueries({ queryKey: qk.system });
       qc.invalidateQueries({ queryKey: qk.options });
@@ -210,7 +211,7 @@ export function useUnloadEngine() {
   return useMutation({
     mutationFn: (name: string) => api.unloadEngine(name),
     onSuccess: (_, name) => {
-      toast.success(`${name} unloaded`);
+      toast.success(`${engineName(name)} unloaded`);
       qc.invalidateQueries({ queryKey: qk.engines });
       qc.invalidateQueries({ queryKey: qk.system });
       qc.invalidateQueries({ queryKey: qk.options });

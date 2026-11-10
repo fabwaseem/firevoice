@@ -33,7 +33,7 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
   const engineOptions = engines.map((e) => ({
     value: e.name,
     label: e.title,
-    description: [e.tier && e.tier.quality !== "-" ? `${e.tier.quality} · ${e.tier.size} · ${e.tier.speed}` : null, e.model,
+    description: [e.tier && e.tier.quality !== "-" ? `${e.tier.quality} · ${e.tier.size} · ${e.tier.speed}` : null,
       e.ready ? (e.loaded ? "loaded" : null) : "not installed", e.commercial === false ? "non-commercial" : null].filter(Boolean).join(" · "),
     disabled: !e.ready,
     group: e.ready ? "Installed" : "Not installed",

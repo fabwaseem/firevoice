@@ -68,7 +68,7 @@ export function SoundView() {
           />
           {engine && (
             <Badge tone={engine.ready ? "neutral" : "warn"}>
-              {engine.title} · {engine.license}
+              {engine.title}{engine.tagline ? ` · ${engine.tagline}` : ""}
             </Badge>
           )}
         </div>

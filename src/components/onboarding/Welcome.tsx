@@ -121,7 +121,6 @@ export function Welcome() {
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] font-medium text-ink">{o.title}</span>
-                    {o.model && <span className="text-[12px] text-faint">{o.model}</span>}
                     {i === 0 && <Badge tone="fire">Recommended</Badge>}
                     {o.ready ? <Badge tone="ok">ready</Badge> : o.installable ? <Badge tone="neutral">download</Badge> : <Badge tone="warn">manual install</Badge>}
                   </div>

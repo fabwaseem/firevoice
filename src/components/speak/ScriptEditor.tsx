@@ -75,7 +75,7 @@ export function ScriptEditor({ supportsTags, disabled, className }: { supportsTa
           </select>
         </Tooltip>
         {!supportsTags && (
-          <Tooltip content="This engine ignores [laugh] and [sigh]. Chatterbox Turbo reads them.">
+          <Tooltip content="This engine ignores [laugh] and [sigh]. Flash, Candle and Phoenix read them.">
             <span className="ml-1 inline-flex items-center gap-1 text-[11.5px] text-faint">
               <Sparkles className="size-3.5" /> tags off
             </span>

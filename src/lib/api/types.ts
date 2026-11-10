@@ -535,6 +535,8 @@ export interface GPUInfo {
 }
 
 export interface SystemInfo {
+  /** engine id -> FireVoice name */
+  engine_names?: Record<string, string>;
   version: string;
   uptime_seconds: number;
   home: string;
@@ -549,6 +551,8 @@ export interface SystemInfo {
 }
 
 export interface Options {
+  /** engine id -> FireVoice name */
+  engine_names?: Record<string, string>;
   engines: Engine[];
   styles: Style[];
   formats: string[];
