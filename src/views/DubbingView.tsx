@@ -89,10 +89,11 @@ export function DubbingView() {
             <span className="text-[12px] text-faint">{file ? `${(file.size / 1e6).toFixed(1)} MB` : "audio or video, any format"}</span>
             <input type="file" accept="audio/*,video/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <TrySample name="speech.mp3" onFile={setFile} />
-            <TrySample name="conversation.mp3" onFile={setFile} label="Try a conversation" />
-          </div>
+          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-faint">
+            Nothing to hand?
+            <TrySample name="speech.mp3" onFile={setFile} label="One speaker" />
+            <TrySample name="conversation.mp3" onFile={setFile} label="A conversation" />
+          </p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="db-from" icon={<Globe />}>From</Label>

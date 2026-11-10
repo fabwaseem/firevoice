@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { authHeaders, url } from "@/lib/api/client";
-import { Button } from "@/components/ui";
 
 /** Sample recordings that ship with the backend (GET /api/v1/samples): speech.mp3, conversation.mp3, speech-with-music.mp3. */
 export type SampleName = "speech.mp3" | "conversation.mp3" | "speech-with-music.mp3";
@@ -13,16 +12,14 @@ export async function sampleFile(name: SampleName): Promise<File> {
   return new File([await r.blob()], name, { type: "audio/mpeg" });
 }
 
-/** A small button that loads a sample recording into a tool, so it can be tried without recording anything. */
+/** A small link that loads a sample recording into a tool, so it can be tried without recording anything. It sits
+ * under the file picker, never beside it as a button of the same weight. */
 export function TrySample({ name, onFile, label = "Try a sample", disabled }: { name: SampleName; onFile: (f: File) => void; label?: string; disabled?: boolean }) {
   const [busy, setBusy] = useState(false);
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      leading={<Sparkles className="size-3.5" />}
-      loading={busy}
-      disabled={disabled}
+    <button
+      type="button"
+      disabled={disabled || busy}
       onClick={async () => {
         setBusy(true);
         try {
@@ -33,8 +30,10 @@ export function TrySample({ name, onFile, label = "Try a sample", disabled }: { 
           setBusy(false);
         }
       }}
+      className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-fire outline-none hover:underline focus-visible:ring-2 focus-visible:ring-fire/40 disabled:opacity-50"
     >
+      {busy ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
       {label}
-    </Button>
+    </button>
   );
 }

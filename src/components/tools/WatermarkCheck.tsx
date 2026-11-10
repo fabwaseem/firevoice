@@ -6,6 +6,7 @@ import type { WatermarkResult } from "@/lib/api/types";
 import { Badge, Button, Card } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
 import { useSessionState } from "@/stores/session";
+import { FilePick } from "@/components/tools/FilePick";
 
 /** Is a file AI speech? Every FireVoice output carries an inaudible watermark; this finds it again. */
 export function WatermarkCheck() {
@@ -29,18 +30,13 @@ export function WatermarkCheck() {
     <Card className="p-5">
       <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><ShieldCheck className="size-4 shrink-0 text-fire" />Is it AI speech?</h3>
       <p className="mt-1 text-[12.5px] text-muted">Everything FireVoice makes carries an inaudible watermark that survives MP3 and editing. Check any file for it.</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input
-          type="file"
-          accept="audio/*,video/*"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null);
-            setR(null);
-          }}
-          className="min-w-0 flex-1 text-[12.5px] text-ink-2 file:mr-3 file:rounded-md file:border-0 file:bg-surface-3 file:px-3 file:py-1.5 file:text-ink"
+      <div className="mt-3 flex flex-wrap items-start gap-2">
+        <FilePick
+          className="min-w-[200px] flex-1"
+          file={file}
+          onFile={(f) => { setFile(f); setR(null); }}
+          below={<TrySample name="speech.mp3" onFile={(f) => { setFile(f); setR(null); }} />}
         />
-        <TrySample name="speech.mp3" onFile={(f) => { setFile(f); setR(null); }} />
-        {file && <span className="max-w-[180px] truncate text-[12px] text-faint" title={file.name}>{file.name}</span>}
         <Button size="sm" variant="soft" leading={<ScanSearch className="size-4" />} disabled={!file} loading={busy} onClick={check}>
           Check
         </Button>

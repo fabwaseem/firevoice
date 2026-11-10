@@ -7,6 +7,7 @@ import { Badge, Button, Card, NativeSelect } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { TrySample } from "@/components/tools/TrySample";
 import { useSessionState } from "@/stores/session";
+import { FilePick } from "@/components/tools/FilePick";
 
 function Score({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
@@ -113,18 +114,13 @@ export function QualityCheck() {
     <Card className="p-5">
       <h3 className="text-[14px] font-semibold text-ink flex items-center gap-2"><Gauge className="size-4 shrink-0 text-fire" />Quality report</h3>
       <p className="mt-1 text-[12.5px] text-muted">Does it sound like the voice, how clean is it, and does the voice wander over a long take?</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input
-          type="file"
-          accept="audio/*,video/*"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null);
-            setR(null);
-          }}
-          className="min-w-0 flex-1 text-[12.5px] text-ink-2 file:mr-3 file:rounded-md file:border-0 file:bg-surface-3 file:px-3 file:py-1.5 file:text-ink"
+      <div className="mt-3 flex flex-wrap items-start gap-2">
+        <FilePick
+          className="min-w-[200px] flex-1"
+          file={file}
+          onFile={(f) => { setFile(f); setR(null); }}
+          below={<TrySample name="speech.mp3" onFile={(f) => { setFile(f); setR(null); }} />}
         />
-        <TrySample name="speech.mp3" onFile={(f) => { setFile(f); setR(null); }} />
-        {file && <span className="max-w-[180px] truncate text-[12px] text-faint" title={file.name}>{file.name}</span>}
         <NativeSelect value={voice} onChange={(e) => setVoice(e.target.value)} className="w-auto" aria-label="Compare with voice">
           <option value="">Compare with no voice</option>
           {(voices.data ?? []).map((v) => (

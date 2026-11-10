@@ -1,16 +1,30 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { useNavigate } from "react-router";
-import { AudioLines, ChevronDown, Download, Power, PowerOff } from "lucide-react";
+import { AudioLines, ChevronDown, Download, Layers, MapPin, Music, Power, PowerOff, Repeat2, Waves } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Engine } from "@/lib/api/types";
 import { useLoadEngine, useUnloadEngine } from "@/lib/api/hooks";
 import { cn } from "@/lib/utils";
 import { useStudio } from "@/stores/studio";
+import { setSession } from "@/stores/session";
 import { Badge, Button, Card, Tooltip } from "@/components/ui";
 import { InstallPanel } from "./InstallPanel";
 import { ParamSchema } from "./ParamSchema";
 
+type Use = { label: string; to: string; icon: ComponentType<{ className?: string }>; where: string[]; speak?: boolean };
+
+/** Where an engine is used in the app, and the page its button opens (only speech engines go to Speak). */
+function usage(engine: Engine): Use {
+  if (engine.task === "vc") return { label: "Open Voice changer", to: "/changer", icon: Repeat2, where: ["Voice changer"] };
+  if (engine.name === "musicgen") return { label: "Open Sound", to: "/sound", icon: Music, where: ["Sound (music)", "Dialogue music beds"] };
+  if (engine.task === "sfx") return { label: "Open Sound", to: "/sound", icon: Waves, where: ["Sound (effects)", "Dialogue sound cues"] };
+  if (engine.task === "tool")
+    return { label: "Open audio tools", to: "/changer", icon: Layers, where: ["Separate voice and music", "Clean a voice (Best)", "Dubbing (keep the music)"] };
+  return { label: "Use in Speak", to: "/speak", icon: AudioLines, where: ["Speak", "Dialogue", "Projects", "Dubbing"], speak: true };
+}
+
 export function EngineCard({ engine }: { engine: Engine }) {
+  const use = usage(engine);
   const navigate = useNavigate();
   const setStudio = useStudio((s) => s.set);
   const load = useLoadEngine();
@@ -44,6 +58,17 @@ export function EngineCard({ engine }: { engine: Engine }) {
         {engine.task !== "sfx" && engine.task !== "tool" && languages.length > 0 && <Badge tone="neutral">{langs}</Badge>}
       </div>
 
+      <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-muted">
+        <MapPin className="size-3.5 shrink-0 text-faint" />
+        <span className="text-faint">Used in</span>
+        {use.where.map((w, i) => (
+          <span key={w} className="text-ink-2">
+            {w}
+            {i < use.where.length - 1 && <span className="text-faint">,</span>}
+          </span>
+        ))}
+      </p>
+
       <InstallPanel engine={engine} />
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
@@ -70,14 +95,16 @@ export function EngineCard({ engine }: { engine: Engine }) {
         <Button
           size="sm"
           variant="ghost"
-          leading={<AudioLines className="size-4" />}
+          leading={<use.icon className="size-4" />}
           disabled={!engine.ready}
           onClick={() => {
-            setStudio({ engine: engine.name, params: {} });
-            navigate("/speak");
+            if (use.speak) setStudio({ engine: engine.name, params: {} });
+            if (engine.name === "musicgen") setSession("sound.kind", "music", "sfx");
+            if (engine.name === "audioldm2") setSession("sound.kind", "sfx", "sfx");
+            navigate(use.to);
           }}
         >
-          Use in Speak
+          {use.label}
         </Button>
         {params.length > 0 && (
           <button

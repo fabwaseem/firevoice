@@ -95,11 +95,15 @@ export function VoiceChangerView() {
           <input ref={fileRef} type="file" accept="audio/*,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) use(f, f.name); e.target.value = ""; }} />
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" leading={<Upload className="size-4" />} onClick={() => fileRef.current?.click()}>Choose a file</Button>
-            <TrySample name="speech.mp3" onFile={(f) => use(f, f.name)} />
             <Button variant={recording ? "danger" : "outline"} leading={recording ? <Square className="size-4" /> : <Mic className="size-4" />} onClick={record}>
               {recording ? "Stop" : "Record"}
             </Button>
           </div>
+          {!source && (
+            <p className="mt-2 flex items-center gap-1.5 text-[12px] text-faint">
+              Nothing to hand? <TrySample name="speech.mp3" onFile={(f) => use(f, f.name)} />
+            </p>
+          )}
           {source && (
             <div className="mt-4 space-y-2">
               <audio controls src={source.url} className="w-full" />
