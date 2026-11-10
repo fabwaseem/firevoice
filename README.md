@@ -23,7 +23,7 @@ Development runs exactly like an installed app; only the Python environment diff
 | what                                   | installed app                                         | development                    |
 |----------------------------------------|-------------------------------------------------------|--------------------------------|
 | backend code                           | wheel inside the installer                            | `backend/` (editable install)  |
-| backend Python environment             | `%LOCALAPPDATA%\dev.firestack.firevoice\backend\venv` | `backend/.venv`                |
+| backend Python environment             | `%LOCALAPPDATA%\app.fabwaseem.firevoice\backend\venv` | `backend/.venv`                |
 | engines, model weights                 | `~/.firevoice/engines`                                | the same folder                |
 | voices, styles, history, renders, logs | `~/.firevoice`                                        | the same folder                |
 

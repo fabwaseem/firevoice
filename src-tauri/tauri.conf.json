@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "FireVoice",
   "version": "1.5.0",
-  "identifier": "dev.firestack.firevoice",
+  "identifier": "app.fabwaseem.firevoice",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -60,7 +60,8 @@
     "resources": {
       "resources/backend/": "backend/"
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "publisher": "fabwaseem"
   },
   "plugins": {
     "updater": {

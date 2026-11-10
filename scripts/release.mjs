@@ -111,7 +111,11 @@ else {
 
 // ------------------------------------------------------------------------------------------------ 3. version, changelog, commit, tag
 step("3/6 version");
-const restore = () => dry && run("git", ["checkout", "--", ...VERSION_FILES]);
+// a dry run puts back exactly what it changed (the files as they were, uncommitted edits included)
+const saved = dry ? Object.fromEntries(VERSION_FILES.map((f) => [f, readFileSync(join(root, f), "utf8")])) : {};
+const restore = () => {
+  for (const [f, text] of Object.entries(saved)) writeFileSync(join(root, f), text);
+};
 if (resuming) info(`already at ${tag}`);
 else {
   setVersion(version);

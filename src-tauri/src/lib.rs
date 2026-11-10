@@ -1,10 +1,13 @@
 mod backend;
+mod migrate;
 mod updater;
 
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // an older identifier's folders (settings, engine runtime, logs) move to this one before anything opens them
+    let moved = migrate::previous_identifiers("app.fabwaseem.firevoice");
     let app = tauri::Builder::default()
         // the app log keeps what explains a problem (starts, updates, errors) without debug chatter pushing it out
         .plugin(
@@ -31,6 +34,12 @@ pub fn run() {
             updater::update_check,
             updater::update_install,
         ])
+        .setup(move |_| {
+            for m in &moved {
+                log::info!("app folder: {m}");
+            }
+            Ok(())
+        })
         .build(tauri::generate_context!())
         .expect("error while building FireVoice");
 
