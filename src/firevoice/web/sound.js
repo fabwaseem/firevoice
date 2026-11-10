@@ -23,7 +23,7 @@ function drawKind() {
   $("#sn-go").disabled = !(e && e.ready);
 }
 
-$$("#sn-kind button").forEach(b => b.onclick = () => { SN.kind = b.dataset.k; $("#sn-len").value = SN.kind === "music" ? 8 : 5; $("#sn-len-v").textContent = `${$("#sn-len").value} s`; drawKind(); });
+$$("#sn-kind button").forEach(b => b.onclick = () => { SN.kind = b.dataset.k; $("#sn-len").max = SN.kind === "music" ? 180 : 30; $("#sn-len").value = SN.kind === "music" ? 8 : 5; $("#sn-len-v").textContent = `${$("#sn-len").value} s`; drawKind(); });
 $("#sn-len").oninput = e => { $("#sn-len-v").textContent = `${e.target.value} s`; };
 
 $("#sn-go").onclick = async () => {

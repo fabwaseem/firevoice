@@ -185,8 +185,8 @@ class FireVoice:
     # -------------------------------------------------------------------- sound effects and music
     def sound(self, prompt: str, kind: str = "sfx", duration: float = 5.0, seed: Optional[int] = None, *, engine: Optional[str] = None,
               params: Optional[dict] = None, priority: int = 0, cancel: Optional[threading.Event] = None) -> tuple:
-        """A sound effect, ambience (kind "sfx", AudioLDM 2) or a music bed (kind "music", MusicGen) from a description.
-        -> (audio, sample rate, info)"""
+        """A sound effect, ambience (kind "sfx", AudioLDM 2, up to 30 s) or music (kind "music", MusicGen, up to 180 s:
+        past 30 s it is continued pass by pass) from a description. -> (audio, sample rate, info)"""
         import random
         from concurrent.futures import TimeoutError as FutTimeout
         prompt = re.sub(r"\s+", " ", str(prompt or "")).strip()
@@ -200,7 +200,9 @@ class FireVoice:
         if not catalog.info(eng).status()["ready"]:
             raise FireVoiceError("unavailable", f"{eng} is not installed: install it from Engines (POST /api/v1/engines/{eng}/install)")
         seed = int(seed if seed is not None else random.randint(1, 2**31 - 1))
-        p = {**(params or {}), "duration": float(max(1.0, min(30.0, duration)))}
+        dp = catalog.info(eng).param("duration")
+        top = float(dp.max) if dp is not None and dp.max else 30.0
+        p = {**(params or {}), "duration": float(max(1.0, min(top, duration)))}
         ld = self._pool(eng, hold=True)
         group = threading.Event()
         t0 = time.perf_counter()
@@ -1222,7 +1224,12 @@ class FireVoice:
         sounds = {}
         for i in cues:
             t = turns[i]
-            secs = t.get("seconds") or (30.0 if t["kind"] == "music" else 3.0)
+            if t["kind"] == "music" and not t.get("seconds"):
+                # a bed as long as the speech (up to 2 minutes), so it seldom has to loop
+                speech_s = sum(r.duration for r in renders_by.values()) + gap_ms / 1000 * len(turns)
+                secs = float(min(120.0, max(30.0, speech_s + 1.0)))
+            else:
+                secs = t.get("seconds") or (30.0 if t["kind"] == "music" else 3.0)
             a_, s_, _info = self.sound(t["text"], t["kind"], secs, seed + i * 101, priority=priority, cancel=cancel)
             sounds[i] = A.resample(a_, s_, sr)
             done["n"] += 1

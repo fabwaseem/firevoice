@@ -483,7 +483,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     class SoundBody(BaseModel):
         prompt: str = Field(..., description="describe the sound: 'rain on a tin roof, distant thunder' or 'calm lo-fi piano bed'")
         kind: Literal["sfx", "music"] = "sfx"
-        duration: float = Field(5.0, ge=1.0, le=30.0)
+        duration: float = Field(5.0, ge=1.0, le=180.0, description="seconds: effects up to 30, music up to 180")
         seed: Optional[int] = None
         engine: Optional[str] = None
         params: dict = Field(default_factory=dict)

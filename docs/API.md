@@ -147,9 +147,9 @@ The style fields:
 
 ### Sound effects and music
 
-`POST /api/v1/sound` `{prompt, kind: "sfx" | "music", duration (1-30 s), seed?, engine?, params?, format}` returns the audio,
+`POST /api/v1/sound` `{prompt, kind: "sfx" | "music", duration (effects 1-30 s, music 2-180 s), seed?, engine?, params?, format}` returns the audio,
 with headers `X-Seed`, `X-Engine`, `X-Duration` and `X-License`. Effects and ambience come from AudioLDM 2 (`audioldm2`),
-music beds from MusicGen small (`musicgen`). Both run in the `sfx` venv and are installed from Engines. Their weights
+music beds from MusicGen small (`musicgen`); music past 30 s is continued in 20 s passes that each hear the last 10 s, with blended seams and a soft ending. Both run in the `sfx` venv and are installed from Engines. Their weights
 are non-commercial. `GET /api/v1/engines?task=sfx` lists them; speech engine lists leave them out (`task=all` shows
 everything).
 
@@ -276,7 +276,7 @@ A dialogue script has one turn per line: `Name: text` or `[Name] text`. A line w
 | `GET /api/v1/tags` | Sound tags (`[laugh]`, `[sigh]`...: performed by engines with tag support, dropped by the rest), delivery tags (`[whisper]`, `[excited]`, `[calm]`... switch the style until `[normal]`), and the markup directives. |
 
 
-Dialogue scripts take sound cues on their own line. `[sfx: description, 2s]` places an effect between turns (stem `SFX`), and one `[music: description]` bed is looped under the whole mix (stem `Music`). Cue turns come back with `kind: "sfx" | "music"` and are left out of the subtitles. They need `audioldm2` / `musicgen` installed; the request fails with `503` before any speech is rendered otherwise.
+Dialogue scripts take sound cues on their own line. `[sfx: description, 2s]` places an effect between turns (stem `SFX`), and one `[music: description]` bed plays under the whole mix (stem `Music`; made as long as the speech, up to 2 minutes, then looped). Cue turns come back with `kind: "sfx" | "music"` and are left out of the subtitles. They need `audioldm2` / `musicgen` installed; the request fails with `503` before any speech is rendered otherwise.
 
 ### Voice tools
 

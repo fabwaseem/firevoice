@@ -36,4 +36,4 @@ def test_sound_route_not_installed(svc, monkeypatch, tmp_path):
     r = c.post("/api/v1/sound", json={"prompt": "rain on a tin roof", "kind": "sfx", "duration": 3})
     assert r.status_code == 503 and "install" in r.json()["error"]["message"]
     assert c.get("/api/v1/engines?task=sfx").status_code == 200
-    assert c.post("/api/v1/sound", json={"prompt": "x", "duration": 99}).status_code == 400
+    assert c.post("/api/v1/sound", json={"prompt": "x", "duration": 200}).status_code == 400   # music tops out at 180 s

@@ -1340,7 +1340,7 @@ def build_parser() -> argparse.ArgumentParser:
     so = sub.add_parser("sound", help="a sound effect, ambience or music bed from a description (AudioLDM 2 / MusicGen)")
     so.add_argument("prompt")
     so.add_argument("--music", action="store_true", help="a music bed (MusicGen) instead of a sound effect (AudioLDM 2)")
-    so.add_argument("--seconds", type=float, default=None, help="length (default 5 for effects, 8 for music; up to 30)")
+    so.add_argument("--seconds", type=float, default=None, help="length (default 5 for effects, 8 for music; effects up to 30, music up to 180)")
     so.add_argument("--seed", type=int, default=None)
     so.add_argument("-o", "--out", default=None)
     _add_remote(so)
