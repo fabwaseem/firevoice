@@ -25,6 +25,11 @@ export const qk = {
   history: (f?: Record<string, string | number | undefined>) => ["history", f ?? {}] as const,
 };
 
+/** Every number for the Stats screen over the last `days` days (0 = all time). */
+export function useStats(days: number) {
+  return useQuery({ queryKey: ["stats", days], queryFn: () => api.stats(days), staleTime: 20_000, refetchInterval: 60_000, retry: 1 });
+}
+
 /** Saved outputs, newest first (all kinds, or the given ones). */
 export function useHistory(kind?: HistoryKind | HistoryKind[], opts: { limit?: number; q?: string } = {}) {
   const k = Array.isArray(kind) ? kind.join(",") : kind;

@@ -1,5 +1,5 @@
 import { useSettings } from "@/stores/settings";
-import type { HistoryItem, HistoryKind } from "./types";
+import type { HistoryItem, HistoryKind, Stats } from "./types";
 import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
 import { rememberEngineNames } from "@/lib/engineNames";
 import { saveBlob } from "@/lib/audio";
@@ -388,6 +388,7 @@ export const api = {
 
   // ---- kept renders: takes and QA
   keptRender: (id: string) => request<KeptRender>(`/api/v1/renders/${encodeURIComponent(id)}`),
+  stats: (days: number) => request<Stats>("/api/v1/stats", {}, { days }),
   // ---- history: everything made
   history: (q: { kind?: HistoryKind | HistoryKind[]; limit?: number; before?: number; q?: string } = {}) =>
     request<{ items: HistoryItem[] }>("/api/v1/history", {}, {

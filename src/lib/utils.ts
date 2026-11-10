@@ -61,7 +61,9 @@ export const LANGUAGE_NAMES: Record<string, string> = {
   en: "English", ur: "Urdu", hi: "Hindi", ar: "Arabic", zh: "Chinese", ja: "Japanese", ko: "Korean", de: "German",
   fr: "French", es: "Spanish", it: "Italian", pt: "Portuguese", ru: "Russian", tr: "Turkish", nl: "Dutch", pl: "Polish",
   sv: "Swedish", da: "Danish", fi: "Finnish", no: "Norwegian", el: "Greek", he: "Hebrew", id: "Indonesian", ms: "Malay",
-  th: "Thai", vi: "Vietnamese", tl: "Filipino", sw: "Swahili", my: "Burmese", km: "Khmer", lo: "Lao", "*": "Many",
+  th: "Thai", vi: "Vietnamese", tl: "Filipino", sw: "Swahili", my: "Burmese", km: "Khmer", lo: "Lao", pa: "Punjabi",
+  bn: "Bengali", ta: "Tamil", te: "Telugu", mr: "Marathi", gu: "Gujarati", fa: "Persian", ps: "Pashto", uk: "Ukrainian",
+  cs: "Czech", ro: "Romanian", hu: "Hungarian", "*": "Many",
 };
 
 export function langName(code: string | null | undefined): string {

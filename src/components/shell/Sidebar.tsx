@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { Link, NavLink, useMatch, useResolvedPath } from "react-router";
 import {
   AudioLines,
+  BarChart3,
   BookA,
   BookOpen,
   Cpu,
@@ -59,6 +60,7 @@ const GROUPS: { title?: string; items: Item[] }[] = [
     items: [
       { to: "/jobs", label: "Jobs", icon: ListChecks, badge: "jobs" },
       { to: "/engines", label: "Engines", icon: Cpu },
+      { to: "/stats", label: "Stats", icon: BarChart3 },
     ],
   },
 ];

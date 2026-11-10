@@ -597,3 +597,45 @@ export interface HistoryItem {
   files: Record<string, HistoryFile>;
   meta: Record<string, unknown>;
 }
+
+/** One ranked row on the Stats screen (an engine, voice, style or language). */
+export interface StatRow {
+  key: string;
+  name?: string;
+  count: number;
+  audio_s: number;
+  speed: number | null;
+}
+
+export type StatGroup = "speech" | "dialogue" | "sound" | "changer" | "dub" | "transcript" | "tools";
+
+export interface Stats {
+  range: { days: number; since: number | null; until: number };
+  totals: {
+    operations: number; done: number; failed: number; cancelled: number; success_rate: number;
+    speech_renders: number; audio_made_s: number; speech_s: number; chars: number; words_spoken: number;
+    transcripts: number; transcribed_s: number; words_transcribed: number; sounds: number; music: number; music_s: number;
+    voice_changes: number; dialogues: number; dubs: number; separations: number; cleanups: number;
+    voices_added: number; voices_designed: number; gpu_s: number; speed: number | null; takes: number; retries: number; sentences: number;
+  };
+  by_kind: { kind: string; count: number; audio_s: number }[];
+  engines: StatRow[]; engines_used: number;
+  voices: StatRow[]; voices_used: number;
+  styles: StatRow[]; styles_used: number;
+  languages: StatRow[]; languages_used: number;
+  daily: ({ date: string; count: number } & Record<StatGroup, number>)[];
+  groups: StatGroup[];
+  heatmap: number[][];
+  records: {
+    first_use: number | null; active_days: number; streak: number; longest_streak: number;
+    busiest_day: { date: string; count: number } | null; longest_speech_s: number | null; fastest_speed: number | null;
+    all_time_audio_s: number; all_time_operations: number;
+  };
+  errors: { message: string; count: number }[];
+  library: {
+    voices: number; cloned: number; designed: number; favorites: number; voice_languages: number; styles: number; custom_styles: number;
+    projects: number; chapters: number; paragraphs: number; project_words: number; dictionary_rules: number; history_items: number;
+    kept_renders: number; jobs: number; engines_ready: number; engines_total: number; tools_ready: number;
+  };
+  storage: { folders: Record<string, number>; data_total: number; home: string };
+}
