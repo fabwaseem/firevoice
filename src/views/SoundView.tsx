@@ -21,7 +21,7 @@ interface Made {
 }
 
 const IDEAS: Record<Kind, string[]> = {
-  sfx: ["a wooden door creaks open slowly, footsteps on a stone floor", "rain on a tin roof, distant thunder", "a busy cafe, cups clinking, soft chatter", "a crowd cheers in a stadium"],
+  sfx: ["ocean waves crashing on a beach", "a wooden door creaking open slowly", "a campfire crackling at night, crickets", "a thunderstorm with heavy rain", "footsteps on a stone floor"],
   music: ["calm lo-fi piano bed for a podcast intro, warm and slow", "upbeat acoustic guitar, bright, for a product video", "tense cinematic strings, low and slow", "soft ambient pads for meditation"],
 };
 
@@ -93,6 +93,7 @@ export function SoundView() {
             placeholder={IDEAS[kind][0]}
             className="w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-[14px] text-ink outline-none focus:border-fire"
           />
+          {kind === "sfx" && <p className="mt-1.5 text-[12px] text-faint">One sound per description works best; make the others separately.</p>}
           <div className="mt-2 flex flex-wrap gap-1.5">
             {IDEAS[kind].map((t) => (
               <button key={t} type="button" onClick={() => setPrompt(t)} className="rounded-full bg-surface-2 px-2.5 py-1 text-[12px] text-muted hover:text-ink">
