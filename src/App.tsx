@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHashRouter, RouterProvider } from "react-router";
 import { AppShell } from "@/components/shell/AppShell";
 import { RouteError } from "@/components/shell/RouteError";
+import { UpdateGate } from "@/components/shell/UpdateGate";
 import { HomeView } from "@/views/HomeView";
 
 // Pages load when first opened, so the app starts from a small bundle. Home ships with it.
@@ -68,7 +69,9 @@ const router = createHashRouter([
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <UpdateGate>
+        <RouterProvider router={router} />
+      </UpdateGate>
     </QueryClientProvider>
   );
 }

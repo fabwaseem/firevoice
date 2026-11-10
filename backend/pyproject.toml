@@ -26,7 +26,7 @@ dev = ["pytest>=8", "httpx"]
 watermark = ["audioseal>=0.2"]
 dub = ["sentencepiece>=0.2"]                           # local translation for `firevoice dub` (M2M100 via transformers)                         # inaudible "made by FireVoice" mark on every output, and its detector
 # Everything the desktop app's bundled backend runs with (install CUDA torch first, as for `gpu`):
-desktop = ["firevoice[server,asr,gpu,watermark,dub]", "resemblyzer>=0.1.4", "imageio-ffmpeg>=0.5"]
+desktop = ["firevoice[server,asr,gpu,watermark,dub]", "resemblyzer>=0.1.4", "speechmos>=0.0.1", "imageio-ffmpeg>=0.5"]
 
 [project.scripts]
 firevoice = "firevoice.cli:main"

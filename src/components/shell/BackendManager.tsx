@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Download, FileText, Loader2, Rocket, RotateCw, Server } from "lucide-react";
+import { AlertTriangle, Download, FileText, Loader2, Rocket, RotateCw } from "lucide-react";
 import { useHealth } from "@/lib/api/hooks";
 import { apiCompat, backend, inTauri, localPort } from "@/lib/backend";
 import { useBackend } from "@/stores/backend";
@@ -28,8 +28,12 @@ export function BackendManager() {
       const st = useBackend.getState();
       const i = await st.refresh();
       if (!i || i.mode === "none" || i.running) return;
+      // an app update ships a newer engine: bring the runtime in step before starting it (only FireVoice itself is
+      // reinstalled; torch and the rest stay), so the engine always matches the app
+      const stale = i.mode === "bundled" && !!i.installed_version && (!i.ready || (!!i.bundled_version && i.installed_version !== i.bundled_version));
+      if (stale) return st.runSetup();
       if (i.ready) return st.start();
-      if (i.mode === "bundled") st.set({ phase: i.installed_version ? "needs-update" : "needs-setup" });
+      if (i.mode === "bundled") st.set({ phase: "needs-setup" });
     })();
   }, [active, health.isLoading, health.isSuccess]);
 
@@ -38,11 +42,16 @@ export function BackendManager() {
     if (active && health.isSuccess && !info) void useBackend.getState().refresh();
   }, [active, health.isSuccess, info]);
 
-  // An app update ships a newer backend: offer to update the runtime even while the old one answers.
+  // An older engine already answering (started before the app updated): stop it and update it, once.
+  const autoUpdated = useRef(false);
   useEffect(() => {
-    if (!active || !health.isSuccess || !info || info.mode !== "bundled") return;
+    if (!active || !health.isSuccess || !info || info.mode !== "bundled" || autoUpdated.current) return;
     if (info.installed_version && info.bundled_version && info.installed_version !== info.bundled_version && phase === "idle") {
-      useBackend.getState().set({ phase: "needs-update" });
+      autoUpdated.current = true;
+      void (async () => {
+        await useBackend.getState().stop();
+        await useBackend.getState().runSetup();
+      })();
     }
   }, [active, health.isSuccess, info, phase]);
 
@@ -102,21 +111,6 @@ export function BackendManager() {
               Update now
             </Button>
           )}
-        </div>
-      )}
-
-      {active && phase === "needs-update" && health.isSuccess && (
-        <div className="mx-auto mb-4 flex max-w-[1400px] items-center gap-3 rounded-xl bg-surface-2 px-4 py-3 text-[13px] text-ink-2">
-          <Server className="size-4 shrink-0 text-fire" />
-          <span className="flex-1">
-            A newer voice engine came with this update ({info?.bundled_version}; you have {info?.installed_version}). Updating takes a minute and keeps your voices and projects.
-          </span>
-          <Button size="sm" onClick={() => useBackend.getState().runSetup()} leading={<Download className="size-3.5" />}>
-            Update now
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => useBackend.getState().set({ phase: "idle" })}>
-            Later
-          </Button>
         </div>
       )}
 

@@ -59,7 +59,18 @@
     },
     "resources": {
       "resources/backend/": "backend/"
-    }
+    },
+    "createUpdaterArtifacts": true
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRDM0E2RTAxRUNCRjFGNjcKUldSbkg3L3NBVzQ2VE82d0N5cU5TREJwb2tmQmx2dlRJcEhtcVJOMlFCajc2OXpER3JQQVpRWEMK",
+      "endpoints": [
+        "https://github.com/fabwaseem/firevoice-releases/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

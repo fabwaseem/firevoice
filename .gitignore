@@ -9,3 +9,6 @@ src-tauri/gen/schemas
 # staged by scripts/bundle-backend.mjs at build time
 src-tauri/resources/backend/*
 !src-tauri/resources/backend/.gitkeep
+
+# built releases (scripts/release.mjs)
+release/

@@ -1,4 +1,5 @@
 mod backend;
+mod updater;
 
 use tauri::Manager;
 
@@ -11,13 +12,17 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(backend::Backend::default())
+        .manage(updater::Updates::default())
         .invoke_handler(tauri::generate_handler![
             backend::backend_info,
             backend::backend_start,
             backend::backend_stop,
             backend::backend_logs,
             backend::backend_setup,
+            updater::update_check,
+            updater::update_install,
         ])
         .build(tauri::generate_context!())
         .expect("error while building FireVoice");

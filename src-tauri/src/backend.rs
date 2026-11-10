@@ -5,7 +5,7 @@
 //!
 //! * finds the Python that runs it, in this order: `FIREVOICE_BACKEND_PYTHON`; the bundled runtime (built on first
 //!   run from the wheel, uv and recipe that the desktop build copies into `resources/backend/`); in debug builds, the
-//!   sibling source checkout's `.venv` (`../firevoice`);
+//!   repo's `backend/.venv` (linked by `scripts/dev-setup.mjs`, running the code in `backend/`);
 //! * builds the bundled runtime with uv (a private Python 3.12 venv in the app's local data folder, CUDA torch, then
 //!   the backend wheel with its `desktop` extra), reporting progress as `backend-setup` events;
 //! * starts `python -m firevoice.cli serve` with its output in the app log folder, and stops it (with its engine
@@ -122,8 +122,8 @@ fn dev_python() -> Option<PathBuf> {
     if !cfg!(debug_assertions) {
         return None;
     }
-    // src-tauri/ -> firevoice-desktop/ -> firestack/firevoice/.venv
-    let p = venv_python(&Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("firevoice").join(".venv"));
+    // src-tauri/ -> repo root -> backend/.venv (a link to the dev resources folder; see scripts/dev-setup.mjs)
+    let p = venv_python(&Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("backend").join(".venv"));
     p.exists().then_some(p)
 }
 

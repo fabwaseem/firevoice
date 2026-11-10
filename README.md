@@ -1,71 +1,113 @@
-# FireVoice Desktop
+# FireVoice
 
-The desktop studio for [FireVoice](../firevoice): local, expressive text-to-speech and speech-to-text on your own GPU.
+Local, expressive text-to-speech and speech-to-text on your own GPU: the desktop app and its voice engine in one repo.
 
-Built with **Tauri 2** (Rust shell, system WebView2) and **React 19 + Vite 8 + Tailwind CSS 4**.
+Built with **Tauri 2** (Rust shell, system WebView2), **React 19 + Vite 8 + Tailwind CSS 4**, and a Python backend
+(FastAPI, CLI and web playground) that the app bundles and runs.
 
 ```
-firestack/
-  firevoice/           Python backend: engines, voices, styles, jobs, HTTP API (firevoice serve)
-  firevoice-desktop/   this repo: the UI and the native shell
+firevoice/                 this repo (private: github.com/fabwaseem/firevoice)
+  backend/                 the voice engine: Python package, HTTP API, CLI, playground, tests (a standalone project)
+  src/                     the app's UI
+  src-tauri/               the native shell: runs the backend, required updates
+  scripts/                 dev setup, bundling, versions, releases
+  release/                 built releases (not in git)
 ```
+
+Installers and the update feed are published to the public **github.com/fabwaseem/firevoice-releases**.
+
+## Where things live
+
+Development runs exactly like an installed app; only the Python environment differs in where it sits.
+
+| what                                   | installed app                                         | development                    |
+|----------------------------------------|-------------------------------------------------------|--------------------------------|
+| backend code                           | wheel inside the installer                            | `backend/` (editable install)  |
+| backend Python environment             | `%LOCALAPPDATA%\dev.firestack.firevoice\backend\venv` | `backend/.venv`                |
+| engines, model weights                 | `~/.firevoice/engines`                                | the same folder                |
+| voices, styles, history, renders, logs | `~/.firevoice`                                        | the same folder                |
+
+Both environments are built from one recipe (`scripts/backend-recipe.mjs`: Python 3.12, CUDA 12.8 torch, the
+`desktop` extra), and both read the same data folder, so an engine installed in one is ready in the other and nothing
+is downloaded twice. Settings > Engines and storage can point engines or weights elsewhere (it writes
+`~/.firevoice/settings.json`, which every build reads).
 
 ## Develop
 
-The app talks to the backend over HTTP. In development you run the backend yourself from the sibling repo.
-
 ```bash
-# terminal 1: backend (from ../firevoice, with its venv active)
-firevoice serve
-
-# terminal 2: UI in a browser, fastest loop
 pnpm install
-pnpm dev                 # http://localhost:1420
-
-# or the real desktop window
-pnpm tauri dev
+node scripts/dev-setup.mjs   # once, and after changing backend dependencies: builds backend/.venv from the recipe
+pnpm tauri dev               # the desktop window; it starts the backend from backend/.venv by itself
 ```
 
-`pnpm tauri dev` starts the UI through `scripts/dev-ui.mjs`. If `pnpm dev` is already serving this app on port 1420, it
-reuses that server instead of failing. If some other program holds the port, it says so and exits.
-
-FireVoice itself stays a standalone API with its own web playground at `/playground`. This app is only a client of it,
-so nothing desktop-specific belongs in the backend repo.
-
-The server address and token live in **Settings** (default `http://127.0.0.1:8787`).
-The backend already allows `localhost`, `127.0.0.1` and `tauri://localhost` origins.
-
-## Build
+Faster loops:
 
 ```bash
-pnpm tauri build         # installer under src-tauri/target/release/bundle/
+pnpm dev                                        # the UI in a browser at http://localhost:1420
+backend/.venv/Scripts/python -m firevoice.cli serve   # the backend alone (API, Swagger at /docs, playground at /playground)
+cd backend && .venv/Scripts/python -m pytest -q       # backend tests
+pnpm typecheck                                  # UI type check
 ```
 
-`tauri build` first runs `scripts/bundle-backend.mjs`, which copies the whole backend into the app: it builds the
-backend's wheel from `../firevoice` (or `FIREVOICE_BACKEND_SRC`) and stages it with `uv` and a pinned recipe
-(`backend.json`: Python 3.12, CUDA 12.8 torch, the `desktop` extra) in `src-tauri/resources/backend/`.
-`node scripts/bundle-backend.mjs --check` shows what it would stage.
+`pnpm tauri dev` starts the UI through `scripts/dev-ui.mjs`; if `pnpm dev` already serves this app on port 1420 it
+reuses that server. Dev builds skip the update check (set `FIREVOICE_UPDATE_URL` to test against a feed).
 
-## The backend inside the app
+The backend stays a standalone API: it never imports anything from the app, and runs on its own with
+`firevoice serve`. The app is a client of it that also bundles it.
 
-The backend stays a standalone API: the app works against any FireVoice server and adds nothing the backend needs.
-When the server URL is on this computer and **Settings > Backend > Start the backend with the app** is on (the default):
+## Versions
 
-1. **First run.** The app builds a private runtime from the bundled pieces in its local data folder
-   (`%LOCALAPPDATA%\dev.firestack.firevoice\backend`): uv fetches Python 3.12, CUDA torch and the backend wheel
-   (about 4 GB, once). Torch is too large for an installer (NSIS and MSI stop near 2 GB), so it is fetched here.
-2. **Every launch.** If nothing answers at the server URL, the app starts `firevoice serve` from that runtime, waits
-   for `/health`, and stops it (with its engine workers) when the app closes. A server you started yourself is left alone.
-3. **Updates.** A new app version ships a new wheel. The app notices the runtime is older and offers to update it;
-   `/health` reports `api_version`, and the app warns when a server is too old or too new for it.
-4. **Engines and weights** are installed on demand from the Engines page (`POST /api/v1/engines/{name}/install`),
-   into the backend's engine folder (Settings > Engines and storage).
-5. **First-run welcome.** Once a backend answers, the app checks the GPU (`GET /api/v1/system/setup`), recommends an
-   engine, installs it if needed, and plays a test line.
+One version for the app and the backend, kept in six files:
 
-In development the app uses the sibling checkout's `.venv` (`../firevoice/.venv`) when nothing is running, so
-`pnpm tauri dev` starts the backend by itself. Set `FIREVOICE_BACKEND_PYTHON` to use another interpreter. The backend
-log is in the app log folder (Settings > Backend > Log).
+```bash
+node scripts/version.mjs            # show them (fails if they differ)
+node scripts/version.mjs 1.5.0      # set them (or patch / minor / major)
+```
+
+The release script sets it for you. The bundled backend runtime is rebuilt on a user's computer when the version
+changes, so a backend change always needs a new version.
+
+## Release
+
+Releases are built and published from this computer; there is no CI.
+
+```bash
+node scripts/release.mjs patch --notes-file notes.md     # or minor / major / 1.5.0, or --notes "One line"
+```
+
+It checks the repo is clean and on `main`, runs the type check and backend tests, sets the version, adds the notes to
+`CHANGELOG.md`, commits `Release vX.Y.Z` and tags it, builds the signed installers into `release/vX.Y.Z/`
+(`FireVoice_X.Y.Z_x64-setup.exe` and its `.sig`, the `.msi`, `latest.json`, `SHA256SUMS.txt`), pushes `main` and the
+tag here, publishes the files as a release of `fabwaseem/firevoice-releases`, and confirms the update feed announces
+the new version. If any step fails, fix it and run the same command again: it resumes the same release.
+
+`--dry-run` builds everything into `release/vX.Y.Z/` and changes nothing else. `--skip-tests` and `--rebuild` do what
+they say.
+
+### Signing key
+
+Updates are signed; the app only installs an update whose signature matches the public key built into it
+(`plugins.updater.pubkey` in `src-tauri/tauri.conf.json`). The private key and its password are kept outside the repo
+in `%USERPROFILE%\.firevoice-release\` (`updater.key`, `updater.key.pub`, `updater.password`; or set
+`FIREVOICE_RELEASE_KEYS`). **Back that folder up somewhere safe.** Without it no installed copy can ever update again:
+a new key means everyone reinstalls by hand.
+
+## Updates
+
+Updates are required. At start the app asks the feed
+(`https://github.com/fabwaseem/firevoice-releases/releases/latest/download/latest.json`) for the newest version:
+
+* **Newer version, online:** the app shows only the update screen. It downloads the installer, checks its signature,
+  stops the voice engine, installs, and opens the new version. If the download fails it stays on that screen with
+  **Try again** (and a link to download it by hand). Voices, history and settings are untouched.
+* **Offline, or GitHub unreachable:** the app opens normally and asks again next time.
+* **While running:** it checks every four hours; a new version shows a bar with **Update now**, so work in progress can
+  finish. The next start requires it.
+
+After an update the app updates its private backend runtime once (only the FireVoice package is reinstalled; torch and
+the rest stay), with progress on screen.
+
+## Security
 
 The release window has a strict content security policy (scripts only from the app; network and media to any
 FireVoice server), and file access is limited to the user's Downloads, Documents, Desktop, Music, Videos and temp
