@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.1 (2026-11-10)
+
+A small housekeeping update.
+
+- FireVoice now installs under its own app name (app.fabwaseem.firevoice, publisher fabwaseem).
+- The app log keeps the lines that explain a problem (starts, updates, errors) for longer.
+
 ## 1.5.0 (2026-11-10)
 
 FireVoice now keeps itself up to date, and audio tools have a home of their own.
