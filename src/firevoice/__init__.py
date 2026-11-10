@@ -6,5 +6,5 @@ __version__ = "1.2.0"
 # clients (the desktop app) compare it with the range they support. MIN_CLIENT_API is the oldest client contract this
 # server still serves correctly.
 # 3: dubbing, sound, separation, quality reports, watermark detection, engine installs, engines?task=
-API_VERSION = 3
+API_VERSION = 4
 MIN_CLIENT_API = 1

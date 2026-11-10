@@ -164,7 +164,7 @@ The full contract, with examples, is in [docs/API.md](docs/API.md).
 Two pages ship with the server for testing by hand:
 
 - `http://127.0.0.1:8787/docs` is Swagger. Every route has **Try it out** with ready-made examples in the Examples dropdown, and an **Authorize** button for the token. TTS responses play inline.
-- `http://127.0.0.1:8787/playground` (also `/`) has six tabs:
+- `http://127.0.0.1:8787/playground` (also `/`; standalone server only, `--no-playground` or the desktop app's backend leave it out) has six tabs:
   - **Speak:** every option plus auto-generated engine settings; render with word highlighting, stream with live playback, send to a job, or copy as curl.
   - **Voices:** browse, filter, preview, upload, design and delete.
   - **Speech to text:** a file or your microphone.

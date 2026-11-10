@@ -123,7 +123,7 @@ setInterval(poll, 8000);
 // ------------------------------------------------------------------------------------------------ init
 // The pages are read from disk on every load, the routes only when `firevoice serve` starts: a server started before an
 // update serves new pages with old routes. Say so instead of failing with "Not Found".
-const PAGE_API = 3;
+const PAGE_API = 4;
 async function checkServerVersion() {
   try {
     const h = await API.req("/health");
@@ -133,10 +133,10 @@ async function checkServerVersion() {
   } catch { /* offline banner handles it */ }
 }
 
-// Sample recordings that ship with the server (web/samples): every audio tool can be tried without recording anything.
+// Sample recordings that ship with the server (GET /api/v1/samples): every audio tool can be tried without recording anything.
 window.trySample = async function trySample(inputId, name) {
   try {
-    const r = await fetch(`/web/samples/${name}`); if (!r.ok) throw new Error(`sample ${name}: ${r.status}`);
+    const r = await fetch(API.url(`/api/v1/samples/${name}`)); if (!r.ok) throw new Error(`sample ${name}: ${r.status}`);
     const f = new File([await r.blob()], name, { type: "audio/mpeg" });
     const dt = new DataTransfer(); dt.items.add(f);
     const inp = $("#" + inputId); inp.files = dt.files;

@@ -9,6 +9,8 @@ firevoice serve --preload voxcpm2 --token SECRET --port 8787
 
 Try it in a browser: **`/docs`** is Swagger with ready-made examples on every route and an Authorize button.
 **`/playground`** is a page for listening: render, stream, record speech to text, manage voices and styles, and watch jobs live.
+It belongs to the standalone server: the desktop app's backend (started with `FIREVOICE_DESKTOP=1`) and
+`firevoice serve --no-playground` serve only the API and its Swagger docs (`/docs`; `/` redirects there).
 
 The CLI and the API share one service (`firevoice.service.FireVoice`), so every option below has the same meaning
 as the matching `firevoice say` flag. The OpenAPI schema is at `/openapi.json`.
@@ -79,6 +81,7 @@ A request is fully validated before rendering starts: unknown fields, styles, vo
 | | |
 |---|---|
 | `GET /health` | `{"ok", "version", "auth"}` |
+| `GET /api/v1/samples` | Sample recordings shipped with the server (`speech.mp3`, `conversation.mp3`, `speech-with-music.mp3`); `GET /api/v1/samples/{name}` returns one as MP3. |
 | `GET /api/v1/system` | version, uptime, GPU name and free/total VRAM, default engine, loaded engines, job counts |
 | `GET /api/v1/options` | Everything a UI needs in one call: engines with capabilities and settings schemas, styles, formats, request defaults, the languages present in the voice library. |
 

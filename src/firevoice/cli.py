@@ -1037,7 +1037,8 @@ def cmd_serve(a) -> int:
         t0 = time.time()
         svc.load(e)
         print(f"  {e} ready in {time.time() - t0:.0f}s", flush=True)
-    app = create_app(svc, token=a.token, cors_origins=a.cors.split(",") if a.cors else None)
+    app = create_app(svc, token=a.token, cors_origins=a.cors.split(",") if a.cors else None,
+                     playground=False if a.no_playground else None)
     print(f"FireVoice API on http://{a.host}:{a.port}  (docs: http://{a.host}:{a.port}/docs, default engine {_nm(svc.default_engine)})", flush=True)
     try:
         uvicorn.run(app, host=a.host, port=a.port, log_level=a.log_level)
@@ -1537,6 +1538,8 @@ def build_parser() -> argparse.ArgumentParser:
     sv.add_argument("--preload", default=None, help="comma-separated engines to load at startup")
     sv.add_argument("--workers", type=int, default=None, help="model copies per preloaded engine")
     sv.add_argument("--token", default=None, help="require this API token (also FIREVOICE_API_KEY)")
+    sv.add_argument("--no-playground", action="store_true",
+                    help="serve only the API and its Swagger docs, no playground page (the desktop app's backend does this)")
     sv.add_argument("--no-token", action="store_true",
                     help="allow --host on a network address without a token (only on a home network you trust)")
     sv.add_argument("--cors", default=None, help="comma-separated allowed origins (default: localhost and tauri)")

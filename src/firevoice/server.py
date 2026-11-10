@@ -112,7 +112,7 @@ STATUS = {"bad_request": 400, "unauthorized": 401, "not_found": 404, "conflict":
 MAX_UPLOAD = 60 * 1024 * 1024
 
 
-def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Optional[list[str]] = None):
+def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Optional[list[str]] = None, playground: Optional[bool] = None):
     from fastapi import Body, Depends, FastAPI, File, Form, Query, Request, Security, UploadFile
     from fastapi.concurrency import run_in_threadpool
     from fastapi.exceptions import RequestValidationError
@@ -124,12 +124,18 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     from . import __version__
 
     token = token or os.environ.get("FIREVOICE_API_KEY") or None
+    # The playground is the standalone API's own web page. Behind the desktop app (which starts the backend with
+    # FIREVOICE_DESKTOP=1) the server offers only the API and its Swagger docs.
+    if playground is None:
+        playground = os.environ.get("FIREVOICE_DESKTOP") != "1" and os.environ.get("FIREVOICE_PLAYGROUND", "1") != "0"
     app = FastAPI(
         title="FireVoice", version=__version__, openapi_tags=TAGS,
         description=("Local expressive text-to-speech and speech-to-text engine: many open models, one API. "
                      "Use **Try it out** on any route and pick a ready-made example from the Examples dropdown; TTS routes return audio you "
-                     "can download from the response panel. For playing and streaming audio, recording speech and watching jobs live, "
-                     "open the [playground](/playground). Full contract: docs/API.md in the repository."),
+                     "can download from the response panel. "
+                     + ("For playing and streaming audio, recording speech and watching jobs live, open the [playground](/playground). "
+                        if playground else "")
+                     + "Full contract: docs/API.md in the repository."),
         swagger_ui_parameters={"tryItOutEnabled": True, "persistAuthorization": True, "displayRequestDuration": True, "filter": True,
                                "docExpansion": "list", "defaultModelsExpandDepth": 0, "syntaxHighlight.theme": "obsidian"})
     app.state.svc = svc
@@ -380,10 +386,26 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     # ------------------------------------------------------------------ pages
     @app.get("/", include_in_schema=False)
     def root():
-        return RedirectResponse("/playground")
+        return RedirectResponse("/playground" if playground else "/docs")
 
     from fastapi.staticfiles import StaticFiles
     web = Path(__file__).parent / "web"
+    samples_dir = web / "samples"
+
+    @app.get("/api/v1/samples", tags=["system"])
+    def samples():
+        """Sample recordings that ship with the server, for trying the audio tools without recording anything:
+        `speech.mp3` (one speaker), `conversation.mp3` (three speakers), `speech-with-music.mp3` (a voice over music)."""
+        return {"samples": [{"name": f.name, "bytes": f.stat().st_size, "url": f"/api/v1/samples/{f.name}"}
+                            for f in sorted(samples_dir.glob("*.mp3"))]}
+
+    @app.get("/api/v1/samples/{name}", tags=["system"])
+    def sample(name: str):
+        """One sample recording (MP3)."""
+        f = samples_dir / name
+        if "/" in name or "\\" in name or not f.is_file() or f.suffix != ".mp3":
+            raise FireVoiceError("not_found", f"no sample {name!r}")
+        return FileResponse(f, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=3600"})
 
     class _Revalidate(StaticFiles):
         """The playground's scripts and styles: revalidated on every load (a cheap 304 when unchanged), so an update to
@@ -393,11 +415,12 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
             r.headers["Cache-Control"] = "no-cache"
             return r
 
-    app.mount("/web", _Revalidate(directory=str(web)), name="web")
+    if playground:
+        app.mount("/web", _Revalidate(directory=str(web)), name="web")
 
-    @app.get("/playground", include_in_schema=False)
-    def playground():
-        return HTMLResponse((web / "index.html").read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
+        @app.get("/playground", include_in_schema=False)
+        def playground_page():
+            return HTMLResponse((web / "index.html").read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
     # ------------------------------------------------------------------ system
     @app.get("/health", tags=["system"])

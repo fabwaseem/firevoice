@@ -241,5 +241,24 @@ def test_playground_files_revalidate_and_samples_ship(svc):
     r = c.get("/web/app.js")
     assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
     for name in ("speech.mp3", "conversation.mp3", "speech-with-music.mp3"):
-        s = c.get(f"/web/samples/{name}")
-        assert s.status_code == 200 and len(s.content) > 10_000, name
+        s = c.get(f"/api/v1/samples/{name}")
+        assert s.status_code == 200 and len(s.content) > 10_000 and s.headers["content-type"] == "audio/mpeg", name
+    assert {x["name"] for x in c.get("/api/v1/samples").json()["samples"]} >= {"speech.mp3", "conversation.mp3"}
+    assert c.get("/api/v1/samples/..%2Fapp.js").status_code == 404 and c.get("/api/v1/samples/nope.mp3").status_code == 404
+
+
+def test_desktop_backend_serves_api_and_docs_but_no_playground(svc, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from firevoice.server import create_app
+    monkeypatch.setenv("FIREVOICE_DESKTOP", "1")
+    c = TestClient(create_app(svc))
+    assert c.get("/playground").status_code == 404 and c.get("/web/app.js").status_code == 404
+    assert c.get("/", follow_redirects=False).headers["location"] == "/docs"
+    assert c.get("/docs").status_code == 200 and c.get("/openapi.json").status_code == 200
+    assert c.get("/api/v1/samples/speech.mp3").status_code == 200        # the app's Try a sample buttons still work
+    assert c.get("/health").json()["api_version"] == 4
+    monkeypatch.delenv("FIREVOICE_DESKTOP")
+    c2 = TestClient(create_app(svc))
+    assert c2.get("/playground").status_code == 200 and c2.get("/", follow_redirects=False).headers["location"] == "/playground"
+    assert TestClient(create_app(svc, playground=False)).get("/playground").status_code == 404
