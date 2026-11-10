@@ -897,19 +897,18 @@ async function refreshEngines() { try { S.engines = (await API.req("/api/v1/engi
 async function loadEngines() {
   try {
     const [es, all, s] = await Promise.all([API.req("/api/v1/engines"), API.req("/api/v1/engines?task=all"), API.req("/api/v1/system")]); S.engines = es.engines; renderEngineSelect();
-    const TASK = { tts: "", sfx: "sound", vc: "voice changer", tool: "audio tool" };
     const g = s.gpu || {};
     $("#sys-metrics").innerHTML = [["GPU", g.name ? g.name.replace("NVIDIA GeForce ", "") : "none"], ["VRAM used", g.vram_total_gb ? `${(g.vram_used_gb ?? 0).toFixed(1)}<small> / ${g.vram_total_gb.toFixed(1)} GB</small>` : "-"],
       ["GPU load", g.utilization != null ? `${g.utilization}<small>%</small>` : "-"], ["Temperature", g.temperature_c != null ? `${g.temperature_c}<small>°C</small>` : "-"],
       ["Loaded", s.loaded_engines.map(n => (all.engines.find(e => e.name === n) || {}).title || n).join(", ") || "none"], ["Voices", s.voices], ["Styles", s.styles], ["Uptime", fmtTime(s.uptime_seconds)], ["Version", s.version]]
       .map(([l, v]) => `<div class="metric"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
-    $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t">${esc(e.title)}</div><div class="n">${esc(e.model || e.title)} · ${esc(e.name)}${TASK[e.task] ? ` · ${TASK[e.task]}` : ""}</div></div>
+    const langs = e => e.languages.includes("*") ? "Many languages" : `${e.languages.length} language${e.languages.length === 1 ? "" : "s"}`;
+    // the model behind the name and its licence, on hover only (the licences ask for credit)
+    const credit = e => [e.model, e.license && `licence ${e.license}`].filter(Boolean).join(" · ");
+    $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t" title="${esc(credit(e))}">${esc(e.title)}</div></div>
         ${e.loaded ? '<span class="tag ok">loaded</span>' : e.ready ? '<span class="tag">ready</span>' : '<span class="tag bad">not installed</span>'}</div>
-      ${e.tier && e.tier.quality !== "-" ? `<div class="tags"><span class="tag ${e.tier.quality === "Studio" ? "ok" : ""}">${esc(e.tier.quality)}</span><span class="tag">size ${esc(e.tier.size)}</span><span class="tag">${esc(e.tier.speed)}</span></div>` : ""}
-      ${e.tagline ? `<div class="small dim" style="margin:4px 0">${esc(e.tagline)}</div>` : ""}
-      <div class="tags">${["clone", "design", "instruct", "tags"].filter(k => e[k]).map(k => `<span class="tag acc">${k}</span>`).join("")}<span class="tag">${esc(e.license)}</span>${e.commercial ? "" : '<span class="tag warn">non-commercial</span>'}</div>
-      <div class="notes">${esc(e.notes || e.description || "")}${e.problems?.length ? `<div style="color:var(--bad)">${esc(e.problems.join("; "))}</div>` : ""}</div>
-      <div class="stats"><span>RTF <b>${e.speed_rtf ?? "-"}</b></span><span><b>${e.sample_rate / 1000}</b> kHz</span><span>~<b>${e.vram_gb}</b> GB</span><span><b>${e.languages.includes("*") ? "600+" : e.languages.length}</b> lang</span>${e.loaded ? `<span><b>${e.workers}</b> worker(s)</span>` : ""}</div>
+      ${e.tagline ? `<div class="notes">${esc(e.tagline)}</div>` : ""}
+      <div class="tags">${e.tier && e.tier.quality !== "-" ? `<span class="tag ${e.tier.quality === "Studio" ? "acc" : ""}">${esc(e.tier.quality)}</span><span class="tag">size ${esc(e.tier.size)}</span><span class="tag">${esc(e.tier.speed)}</span>` : ""}${e.clone ? '<span class="tag">clones voices</span>' : ""}${e.design ? '<span class="tag">designs voices</span>' : ""}${e.task === "tts" ? `<span class="tag">${langs(e)}</span>` : ""}</div>
       <div class="install" id="inst-${e.name}"></div>
       <div class="row">${e.ready ? (e.loaded ? `<button class="btn sm" data-unload="${e.name}">Unload</button>` : `<button class="btn sm primary" data-load="${e.name}">${icon("zap", "sm")}Load now</button>`) : ""}
         ${!e.ready && e.installable ? `<button class="btn sm primary" data-install="${e.name}">${icon("download", "sm")}Install</button>` : ""}
