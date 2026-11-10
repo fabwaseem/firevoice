@@ -1,7 +1,7 @@
 """Pronunciation dictionary: your own rules for how words are said.
 
 A rule rewrites written text into what the engine should read, before anything else in the text pass:
-  {"match": "Ayesha", "say": "Aa-ye-sha"}             a name said your way
+  {"match": "Siobhan", "say": "Shi-vawn"}             a name said your way
   {"match": "SQL", "say": "sequel"}                    an acronym said as a word
   {"match": "kg", "say": "kilograms", "case": true}    only this exact casing
 

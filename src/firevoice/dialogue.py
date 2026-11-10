@@ -1,8 +1,8 @@
 """Multi-speaker dialogue: a script of "Name: line" turns, a cast that maps speakers to voices, one mix plus stems.
 
 Script forms (one turn per line):
-  Ayesha: Assalam o Alaikum! Aaj ka episode shuru karte hain.
-  [Bilal] Bilkul. Let's go.
+  Evelyn: Hello, and welcome to today's episode.
+  [Arthur] Absolutely. Let's go.
   Narrator: The two of them sat down.
 A line without a speaker continues the previous speaker's turn; blank lines are ignored; "(laughs)", "(sighs)" and
 similar stage directions become sound tags for engines that support them and are dropped by the others.

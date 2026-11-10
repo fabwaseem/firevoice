@@ -89,7 +89,7 @@ TTS_EXAMPLES = {
         "voice": "glb-m-sco-s01863", "style": "documentary", "params": {"cfg_value": 2.5, "inference_timesteps": 14},
         "style_overrides": {"pause": 1.2}, "candidates": 2, "format": "wav", "sample_rate": 44100}},
     "urdu": {"summary": "Urdu in Roman script with a native Urdu voice", "value": {
-        "text": "Aaj mausam bohat acha hai. Chalo, chai peetay hain.", "voice": "Ayesha", "language": "ur", "format": "mp3"}},
+        "text": "The weather is lovely today. Let's go for a walk by the river.", "voice": "Evelyn", "language": "en", "format": "mp3"}},
     "json with word times": {"summary": "JSON response: base64 audio plus word timestamps", "value": {
         "text": "Word timestamps come back with the audio.", "voice": "hifi-f-92", "response": "json"}},
     "another engine": {"summary": "The same request on Chatterbox Turbo", "value": {
@@ -295,7 +295,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     class DialogueParse(BaseModel):
         script: str = Field(..., min_length=1, max_length=500_000)
-        cast: Optional[dict[str, Any]] = Field(None, description='{"Ayesha": {"voice": "urd-f-cv01", "style": "podcast"}, "Bilal": "Bilal"}')
+        cast: Optional[dict[str, Any]] = Field(None, description='{"Evelyn": {"voice": "Evelyn", "style": "podcast"}, "Arthur": "Arthur"}')
 
     class DialogueBody(DialogueParse):
         defaults: Optional[dict[str, Any]] = Field(None, description="TTS request fields for every turn (engine, style, pace...)")

@@ -2,10 +2,10 @@
 "use strict";
 
 const DG = { cast: {}, speakers: [], audio: null };
-const DG_EXAMPLE = `Ayesha: Assalam o Alaikum, and welcome back to the show!
-Bilal: Thanks for having me. (laughs) I promise to keep it short this time.
-Ayesha: You said that last week too.
-Bilal: Fair. But this time I mean it.
+const DG_EXAMPLE = `Evelyn: Hello, and welcome back to the show!
+Arthur: Thanks for having me. (laughs) I promise to keep it short this time.
+Evelyn: You said that last week too.
+Arthur: Fair. But this time I mean it.
 Narrator: He did not keep it short.`;
 
 window.loadDialogue = function loadDialogue() {

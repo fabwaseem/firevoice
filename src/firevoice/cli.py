@@ -1388,7 +1388,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     dg = sub.add_parser("dialogue", help="multi-speaker script ('Name: line' per turn) -> one mix, stems and subtitles")
     dg.add_argument("script", help="the script file (or @file / - for stdin)")
-    dg.add_argument("--cast", default=None, help='who speaks with which voice: "Ayesha=urd-f-cv01,Bilal=Bilal" (missing speakers get one automatically)')
+    dg.add_argument("--cast", default=None, help='who speaks with which voice: "Evelyn=Evelyn,Arthur=Arthur" (missing speakers get one automatically)')
     dg.add_argument("-o", "--out", default="dialogue.mp3")
     dg.add_argument("--stems", default=None, metavar="DIR", help="also write one track per speaker into DIR")
     dg.add_argument("--srt", default=None, metavar="FILE", help="also write speaker-labelled subtitles")

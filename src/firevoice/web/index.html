@@ -200,7 +200,7 @@
           <div class="card"><div class="card-h"><h3>Options</h3></div><div class="card-b grid2">
             <div class="field"><label class="f">Language</label><input class="inp" id="slang" value="auto"></div>
             <div class="field"><label class="f">Beam size <span class="hint">(higher = more careful)</span></label><select class="inp" id="sbeam"><option>1</option><option>3</option><option selected>5</option><option>8</option></select></div>
-            <div class="field"><label class="f">Key terms <span class="hint">(names and jargon to spell right, comma-separated)</span></label><input class="inp" id="skeys" placeholder="FireVoice, Ayesha, Inferno"></div>
+            <div class="field"><label class="f">Key terms <span class="hint">(names and jargon to spell right, comma-separated)</span></label><input class="inp" id="skeys" placeholder="FireVoice, Siobhan, Inferno"></div>
             <label class="toggle" style="margin-bottom:10px"><input type="checkbox" id="sdiar"><span class="sw"></span>Label who speaks (Speaker 1, Speaker 2...)</label>
           </div></div>
         </div>
@@ -228,7 +228,7 @@
       <div class="page-head"><div><h1>Dialogue</h1><p>One line per turn as <b>Name: what they say</b>. Every speaker keeps their own voice; you get one mix, a track per speaker and labelled subtitles.</p></div></div>
       <div class="grid2" style="align-items:start">
         <div class="card"><div class="card-h"><h3>Script</h3><div class="grow"></div><button class="btn sm ghost" id="dg-example">Example</button></div><div class="card-b">
-          <textarea class="inp" id="dg-script" rows="14" placeholder="Ayesha: Assalam o Alaikum! Welcome to the show.&#10;Bilal: Thanks for having me. (laughs)&#10;Narrator: And so it began."></textarea>
+          <textarea class="inp" id="dg-script" rows="14" placeholder="Evelyn: Hello, and welcome to the show.&#10;Arthur: Thanks for having me. (laughs)&#10;Narrator: And so it began."></textarea>
           <div class="row" style="margin-top:10px;gap:8px"><button class="btn" id="dg-detect"><svg class="i"><use href="#i-search"/></svg>Find speakers</button><span class="small dim" id="dg-info"></span></div>
           <div class="small dim" style="margin-top:8px">Sound cues on their own line: <code>[sfx: a door creaks open, 2s]</code> and one <code>[music: calm lo-fi piano]</code> bed under everything (needs the sound engines from Engines).</div>
         </div></div>
@@ -330,7 +330,7 @@
         <div class="grow"></div><button class="btn" id="dict-import"><svg class="i"><use href="#i-upload"/></svg>Import</button><button class="btn" id="dict-export"><svg class="i"><use href="#i-download"/></svg>Export</button></div>
       <div class="card" style="margin-bottom:16px"><div class="card-b">
         <div class="dict-add">
-          <div class="field"><label class="f">Written</label><input class="inp" id="d-match" placeholder="Ayesha, SQL, Nguyen"></div>
+          <div class="field"><label class="f">Written</label><input class="inp" id="d-match" placeholder="Siobhan, SQL, Nguyen"></div>
           <div class="field"><label class="f">Say it as</label><input class="inp" id="d-say" placeholder="Aa-ye-sha, sequel, Win"></div>
           <button class="btn primary" id="d-add"><svg class="i"><use href="#i-plus"/></svg>Add rule</button>
         </div>
