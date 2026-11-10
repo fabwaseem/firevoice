@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, FileText, Lightbulb, MessagesSquare, Play, Search, Timer, Users } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { errMessage, useStyles, useVoices } from "@/lib/api/hooks";
+import { errMessage, useStyles, useVoices, useEngines } from "@/lib/api/hooks";
 import type { DialogueResult } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { useStudio } from "@/stores/studio";
@@ -68,7 +68,10 @@ export function DialogueView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const body = () => ({ script, cast, gap_ms: gap, defaults: { engine: studioEngine ?? undefined } });
+  // Speak's engine is the default for every speaker, but only when it is a speech engine that is set up
+  const speechEngines = useEngines("tts");
+  const engine = studioEngine && (speechEngines.data ?? []).some((e) => e.name === studioEngine && e.ready) ? studioEngine : undefined;
+  const body = () => ({ script, cast, gap_ms: gap, defaults: { engine } });
   // the mix's object URL is released when a new mix replaces it (it stays while you are on other pages)
   useReleaseOnReplace(result?.url);
 

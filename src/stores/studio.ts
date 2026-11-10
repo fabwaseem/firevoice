@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+/** Engines that cannot read text aloud: never a Speak or Dialogue engine. */
+const NOT_SPEECH = new Set(["chatterbox-vc", "separator", "musicgen", "audioldm2"]);
+
 /** The Speak view's draft. Persisted so a restart never loses a script. */
 export interface StudioState {
   text: string;
@@ -54,6 +57,15 @@ export const useStudio = create<StudioState>()(
       setParam: (name, value) => set((s) => ({ params: { ...s.params, [name]: value } })),
       resetParams: () => set({ params: {} }),
     }),
-    { name: "firevoice.studio", version: 1 },
+    {
+      name: "firevoice.studio",
+      version: 1,
+      // older versions could save a non-speech engine here (the voice changer's "Use in Speak"); it reads no text,
+      // so Speak and Dialogue came back silent. Forget it and use the default speech engine.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<StudioState>;
+        return { ...current, ...p, engine: p.engine && NOT_SPEECH.has(p.engine) ? null : (p.engine ?? current.engine) };
+      },
+    },
   ),
 );

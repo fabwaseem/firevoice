@@ -33,15 +33,14 @@ export function ToolsView() {
               aria-controls={`tool-${t.id}`}
               onClick={() => setTool(t.id)}
               className={cn(
-                "group relative flex items-center gap-3.5 overflow-hidden rounded-2xl border p-4 text-left transition-[background,border-color,box-shadow] duration-200",
-                on ? "border-fire/50 bg-surface shadow-[0_8px_28px_-14px_rgba(255,90,45,0.55)]" : "border-line bg-surface/60 hover:border-line-strong hover:bg-surface",
+                "group flex items-center gap-3.5 rounded-2xl border p-4 text-left transition-colors duration-200",
+                on ? "border-fire/40 bg-fire-soft" : "border-line bg-surface hover:border-line-strong",
               )}
             >
-              {on && <span className="fire-gradient absolute inset-x-0 top-0 h-[3px]" aria-hidden />}
               <span
                 className={cn(
                   "flex size-11 shrink-0 items-center justify-center rounded-xl transition-colors",
-                  on ? "fire-gradient text-white shadow-[0_6px_16px_-8px_rgba(255,90,45,0.8)]" : "bg-surface-3 text-muted group-hover:text-ink",
+                  on ? "fire-gradient text-white" : "bg-surface-3 text-muted group-hover:text-ink",
                 )}
               >
                 <t.icon className="size-5" />

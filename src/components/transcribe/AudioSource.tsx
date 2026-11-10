@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { FileAudio, Mic, Square, Upload, X } from "lucide-react";
 import { Recorder } from "@/lib/audio";
 import { cn, fmtBytes, fmtTime } from "@/lib/utils";
-import { Button, Segmented } from "@/components/ui";
+import { AudioPlayer, Button, Segmented } from "@/components/ui";
 
 export interface SourceFile {
   blob: Blob;
@@ -171,8 +171,11 @@ function RecordPanel({ onDone, disabled }: { onDone: (f: SourceFile) => void; di
 }
 
 function FilePreview({ file, onClear, disabled }: { file: SourceFile; onClear: () => void; disabled?: boolean }) {
+  const src = useMemo(() => URL.createObjectURL(file.blob), [file.blob]);
+  useEffect(() => () => URL.revokeObjectURL(src), [src]);
   return (
-    <div className="surface flex items-center gap-3 rounded-xl px-4 py-3">
+    <div className="surface space-y-3 rounded-xl px-4 py-3">
+    <div className="flex items-center gap-3">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-fire-soft text-fire">
         <FileAudio className="size-5" />
       </div>
@@ -186,6 +189,8 @@ function FilePreview({ file, onClear, disabled }: { file: SourceFile; onClear: (
       <Button variant="ghost" size="icon-sm" aria-label="Remove file" onClick={onClear} disabled={disabled}>
         <X className="size-4" />
       </Button>
+    </div>
+    <AudioPlayer src={src} label={file.name} />
     </div>
   );
 }

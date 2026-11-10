@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ import { api } from "@/lib/api/client";
 import { errMessage, useAddVoice, useDesignVoice, useEngines, useOptions } from "@/lib/api/hooks";
 import type { DesignBatch, Voice } from "@/lib/api/types";
 import { cn, fmtBytes, langName } from "@/lib/utils";
-import { Button, Chip, Dialog, Input, Label, NativeSelect, Segmented, Select, Textarea } from "@/components/ui";
+import { AudioPlayer, Button, Chip, Dialog, Input, Label, NativeSelect, Segmented, Select, Textarea } from "@/components/ui";
 import { RecordPanel } from "./RecordPanel";
 import { DESIGN_EXAMPLES, GENDERS } from "./helpers";
 
@@ -278,6 +278,7 @@ export function NewVoiceDialog({
                     <FileAudio className="size-8 text-fire" />
                     <p className="text-[14px] font-medium text-ink">{file.name}</p>
                     <p className="text-[12px] text-muted">{fmtBytes(file.size)}</p>
+                    <FilePlayer file={file} />
                     <button type="button" onClick={() => setFile(null)} className="mt-1 inline-flex items-center gap-1 text-[12.5px] text-muted hover:text-ink">
                       <X className="size-3.5" /> Remove
                     </button>
@@ -472,4 +473,11 @@ async function followDesign(jobId: string, onCreated: (v: Voice) => void, refres
     }
     if (job.status === "failed" || job.status === "cancelled") return;
   }
+}
+
+/** Hear an uploaded clip before saving it as a voice. */
+function FilePlayer({ file }: { file: File }) {
+  const src = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => () => URL.revokeObjectURL(src), [src]);
+  return <AudioPlayer src={src} label={file.name} size="sm" className="mt-1 w-full max-w-md text-left" />;
 }
