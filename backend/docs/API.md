@@ -3,17 +3,19 @@
 The API the desktop app (and anything else) uses. Start it with:
 
 ```bash
-firevoice serve                              # http://127.0.0.1:8787, default engine voxcpm2, interactive docs at /docs
-firevoice serve --preload voxcpm2 --token SECRET --port 8787
+python -m firevoice.server                              # http://127.0.0.1:8787, default engine voxcpm2, interactive docs at /docs
+python -m firevoice.server --preload voxcpm2 --token SECRET --port 8787
 ```
 
-Try it in a browser: **`/docs`** is Swagger with ready-made examples on every route and an Authorize button.
-**`/playground`** is a page for listening: render, stream, record speech to text, manage voices and styles, and watch jobs live.
-It belongs to the standalone server: the desktop app's backend (started with `FIREVOICE_DESKTOP=1`) and
-`firevoice serve --no-playground` serve only the API and its Swagger docs (`/docs`; `/` redirects there).
+The desktop app starts the server by itself. Options: `--host`, `--port`, `--engine` (the default engine), `--preload`
+(comma-separated engines to load at startup), `--workers` (model copies per preloaded engine), `--token`, `--no-token`,
+`--cors`, `--asr-model`, `--asr-device` and `--log-level`.
 
-The CLI and the API share one service (`firevoice.service.FireVoice`), so every option below has the same meaning
-as the matching `firevoice say` flag. The OpenAPI schema is at `/openapi.json`.
+Try it in a browser: **`/docs`** is Swagger with ready-made examples on every route and an Authorize button. It is the
+only page the server has; `/` redirects there. The OpenAPI schema is at `/openapi.json`.
+
+The desktop app and the API share one service (`firevoice.service.FireVoice`), so every option below has the same
+meaning in both.
 
 ## Conventions
 
@@ -24,8 +26,8 @@ as the matching `firevoice say` flag. The OpenAPI schema is at `/openapi.json`.
   - `xi-api-key: <token>`
   - `?token=<token>`, which works for `<audio src>` and `EventSource`.
   - On a network address (`--host 0.0.0.0`) the server refuses to start without a token, unless `--no-token` says the
-    network is trusted (a home network): then anyone who can reach the port can use it, so the playground opens at
-    `http://<this PC's address>:8787/playground` on other computers with no password.
+    network is trusted (a home network): then anyone who can reach the port can use it, so other computers reach the
+    API at `http://<this PC's address>:8787` with no password.
 
   `/health` never needs a token. The server refuses a non-local `--host` unless a token is set.
 - **Errors:** every failure is JSON in this shape: `{"error": {"code": "...", "message": "..."}}`.
@@ -465,10 +467,3 @@ for (;;) {
 }
 ```
 
-```python
-from firevoice.client import Client
-c = Client("http://127.0.0.1:8787")
-audio, info = c.tts("Hello there.", voice="lib-f-4992", style="storyteller", format="mp3")
-for ev in c.tts_stream("A longer paragraph. With several sentences.", voice="lib-f-4992"):
-    print(ev["type"], ev.get("index"))
-```

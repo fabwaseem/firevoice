@@ -1,4 +1,4 @@
-"""FireVoice service: the one backend both the CLI and the HTTP API (and the desktop app) talk to.
+"""FireVoice service: the one backend behind the HTTP API (and so the desktop app and every other client).
 
     svc = FireVoice()
     r = svc.tts(TTSRequest(text="Hello there.", engine="voxcpm2", voice="lib-f-4992", style="storyteller"))
@@ -2431,7 +2431,7 @@ def _clip_checks(a: np.ndarray, sr: int, ref_path: Optional[str]) -> tuple:
             import soundfile as sf
             enc = _clip_checks.__dict__.get("enc")
             if enc is None:                      # built once: setdefault would build a new encoder on every call
-                enc = _clip_checks.__dict__["enc"] = VoiceEncoder(device="cpu")
+                enc = _clip_checks.__dict__["enc"] = VoiceEncoder(device="cpu", verbose=False)
             r, rsr = sf.read(ref_path, dtype="float32", always_2d=False)
             r = r.mean(axis=1) if r.ndim > 1 else r
             sim = float(enc.embed_utterance(preprocess_wav(y, 16000)) @ enc.embed_utterance(preprocess_wav(r, rsr)))

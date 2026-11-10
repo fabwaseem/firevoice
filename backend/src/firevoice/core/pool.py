@@ -79,7 +79,7 @@ class Job:
     future: Future = field(default_factory=Future)
     attempts: int = 0
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
-    priority: int = 0                         # 0 = someone is waiting (playground, API render), 1 = background job
+    priority: int = 0                         # 0 = someone is waiting (an API render), 1 = background job
     on_part: Optional[object] = None          # callable(np.ndarray): stream pieces of this generation as they decode
     parts_sent: int = 0
     group: Optional[threading.Event] = None   # set = the render this belongs to was cancelled: drop, do not run

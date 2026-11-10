@@ -6,8 +6,7 @@
 //
 // The wheel that ships holds no Python source. Every module is compiled to a native extension module (see
 // scripts/protect-backend.py), once for each Python version that runs the package: the app's runtime and the engine
-// venvs. The playground's scripts and styles are minified. If any of that fails the build fails: it never falls back
-// to shipping source.
+// venvs. If any of that fails the build fails: it never falls back to shipping source.
 //
 //   node scripts/bundle-backend.mjs            build the protected wheel and stage everything
 //   node scripts/bundle-backend.mjs --plain    stage the plain source wheel (debugging only; a release refuses it)
@@ -101,7 +100,6 @@ if (plain) {
       fail(`compiling the backend for Python ${v} failed (full output: ${log})`);
     }
   }
-  await minifyWeb(join(stage, "firevoice", "web"));
   const outText = py(RECIPE.python, ["pack", stage, out, "--builds", String(pythons.length)], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
   process.stdout.write(outText);
   wheel = outText.match(/^WHEEL=(.+)$/m)?.[1]?.trim() ?? fail("the protected wheel was not written");
@@ -110,23 +108,3 @@ if (plain) {
 copyFileSync(uv, join(out, win ? "uv.exe" : "uv"));
 writeFileSync(join(out, "backend.json"), JSON.stringify({ version, api_version: apiVersion, wheel, protected: !plain, ...RECIPE }, null, 1));
 console.log(`[bundle-backend] staged ${wheel}, uv and backend.json`);
-
-/** The playground (the backend's own web page): scripts and styles minified, comments out of the page. */
-async function minifyWeb(dir) {
-  if (!existsSync(dir)) return;
-  const { transform } = await import("esbuild");
-  let n = 0;
-  for (const f of readdirSync(dir)) {
-    const p = join(dir, f);
-    if (f.endsWith(".js") || f.endsWith(".css")) {
-      // scripts are classic (not modules): their top-level names are shared between files and stay as they are
-      const r = await transform(readFileSync(p, "utf8"), { loader: f.endsWith(".css") ? "css" : "js", minify: true, legalComments: "none" });
-      writeFileSync(p, r.code);
-      n++;
-    } else if (f.endsWith(".html")) {
-      writeFileSync(p, readFileSync(p, "utf8").replace(/<!--[\s\S]*?-->/g, ""));
-      n++;
-    }
-  }
-  console.log(`[bundle-backend] minified ${n} playground files`);
-}

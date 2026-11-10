@@ -3,11 +3,11 @@
 Local, expressive text-to-speech and speech-to-text on your own GPU: the desktop app and its voice engine in one repo.
 
 Built with **Tauri 2** (Rust shell, system WebView2), **React 19 + Vite 8 + Tailwind CSS 4**, and a Python backend
-(FastAPI, CLI and web playground) that the app bundles and runs.
+(a FastAPI HTTP API) that the app bundles and runs.
 
 ```
 firevoice/                 this repo (private: github.com/fabwaseem/firevoice)
-  backend/                 the voice engine: Python package, HTTP API, CLI, playground, tests (a standalone project)
+  backend/                 the voice engine: Python package, HTTP API, tests (a standalone project)
   src/                     the app's UI
   src-tauri/               the native shell: runs the backend, required updates
   scripts/                 dev setup, bundling, versions, releases
@@ -44,7 +44,7 @@ Faster loops:
 
 ```bash
 pnpm dev                                        # the UI in a browser at http://localhost:1420
-backend/.venv/Scripts/python -m firevoice.cli serve   # the backend alone (API, Swagger at /docs, playground at /playground)
+backend/.venv/Scripts/python -m firevoice.server      # the backend alone (the API, with Swagger docs at /docs)
 cd backend && .venv/Scripts/python -m pytest -q       # backend tests
 pnpm typecheck                                  # UI type check
 ```
@@ -53,7 +53,8 @@ pnpm typecheck                                  # UI type check
 reuses that server. Dev builds skip the update check (set `FIREVOICE_UPDATE_URL` to test against a feed).
 
 The backend stays a standalone API: it never imports anything from the app, and runs on its own with
-`firevoice serve`. The app is a client of it that also bundles it.
+`python -m firevoice.server`. There is no command-line tool and no web page: the app and the API are the two ways in.
+The app is a client of the API that also bundles it.
 
 ## Versions
 
@@ -92,7 +93,7 @@ An installed copy holds no readable source of the app:
   module (`scripts/protect-backend.py`: Cython, then the C compiler) and builds a wheel with those and no `.py` file.
   It compiles once per Python version that imports the package: the app's runtime and the engine venvs (3.11 and
   3.12 today; the list comes from the recipe and `installer.py`). Docstrings are left out, except the route
-  descriptions shown at `/docs`. The playground's scripts and styles are minified. An update replaces the installed
+  descriptions shown at `/docs`. An update replaces the installed
   package, and the copy that engine workers import, so source left by older versions goes away.
 * **UI.** Minified, no source maps, files named by hash, and packed inside the app binary.
 * **App binary (Rust).** Optimised, stripped of symbols, and built with this computer's folder names removed.
@@ -158,3 +159,8 @@ src/
   views/          Home, Speak, Voices, Transcribe, Jobs, Engines, Styles, Settings
 src-tauri/        Rust shell, capabilities, icons
 ```
+
+## License
+
+Proprietary: all rights reserved (see `LICENSE`). The code may not be copied, changed, shared or sold without written
+permission. The speech models a user installs keep their own licences.

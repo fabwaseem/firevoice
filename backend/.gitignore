@@ -46,5 +46,5 @@ renders/
 .DS_Store
 Thumbs.db
 desktop.ini
-# the sample recordings the playground and desktop "Try a sample" buttons load
-!src/firevoice/web/samples/*.mp3
+# the sample recordings the app's "Try a sample" buttons load
+!src/firevoice/samples/*.mp3

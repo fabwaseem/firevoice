@@ -182,14 +182,14 @@ class VoiceLibrary:
             d = self.default_id()
             if d is None:
                 if needs_reference:
-                    raise ValueError("this engine needs a reference voice: `firevoice voices add --name narrator --ref clip.wav --consent` then --voice narrator (or `firevoice voices default narrator`)")
+                    raise ValueError("this engine needs a voice to copy: add a voice from a recording first, then choose it (or make it the default voice)")
                 return {"voice_id": DEFAULT, "ref": None, "ref_text": None, "desc": None}
             vid = d
         vid = self.canonical(vid)
         meta = self.get(vid)
         ref = self.ref_path(vid, style)
         if ref is None and needs_reference:
-            raise ValueError(f"voice {vid!r} has no reference clip and engine {engine or '?'} cannot speak from a description; run `firevoice voices design {vid}` first")
+            raise ValueError(f"voice {vid!r} has no reference clip and engine {engine or '?'} cannot speak from a description; give the voice a reference clip first (design it with an engine that can, or add a recording)")
         return {"voice_id": f"{_slug(vid)}:{style}" if style and ref and style in meta.get("styles", []) else _slug(vid), "ref": ref,
                 "ref_text": self.ref_text(vid, style), "desc": meta.get("description") or None}
 

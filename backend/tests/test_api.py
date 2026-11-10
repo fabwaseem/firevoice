@@ -220,7 +220,7 @@ def test_elevenlabs_compat(c):
     assert any(m["model_id"] == "voxcpm2" for m in c.get("/v1/models").json())
 
 
-def test_docs_and_playground(c):
+def test_docs(c):
     assert c.get("/docs").status_code == 200 and "swagger" in c.get("/docs").text.lower()
     spec = c.get("/openapi.json").json()
     tts = spec["paths"]["/api/v1/tts"]["post"]
@@ -228,45 +228,20 @@ def test_docs_and_playground(c):
     assert {"simple", "designed voice", "engine settings"} <= set(examples)
     assert "HTTPBearer" in spec["components"]["securitySchemes"]
     assert {t["name"] for t in spec["tags"]} >= {"tts", "voices", "jobs"}
-    p = c.get("/playground")
-    assert p.status_code == 200 and "FireVoice" in p.text and "/web/app.js" in p.text
-    js = c.get("/web/app.js")
-    assert js.status_code == 200 and "/api/v1/options" in js.text
-    assert c.get("/web/app.css").status_code == 200
-    assert c.get("/web/fonts/urbanist-latin-normal.woff2").status_code == 200
-    assert c.get("/", follow_redirects=False).headers["location"] == "/playground"
+    assert c.get("/", follow_redirects=False).headers["location"] == "/docs"
+    assert c.get("/playground").status_code == 404 and c.get("/web/app.js").status_code == 404     # Swagger is the only page
 
 
-def test_playground_files_revalidate_and_samples_ship(svc):
+def test_samples_ship(svc):
     from fastapi.testclient import TestClient
 
     from firevoice.server import create_app
     c = TestClient(create_app(svc))
-    r = c.get("/web/app.js")
-    assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
     for name in ("speech.mp3", "conversation.mp3", "speech-with-music.mp3"):
         s = c.get(f"/api/v1/samples/{name}")
         assert s.status_code == 200 and len(s.content) > 10_000 and s.headers["content-type"] == "audio/mpeg", name
     assert {x["name"] for x in c.get("/api/v1/samples").json()["samples"]} >= {"speech.mp3", "conversation.mp3"}
-    assert c.get("/api/v1/samples/..%2Fapp.js").status_code == 404 and c.get("/api/v1/samples/nope.mp3").status_code == 404
-
-
-def test_desktop_backend_serves_api_and_docs_but_no_playground(svc, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    from firevoice.server import create_app
-    monkeypatch.setenv("FIREVOICE_DESKTOP", "1")
-    c = TestClient(create_app(svc))
-    assert c.get("/playground").status_code == 404 and c.get("/web/app.js").status_code == 404
-    assert c.get("/", follow_redirects=False).headers["location"] == "/docs"
-    assert c.get("/docs").status_code == 200 and c.get("/openapi.json").status_code == 200
-    assert c.get("/api/v1/samples/speech.mp3").status_code == 200        # the app's Try a sample buttons still work
-    from firevoice import API_VERSION
-    assert c.get("/health").json()["api_version"] == API_VERSION
-    monkeypatch.delenv("FIREVOICE_DESKTOP")
-    c2 = TestClient(create_app(svc))
-    assert c2.get("/playground").status_code == 200 and c2.get("/", follow_redirects=False).headers["location"] == "/playground"
-    assert TestClient(create_app(svc, playground=False)).get("/playground").status_code == 404
+    assert c.get("/api/v1/samples/..%2Fserver.py").status_code == 404 and c.get("/api/v1/samples/nope.mp3").status_code == 404
 
 
 def test_cors_exposes_history_id(c):

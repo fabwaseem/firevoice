@@ -1,5 +1,5 @@
-"""FireVoice HTTP API (FastAPI). Everything goes through the FireVoice service, so the API, the CLI and the desktop
-app behave identically. Interactive docs: http://127.0.0.1:8787/docs
+"""FireVoice HTTP API (FastAPI). Everything goes through the FireVoice service, so every client of the API (the
+desktop app, other programs, AI agents) gets the same behaviour. main() at the end of this module starts it. Interactive docs: http://127.0.0.1:8787/docs
 
 App API (/api/v1)
   GET    /health                          liveness (no auth)
@@ -151,7 +151,7 @@ def _check_signatures(app) -> None:
                                            f"is annotated {p.annotation!r}, which does not resolve ({e}); pass the type to _expose()") from None
 
 
-def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Optional[list[str]] = None, playground: Optional[bool] = None):
+def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Optional[list[str]] = None):
     from fastapi import Body, Depends, FastAPI, File, Form, Query, Request, Security, UploadFile
     from fastapi.concurrency import run_in_threadpool
     from fastapi.exceptions import RequestValidationError
@@ -174,18 +174,11 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     from . import __version__
 
     token = token or os.environ.get("FIREVOICE_API_KEY") or None
-    # The playground is the standalone API's own web page. Behind the desktop app (which starts the backend with
-    # FIREVOICE_DESKTOP=1) the server offers only the API and its Swagger docs.
-    if playground is None:
-        playground = os.environ.get("FIREVOICE_DESKTOP") != "1" and os.environ.get("FIREVOICE_PLAYGROUND", "1") != "0"
     app = FastAPI(
         title="FireVoice", version=__version__, openapi_tags=TAGS,
         description=("Local expressive text-to-speech and speech-to-text engine: many open models, one API. "
                      "Use **Try it out** on any route and pick a ready-made example from the Examples dropdown; TTS routes return audio you "
-                     "can download from the response panel. "
-                     + ("For playing and streaming audio, recording speech and watching jobs live, open the [playground](/playground). "
-                        if playground else "")
-                     + "Full contract: docs/API.md in the repository."),
+                     "can download from the response panel."),
         swagger_ui_parameters={"tryItOutEnabled": True, "persistAuthorization": True, "displayRequestDuration": True, "filter": True,
                                "docExpansion": "list", "defaultModelsExpandDepth": 0, "syntaxHighlight.theme": "obsidian"})
     app.state.svc = svc
@@ -455,11 +448,9 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     # ------------------------------------------------------------------ pages
     @app.get("/", include_in_schema=False)
     def root():
-        return RedirectResponse("/playground" if playground else "/docs")
+        return RedirectResponse("/docs")
 
-    from fastapi.staticfiles import StaticFiles
-    web = Path(__file__).parent / "web"
-    samples_dir = web / "samples"
+    samples_dir = Path(__file__).parent / "samples"
 
     @app.get("/api/v1/samples", tags=["system"])
     def samples():
@@ -475,21 +466,6 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         if "/" in name or "\\" in name or not f.is_file() or f.suffix != ".mp3":
             raise FireVoiceError("not_found", f"no sample {name!r}")
         return FileResponse(f, media_type="audio/mpeg", headers={"Cache-Control": "public, max-age=3600"})
-
-    class _Revalidate(StaticFiles):
-        """The playground's scripts and styles: revalidated on every load (a cheap 304 when unchanged), so an update to
-        the backend never leaves a browser running yesterday's scripts against today's pages."""
-        async def get_response(self, path, scope):
-            r = await super().get_response(path, scope)
-            r.headers["Cache-Control"] = "no-cache"
-            return r
-
-    if playground:
-        app.mount("/web", _Revalidate(directory=str(web)), name="web")
-
-        @app.get("/playground", include_in_schema=False)
-        def playground_page():
-            return HTMLResponse((web / "index.html").read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
     # ------------------------------------------------------------------ system
     @app.get("/health", tags=["system"])
@@ -1740,3 +1716,74 @@ def _is_engine(name: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+DEFAULT_ENGINE = os.environ.get("FIREVOICE_ENGINE", "voxcpm2")
+
+
+def _quiet_logs() -> None:
+    """Keep the server's log readable when it goes to a file (the desktop app's backend.log): no progress bars (each
+    redraw would be a line, hundreds per model load) and none of the libraries' deprecation notices about their own
+    code, which say nothing about FireVoice."""
+    import sys
+    import warnings
+    if not sys.stderr.isatty():
+        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+        os.environ.setdefault("TQDM_DISABLE", "1")
+    for cat in (FutureWarning, DeprecationWarning, UserWarning):
+        warnings.filterwarnings("ignore", category=cat, module=r"(torch|transformers|diffusers|resemblyzer|webrtcvad|librosa)(\..*)?")
+
+
+def main(argv=None) -> int:
+    """Start the HTTP API. This is the one way to run the backend: the desktop app starts it like this, and everything
+    else (other programs, AI agents) talks to the API it serves."""
+    import argparse
+    import sys
+    import time
+
+    p = argparse.ArgumentParser(prog="firevoice-server", description="FireVoice HTTP API (docs at /docs)")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8787)
+    p.add_argument("--engine", default=None, help=f"default engine (default {DEFAULT_ENGINE})")
+    p.add_argument("--preload", default=None, help="comma-separated engines to load at startup")
+    p.add_argument("--workers", type=int, default=None, help="model copies per preloaded engine")
+    p.add_argument("--token", default=None, help="require this API token (also FIREVOICE_API_KEY)")
+    p.add_argument("--no-token", action="store_true", help="allow --host on a network address without a token (only on a network you trust)")
+    p.add_argument("--cors", default=None, help="comma-separated allowed origins (default: localhost and the desktop app)")
+    p.add_argument("--asr-model", default="auto")
+    p.add_argument("--asr-device", default="auto")
+    p.add_argument("--log-level", default="warning", choices=["critical", "error", "warning", "info", "debug"])
+    a = p.parse_args(argv)
+
+    _quiet_logs()
+    import uvicorn
+
+    from .core.brands import name_of
+
+    local = a.host in ("127.0.0.1", "localhost", "::1")
+    if not local and not (a.token or os.environ.get("FIREVOICE_API_KEY")):
+        if not a.no_token:
+            print("refusing to listen on a non-local address without --token (or FIREVOICE_API_KEY); "
+                  "--no-token allows it on a network you trust", file=sys.stderr)
+            return 2
+        print(f"WARNING: no token on {a.host}: anyone who can reach this port can use FireVoice "
+              "(renders, voices, cloning, files)", file=sys.stderr, flush=True)
+    svc = FireVoice(default_engine=a.engine or DEFAULT_ENGINE, asr_model=a.asr_model, asr_device=a.asr_device,
+                    workers={e: a.workers for e in (a.preload or "").split(",") if e} if a.workers else None)
+    for e in [x for x in (a.preload or "").split(",") if x]:
+        print(f"loading {e}...", flush=True)
+        t0 = time.time()
+        svc.load(e)
+        print(f"  {e} ready in {time.time() - t0:.0f}s", flush=True)
+    app = create_app(svc, token=a.token, cors_origins=a.cors.split(",") if a.cors else None)
+    engine = svc.default_engine
+    print(f"FireVoice API on http://{a.host}:{a.port}  (docs: http://{a.host}:{a.port}/docs, default engine {name_of(engine) if engine else '?'})", flush=True)
+    try:
+        uvicorn.run(app, host=a.host, port=a.port, log_level=a.log_level)
+    finally:
+        svc.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

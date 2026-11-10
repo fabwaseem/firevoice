@@ -13,7 +13,9 @@ SAME = 0.75          # cosine similarity above which two segments are taken to b
 
 def _embed(a: np.ndarray, sr: int) -> np.ndarray:
     from resemblyzer import VoiceEncoder, preprocess_wav
-    enc = _embed.__dict__.setdefault("enc", VoiceEncoder(device="cpu"))
+    enc = _embed.__dict__.get("enc")
+    if enc is None:                      # built once: setdefault would build (and load) a new encoder on every call
+        enc = _embed.__dict__["enc"] = VoiceEncoder(device="cpu", verbose=False)
     return enc.embed_utterance(preprocess_wav(np.asarray(a, dtype=np.float32), sr))
 
 

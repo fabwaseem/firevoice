@@ -181,10 +181,33 @@ export function Sidebar() {
     >
       {/* brand + collapse */}
       <div className={cn("flex h-16 shrink-0 items-center", collapsed ? "justify-center" : "justify-between pr-2.5 pl-4")}>
-        <NavLink to="/" className="flex items-center gap-2.5 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-fire/50" aria-label="FireVoice home">
-          <Logo size={30} className="shrink-0 drop-shadow-[0_4px_12px_rgba(255,90,45,0.35)]" />
-          {!collapsed && <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice</span>}
-        </NavLink>
+        {collapsed ? (
+          // compact: the logo is the button that opens the sidebar; pointing at it (or focusing it) shows the open icon
+          <Tooltip content="Expand sidebar" side="right">
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label="Expand sidebar"
+              className="group relative flex size-10 items-center justify-center rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-fire/50"
+            >
+              <Logo
+                size={30}
+                className="shrink-0 drop-shadow-[0_4px_12px_rgba(255,90,45,0.35)] transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0"
+              />
+              <span
+                className="absolute inset-0 flex items-center justify-center rounded-[10px] bg-surface-3/70 text-ink opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+                aria-hidden
+              >
+                <PanelLeftOpen className="size-[18px]" />
+              </span>
+            </button>
+          </Tooltip>
+        ) : (
+          <NavLink to="/" className="flex items-center gap-2.5 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-fire/50" aria-label="FireVoice home">
+            <Logo size={30} className="shrink-0 drop-shadow-[0_4px_12px_rgba(255,90,45,0.35)]" />
+            <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice</span>
+          </NavLink>
+        )}
         {!collapsed && (
           <Tooltip content="Collapse sidebar" side="right">
             <button
@@ -198,18 +221,6 @@ export function Sidebar() {
           </Tooltip>
         )}
       </div>
-      {collapsed && (
-        <Tooltip content="Expand sidebar" side="right">
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label="Expand sidebar"
-            className="mx-auto mb-1 flex size-10 shrink-0 items-center justify-center rounded-[10px] text-faint transition-colors hover:bg-surface-3/70 hover:text-ink"
-          >
-            <PanelLeftOpen className="size-[18px]" />
-          </button>
-        </Tooltip>
-      )}
 
       {/* views: scrolls when the window is short */}
       <nav

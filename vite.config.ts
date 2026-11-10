@@ -4,9 +4,21 @@ import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
+const root = fileURLToPath(new URL(".", import.meta.url));
+
+/** Dev server only: says which checkout it serves, so `tauri dev` never reuses another copy's server (scripts/dev-ui.mjs). */
+const whoami = {
+  name: "firevoice-whoami",
+  configureServer(server: { middlewares: { use: (path: string, fn: (req: unknown, res: { setHeader: (k: string, v: string) => void; end: (b: string) => void }) => void) => void } }) {
+    server.middlewares.use("/__firevoice_dev", (_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ root }));
+    });
+  },
+};
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), whoami],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   clearScreen: false,
   server: {

@@ -1,6 +1,6 @@
 //! The FireVoice backend as a managed sidecar.
 //!
-//! The backend is a standalone Python service (`firevoice serve`); the app never depends on it being started by the
+//! The backend is a standalone Python service (the FireVoice HTTP API); the app never depends on it being started by the
 //! app, and the app works against any running FireVoice server. When the user lets the app manage it, this module:
 //!
 //! * finds the Python that runs it, in this order: `FIREVOICE_BACKEND_PYTHON`; the bundled runtime (built on first
@@ -8,7 +8,7 @@
 //!   repo's `backend/.venv` (linked by `scripts/dev-setup.mjs`, running the code in `backend/`);
 //! * builds the bundled runtime with uv (a private Python 3.12 venv in the app's local data folder, CUDA torch, then
 //!   the backend wheel with its `desktop` extra), reporting progress as `backend-setup` events;
-//! * starts the server (`serve` in `firevoice.cli`) with its output in the app log folder, and stops it (with its engine
+//! * starts the server (`firevoice.server`) with its output in the app log folder, and stops it (with its engine
 //!   worker processes) on request and when the app exits.
 
 use std::fs::{self, File, OpenOptions};
@@ -210,12 +210,16 @@ pub fn backend_start(app: AppHandle, st: State<Backend>, port: Option<u16>) -> R
     }
     let port = port.unwrap_or(8787);
     let log = log_path(&app);
+    // keep one older log; a log never grows past about 5 MB
+    if fs::metadata(&log).map(|m| m.len() > 5_000_000).unwrap_or(false) {
+        let _ = fs::rename(&log, log.with_extension("log.1"));
+    }
     let mut f = OpenOptions::new().create(true).append(true).open(&log).map_err(|e| format!("Could not open the log file {}: {e}", log.display()))?;
     let _ = writeln!(f, "\n===== starting FireVoice backend ({mode}) on port {port} =====");
     let err = f.try_clone().map_err(|e| e.to_string())?;
     let mut cmd = Command::new(&python);
-    // not `-m firevoice.cli`: release builds ship the backend compiled, and Python cannot run a compiled module as a script
-    cmd.args(["-X", "utf8", "-c", "import sys; from firevoice.cli import main; sys.exit(main())", "serve", "--port", &port.to_string()])
+    // not `-m firevoice.server`: release builds ship the backend compiled, and Python cannot run a compiled module as a script
+    cmd.args(["-X", "utf8", "-c", "import sys; from firevoice.server import main; sys.exit(main())", "--port", &port.to_string()])
         .env("PYTHONUNBUFFERED", "1")
         .env("FIREVOICE_DESKTOP", "1")
         .stdin(Stdio::null())
