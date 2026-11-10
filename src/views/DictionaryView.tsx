@@ -136,7 +136,7 @@ export function DictionaryView() {
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <div>
             <Label htmlFor="d-match">Written</Label>
-            <Input id="d-match" value={draft.match} placeholder="Ayesha, SQL, Nguyen" onChange={(e) => setDraft({ ...draft, match: e.target.value })} />
+            <Input id="d-match" value={draft.match} placeholder="Siobhan, SQL, Nguyen" onChange={(e) => setDraft({ ...draft, match: e.target.value })} />
           </div>
           <div>
             <Label htmlFor="d-say">Say it as</Label>

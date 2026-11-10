@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Download, Layers } from "lucide-react";
 import { toast } from "sonner";
@@ -7,19 +6,21 @@ import { errMessage } from "@/lib/api/hooks";
 import { saveBlob } from "@/lib/audio";
 import { Button, Card, NativeSelect } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
+import { useReleaseOnReplace, useSessionState } from "@/stores/session";
 
 type Mode = "vocals" | "denoise" | "dereverb";
 const REST: Record<Mode, string> = { vocals: "music and effects", denoise: "noise", dereverb: "room echo" };
 
 /** Pull a voice out of music and effects, noise or room echo (the separator engine). */
 export function SeparateCard() {
-  const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<Mode>("vocals");
-  const [busy, setBusy] = useState(false);
-  const [out, setOut] = useState<{ voice: Blob; vUrl: string; rUrl: string; rest?: Blob } | null>(null);
+  const [file, setFile] = useSessionState<File | null>("tool.separate.file", null);
+  const [mode, setMode] = useSessionState<Mode>("tool.separate.mode", "vocals");
+  const [busy, setBusy] = useSessionState("tool.separate.busy", false);
+  const [out, setOut] = useSessionState<{ voice: Blob; vUrl: string; rUrl: string; rest?: Blob } | null>("tool.separate.out", null);
   const qc = useQueryClient();
-  // object URLs made here are released when replaced or when the card goes away
-  useEffect(() => () => { if (out) { URL.revokeObjectURL(out.vUrl); if (out.rUrl.startsWith("blob:")) URL.revokeObjectURL(out.rUrl); } }, [out]);
+  // object URLs made here are released when a new separation replaces them
+  useReleaseOnReplace(out?.vUrl);
+  useReleaseOnReplace(out?.rUrl);
 
   const run = async () => {
     if (!file) return;

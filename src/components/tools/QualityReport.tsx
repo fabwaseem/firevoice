@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Gauge } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
@@ -7,6 +6,7 @@ import type { QualityReport } from "@/lib/api/types";
 import { Badge, Button, Card, NativeSelect } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { TrySample } from "@/components/tools/TrySample";
+import { useSessionState } from "@/stores/session";
 
 function Score({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
@@ -92,10 +92,10 @@ export function QualityView({ r }: { r: QualityReport }) {
 /** Check any file: upload, optionally pick the voice it should sound like. */
 export function QualityCheck() {
   const voices = useVoices();
-  const [file, setFile] = useState<File | null>(null);
-  const [voice, setVoice] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [r, setR] = useState<QualityReport | null>(null);
+  const [file, setFile] = useSessionState<File | null>("tool.quality.file", null);
+  const [voice, setVoice] = useSessionState("tool.quality.voice", "");
+  const [busy, setBusy] = useSessionState("tool.quality.busy", false);
+  const [r, setR] = useSessionState<QualityReport | null>("tool.quality.r", null);
 
   const run = async () => {
     if (!file) return;

@@ -11,11 +11,12 @@ import { PageHeader } from "@/components/shell/PageHeader";
 import { ArtTile, Badge, Button, Card, EmptyState, Label, NativeSelect, Slider, Textarea } from "@/components/ui";
 import { cn, fmtTime } from "@/lib/utils";
 import { RecentHistory } from "@/components/history/HistoryList";
+import { useReleaseOnReplace, useSessionState } from "@/stores/session";
 
-const EXAMPLE = `Ayesha: Assalam o Alaikum, and welcome back to the show!
-Bilal: Thanks for having me. (laughs) I promise to keep it short this time.
-Ayesha: You said that last week too.
-Bilal: Fair. But this time I mean it.
+const EXAMPLE = `Evelyn: Hello, and welcome back to the show!
+Arthur: Thanks for having me. (laughs) I promise to keep it short this time.
+Evelyn: You said that last week too.
+Arthur: Fair. But this time I mean it.
 Narrator: He did not keep it short.`;
 
 type Cast = Record<string, { voice?: string; style?: string }>;
@@ -27,12 +28,12 @@ export function DialogueView() {
   const studioEngine = useStudio((s) => s.engine);
   const qc = useQueryClient();
   const [script, setScript] = useState(() => localStorage.getItem("firevoice.dialogue") || EXAMPLE);   // a ready example on first visit
-  const [speakers, setSpeakers] = useState<string[]>([]);
-  const [cast, setCast] = useState<Cast>({});
-  const [turnsCount, setTurnsCount] = useState(0);
-  const [gap, setGap] = useState(350);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [result, setResult] = useState<(DialogueResult & { url: string; blob: Blob }) | null>(null);
+  const [speakers, setSpeakers] = useSessionState<string[]>("dialogue.speakers", []);
+  const [cast, setCast] = useSessionState<Cast>("dialogue.cast", {});
+  const [turnsCount, setTurnsCount] = useSessionState("dialogue.turnsCount", 0);
+  const [gap, setGap] = useSessionState("dialogue.gap", 350);
+  const [busy, setBusy] = useSessionState<string | null>("dialogue.busy", null);
+  const [result, setResult] = useSessionState<(DialogueResult & { url: string; blob: Blob }) | null>("dialogue.result", null);
   const [now, setNow] = useState(0);
   const player = useRef<HTMLAudioElement>(null);
   const preview = useRef<HTMLAudioElement | null>(null);
@@ -60,7 +61,7 @@ export function DialogueView() {
   // the cast is ready as soon as the page opens with a script (the example on a first visit)
   const detected = useRef(false);
   useEffect(() => {
-    if (!detected.current && script.trim()) {
+    if (!detected.current && script.trim() && speakers.length === 0) {   // a cast from an earlier visit stays
       detected.current = true;
       void detect(script);
     }
@@ -68,8 +69,8 @@ export function DialogueView() {
   }, []);
 
   const body = () => ({ script, cast, gap_ms: gap, defaults: { engine: studioEngine ?? undefined } });
-  // the mix's object URL is released when a new mix replaces it or the page goes away
-  useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
+  // the mix's object URL is released when a new mix replaces it (it stays while you are on other pages)
+  useReleaseOnReplace(result?.url);
 
   const render = async () => {
     setBusy("render");
@@ -109,7 +110,7 @@ export function DialogueView() {
             <Button size="sm" variant="ghost" onClick={() => { setScript(EXAMPLE); void detect(EXAMPLE); }}>Example</Button>
           </div>
           <Textarea rows={14} value={script} onChange={(e) => setScript(e.target.value)} aria-label="Dialogue script"
-            placeholder={"Ayesha: Assalam o Alaikum! Welcome to the show.\nBilal: Thanks for having me. (laughs)\nNarrator: And so it began."} />
+            placeholder={"Evelyn: Hello, and welcome to the show.\nArthur: Thanks for having me. (laughs)\nNarrator: And so it began."} />
           <p className="mt-2 text-[12px] text-faint">
             Sound cues on their own line: <code className="font-mono">[sfx: a door creaks open, 2s]</code> and one{" "}
             <code className="font-mono">[music: calm lo-fi piano]</code> bed under everything (needs the sound engines from Engines).

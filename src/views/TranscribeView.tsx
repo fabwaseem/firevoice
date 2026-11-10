@@ -1,4 +1,3 @@
-import { useRef, useState } from "react";
 import { Ear, Mic, Square } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +11,7 @@ import { Button, Card, CardBody, CardHeader, EmptyState, Input, Label, LabeledSl
 import { AudioSource, type SourceFile } from "@/components/transcribe/AudioSource";
 import { TranscriptResult } from "@/components/transcribe/TranscriptResult";
 import { TrySample } from "@/components/tools/TrySample";
+import { useSessionState } from "@/stores/session";
 
 const LANG_OPTIONS = [
   { value: "auto", label: "Auto detect" },
@@ -21,16 +21,18 @@ const LANG_OPTIONS = [
     .map(([value, label]) => ({ value, label })),
 ];
 
+
+// shared across visits: Stop still works after leaving the page and coming back
+const abortRef: { current: AbortController | null } = { current: null };
 export function TranscribeView() {
-  const [source, setSource] = useState<SourceFile | null>(null);
-  const [language, setLanguage] = useState("auto");
-  const [beam, setBeam] = useState(5);
-  const [keyterms, setKeyterms] = useState("");
-  const [diarize, setDiarize] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ data: STTResult; source: SourceFile; trackId: string } | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const [source, setSource] = useSessionState<SourceFile | null>("transcribe.source", null);
+  const [language, setLanguage] = useSessionState("transcribe.language", "auto");
+  const [beam, setBeam] = useSessionState("transcribe.beam", 5);
+  const [keyterms, setKeyterms] = useSessionState("transcribe.keyterms", "");
+  const [diarize, setDiarize] = useSessionState("transcribe.diarize", false);
+  const [busy, setBusy] = useSessionState("transcribe.busy", false);
+  const [error, setError] = useSessionState<string | null>("transcribe.error", null);
+  const [result, setResult] = useSessionState<{ data: STTResult; source: SourceFile; trackId: string } | null>("transcribe.result", null);
   const qc = useQueryClient();
 
   const run = async () => {
@@ -81,7 +83,7 @@ export function TranscribeView() {
               <LabeledSlider label="Accuracy" value={beam} onChange={setBeam} min={1} max={10} step={1} hint="Higher is more careful and slower" disabled={busy} onReset={() => setBeam(5)} />
               <div>
                 <Label htmlFor="stt-keys" hint="comma-separated">Key terms</Label>
-                <Input id="stt-keys" value={keyterms} onChange={(e) => setKeyterms(e.target.value)} placeholder="FireVoice, Ayesha, Inferno" disabled={busy} />
+                <Input id="stt-keys" value={keyterms} onChange={(e) => setKeyterms(e.target.value)} placeholder="FireVoice, Siobhan, Inferno" disabled={busy} />
               </div>
               <Switch checked={diarize} onChange={setDiarize} label="Label who speaks" description="Speaker 1, Speaker 2… for interviews and podcasts" disabled={busy} />
               <div className="flex items-center gap-2 pt-1">

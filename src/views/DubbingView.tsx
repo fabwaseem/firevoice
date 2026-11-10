@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Download, Languages, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import type { DubLine } from "@/lib/api/types";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { Badge, Button, Card, Label, NativeSelect, ProgressBar, Switch } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
+import { useSessionState } from "@/stores/session";
 
 const NAMES: Record<string, string> = {
   en: "English", de: "German", es: "Spanish", fr: "French", it: "Italian", pt: "Portuguese", nl: "Dutch", pl: "Polish", ru: "Russian",
@@ -23,19 +24,19 @@ export function DubbingView() {
   const qc = useQueryClient();
   const voices = useVoices();
   const langs = useQuery({ queryKey: ["dub-languages"], queryFn: api.dubLanguages, staleTime: Infinity });
-  const [file, setFile] = useState<File | null>(null);
-  const [to, setTo] = useState(() => localStorage.getItem("firevoice.dubTo") ?? "es");
-  const [from, setFrom] = useState("auto");
-  const [voice, setVoice] = useState("");
-  const [keep, setKeep] = useState(false);
-  const [consent, setConsent] = useState(false);
-  const [background, setBackground] = useState(0);
-  const [better, setBetter] = useState(false);
-  const [music, setMusic] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [file, setFile] = useSessionState<File | null>("dub.file", null);
+  const [to, setTo] = useSessionState("dub.to", () => localStorage.getItem("firevoice.dubTo") ?? "es");
+  const [from, setFrom] = useSessionState("dub.from", "auto");
+  const [voice, setVoice] = useSessionState("dub.voice", "");
+  const [keep, setKeep] = useSessionState("dub.keep", false);
+  const [consent, setConsent] = useSessionState("dub.consent", false);
+  const [background, setBackground] = useSessionState("dub.background", 0);
+  const [better, setBetter] = useSessionState("dub.better", false);
+  const [music, setMusic] = useSessionState("dub.music", false);
+  const [jobId, setJobId] = useSessionState<string | null>("dub.jobId", null);
+  const [busy, setBusy] = useSessionState("dub.busy", false);
   const job = useJob(jobId).data;
-  const [lines, setLines] = useState<DubLine[]>([]);
+  const [lines, setLines] = useSessionState<DubLine[]>("dub.lines", []);
 
   useEffect(() => localStorage.setItem("firevoice.dubTo", to), [to]);
   const sorted = useMemo(

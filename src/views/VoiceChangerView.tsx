@@ -14,16 +14,17 @@ import { SeparateCard } from "@/components/tools/SeparateCard";
 import { Badge, Button, Card, Label, NativeSelect } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
 import { RecentHistory } from "@/components/history/HistoryList";
+import { useReleaseOnReplace, useSessionState } from "@/stores/session";
 
 /** Voice changer: keep the words, timing and delivery of a recording, swap the voice. */
 export function VoiceChangerView() {
   const voices = useVoices();
   const studioVoice = useStudio((s) => s.voice);
-  const [source, setSource] = useState<{ blob: Blob; name: string; url: string } | null>(null);
-  const [check, setCheck] = useState<ClipCheck | null>(null);
-  const [voice, setVoice] = useState(studioVoice);
-  const [result, setResult] = useState<{ blob: Blob; url: string; duration: number } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [source, setSource] = useSessionState<{ blob: Blob; name: string; url: string } | null>("changer.source", null);
+  const [check, setCheck] = useSessionState<ClipCheck | null>("changer.check", null);
+  const [voice, setVoice] = useSessionState("changer.voice", studioVoice);
+  const [result, setResult] = useSessionState<{ blob: Blob; url: string; duration: number } | null>("changer.result", null);
+  const [busy, setBusy] = useSessionState("changer.busy", false);
   const [recording, setRecording] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -32,9 +33,9 @@ export function VoiceChangerView() {
 
   // leaving the page stops a recording but not a conversion: it finishes and is kept in History
   useEffect(() => () => recRef.current?.stop(), []);
-  // release the previews' object URLs when they are replaced or the page goes away
-  useEffect(() => () => { if (source) URL.revokeObjectURL(source.url); }, [source]);
-  useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
+  // release a preview's object URL when it is replaced (not when the page closes: the preview is still here on return)
+  useReleaseOnReplace(source?.url);
+  useReleaseOnReplace(result?.url);
 
   const use = (blob: Blob, name: string) => {
     const n = ++latest.current;

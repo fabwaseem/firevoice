@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ScanSearch } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
@@ -6,12 +5,13 @@ import { errMessage } from "@/lib/api/hooks";
 import type { WatermarkResult } from "@/lib/api/types";
 import { Badge, Button, Card } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
+import { useSessionState } from "@/stores/session";
 
 /** Is a file AI speech? Every FireVoice output carries an inaudible watermark; this finds it again. */
 export function WatermarkCheck() {
-  const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [r, setR] = useState<WatermarkResult | null>(null);
+  const [file, setFile] = useSessionState<File | null>("tool.watermark.file", null);
+  const [busy, setBusy] = useSessionState("tool.watermark.busy", false);
+  const [r, setR] = useSessionState<WatermarkResult | null>("tool.watermark.r", null);
 
   const check = async () => {
     if (!file) return;

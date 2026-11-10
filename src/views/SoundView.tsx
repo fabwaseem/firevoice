@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Music, Sparkles, Waves } from "lucide-react";
@@ -9,6 +8,7 @@ import { usePlayer } from "@/stores/player";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { RecentHistory } from "@/components/history/HistoryList";
 import { Badge, Button, Card, Label, Segmented } from "@/components/ui";
+import { useSessionState } from "@/stores/session";
 
 type Kind = "sfx" | "music";
 
@@ -20,11 +20,11 @@ const IDEAS: Record<Kind, string[]> = {
 /** Sound effects, ambience and music from a description (Crackle, Bonfire). Everything made is kept in History. */
 export function SoundView() {
   const engines = useEngines("sfx");
-  const [kind, setKind] = useState<Kind>("sfx");
-  const [prompt, setPrompt] = useState(IDEAS.sfx[0]);
-  const [seconds, setSeconds] = useState(5);
-  const [seed, setSeed] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [kind, setKind] = useSessionState<Kind>("sound.kind", "sfx");
+  const [prompt, setPrompt] = useSessionState("sound.prompt", IDEAS.sfx[0]);
+  const [seconds, setSeconds] = useSessionState("sound.seconds", 5);
+  const [seed, setSeed] = useSessionState("sound.seed", "");
+  const [busy, setBusy] = useSessionState("sound.busy", false);
   const qc = useQueryClient();
   const load = usePlayer((s) => s.load);
   const engineName = kind === "music" ? "musicgen" : "audioldm2";

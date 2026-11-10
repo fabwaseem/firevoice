@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { useSessionState } from "@/stores/session";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
@@ -45,11 +46,14 @@ function trackMeta(req: TTSRequest, engine?: string): Pick<Track, "title" | "sub
   };
 }
 
+// One render at a time, shared by every visit to Speak: leaving the page and coming back finds it as it was
+// (still rendering, with its Stop button, or done with its result).
+const abortRef: { current: AbortController | null } = { current: null };
+const chunkPlayerRef: { current: ChunkPlayer | null } = { current: null };
+
 /** Orchestrates whole-file and streamed renders and feeds the global player. */
 export function useRender() {
-  const [state, setState] = useState<RenderState>(idle);
-  const abortRef = useRef<AbortController | null>(null);
-  const chunkPlayerRef = useRef<ChunkPlayer | null>(null);
+  const [state, setState] = useSessionState<RenderState>("speak.render", idle);
 
   // Live mode: pause/resume by suspending the AudioContext; follow volume.
   useEffect(() => {

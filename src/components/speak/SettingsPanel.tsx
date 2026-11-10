@@ -8,12 +8,29 @@ import { Badge, Button, Label, LabeledSlider, Select, Switch, Textarea, Tooltip 
 import { cn, langName } from "@/lib/utils";
 import { ParamControl } from "./ParamControl";
 
-function Section({ title, children, defaultOpen = true, right }: { title: string; children: React.ReactNode; defaultOpen?: boolean; right?: React.ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
+/** A collapsible group. Whether it is open is remembered (per section) across pages and restarts. */
+function Section({ title, children, defaultOpen = false, right }: { title: string; children: React.ReactNode; defaultOpen?: boolean; right?: React.ReactNode }) {
+  const key = `firevoice.speak.open.${title.toLowerCase()}`;
+  const [open, setOpenState] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? defaultOpen : v === "1";
+    } catch {
+      return defaultOpen;
+    }
+  });
+  const setOpen = (v: boolean) => {
+    setOpenState(v);
+    try {
+      localStorage.setItem(key, v ? "1" : "0");
+    } catch {
+      /* storage unavailable: the choice lasts this session */
+    }
+  };
   return (
     <section className="border-t border-line first:border-t-0">
       <div className="flex items-center justify-between py-3">
-        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase hover:text-ink">
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="-mx-1 flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-fire/40">
           <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
           {title}
         </button>
@@ -49,7 +66,7 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
 
   return (
     <div className={cn("text-ink", disabled && "pointer-events-none opacity-60")}>
-      <Section title="Engine" right={engine && (engine.loaded ? <Badge tone="ok" dot>Loaded</Badge> : <Badge>Loads on first use</Badge>)}>
+      <Section title="Engine" defaultOpen right={engine && (engine.loaded ? <Badge tone="ok" dot>Loaded</Badge> : <Badge>Loads on first use</Badge>)}>
         <Select value={s.engine ?? engine?.name ?? ""} onChange={(v) => s.set({ engine: v, params: {} })} options={engineOptions} placeholder="Default engine" ariaLabel="Engine" />
         {engine?.tagline && (
           <p className="-mt-2 text-[12px] leading-snug text-muted">
