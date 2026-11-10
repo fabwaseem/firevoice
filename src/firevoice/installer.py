@@ -389,12 +389,12 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
         with _venv_lock(m.venv):
             if build:
                 paths.engines_dir().mkdir(parents=True, exist_ok=True)
-                progress(k, steps, f"creating the {m.venv} venv (Python {m.python})")
+                progress(k, steps, "Preparing a private Python for this engine")
                 _run([u, "venv", "--allow-existing", "--python", m.python, str(paths.engines_dir() / m.venv)], log, cancel, env)
                 _write_marker(m, "building")
                 k += 1
                 if m.torch:
-                    progress(k, steps, f"installing torch {m.torch} for CUDA 12.8 (about 3 GB the first time)")
+                    progress(k, steps, "Installing GPU support (about 3 GB the first time)")
                     pk = [f"torch=={m.torch}"] + ([f"torchaudio=={m.torch}"] if m.torchaudio else [])
                     _run([u, "pip", "install", "--python", str(py), *pk, "--index-url", TORCH_INDEX], log, cancel, env)
                 k += 1
@@ -402,7 +402,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 if m.git:
                     url, commit, folder = m.git
                     repo_dir = paths.engines_dir() / folder
-                    progress(k, steps, f"fetching the engine's code ({url.rsplit('/', 1)[-1]} at {commit[:10]})")
+                    progress(k, steps, "Fetching the engine's code")
                     if not (repo_dir / ".git").exists():
                         _git(["clone", "--filter=blob:none", "--no-checkout", url, str(repo_dir)], log, cancel, env)
                     _git(["-C", str(repo_dir), "fetch", "--depth", "1", "origin", commit], log, cancel, env)
@@ -413,7 +413,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                     if m.editable:
                         extra += ["-e", str(repo_dir)]
                 pk = m.packages + (m.windows_extra if os.name == "nt" else [])
-                progress(k, steps, f"installing {', '.join([p.split('==')[0] for p in pk] + (['the engine code'] if extra else []))}")
+                progress(k, steps, "Installing the engine")
                 # keep the CUDA torch: the engine packages must not swap it for PyPI's CPU build
                 pin = [f"torch=={m.torch}"] + ([f"torchaudio=={m.torch}"] if m.torchaudio else []) if m.torch else []
                 ovr: list[str] = []
@@ -428,7 +428,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 dest = paths.weights(folder)
                 dest.mkdir(parents=True, exist_ok=True)
                 total = _repo_size(repo, rev, m.skip)
-                label = f"downloading {repo}" + (f" ({total / 1e9:.1f} GB)" if total else "")
+                label = "Downloading the model" + (f" ({total / 1e9:.1f} GB)" if total else "")
                 progress(k, steps, label)
                 stop = threading.Event()
                 cache = _hub_cache_dir(repo)
@@ -447,7 +447,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                     stop.set()
                 k += 1
             if warm:
-                progress(k, steps, "first load: fetching the engine's helper models")
+                progress(k, steps, "First start: fetching helper models")
                 repo_dir = str(paths.engines_dir() / m.git[2]) if m.git else None
                 wenv = {**env, "PYTHONPATH": repo_dir or "", "PYTHONUTF8": "1"}
                 wdir = paths.weights(_weights(m)[0][1] if m.weights else m.engine)
@@ -457,7 +457,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 (paths.engines_dir() / m.venv / f".warm-{m.engine}").write_text(m.engine, encoding="utf-8")
                 k += 1
             if m.check:
-                progress(k, steps, f"checking that {m.check} imports")
+                progress(k, steps, "Checking the install")
                 # the engine worker puts a checkout on PYTHONPATH and runs inside it; check the same way
                 rd = str(paths.engines_dir() / m.git[2]) if m.git else None
                 cenv = {**env, "PYTHONPATH": rd} if rd else env
