@@ -267,3 +267,10 @@ def test_desktop_backend_serves_api_and_docs_but_no_playground(svc, monkeypatch)
     c2 = TestClient(create_app(svc))
     assert c2.get("/playground").status_code == 200 and c2.get("/", follow_redirects=False).headers["location"] == "/playground"
     assert TestClient(create_app(svc, playground=False)).get("/playground").status_code == 404
+
+
+def test_cors_exposes_history_id(c):
+    # the desktop app reads X-History-Id after a separation; without exposing it, the browser hides it and the app
+    # runs the separation twice
+    r = c.get("/health", headers={"Origin": "http://localhost:1420"})
+    assert "X-History-Id" in r.headers.get("access-control-expose-headers", "")

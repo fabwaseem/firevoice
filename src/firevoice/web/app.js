@@ -928,7 +928,7 @@ async function loadEngines() {
           : `<button class="btn sm ghost" data-go="${engineUse(e).hash}" data-engine="${e.name}" ${e.ready ? "" : "disabled"}>${engineUse(e).label}</button>`}
         ${e.ready && e.installable && !e.loaded ? `<button class="btn sm ghost" data-uninstall="${e.name}" title="Delete this engine's venv">Remove</button>` : ""}</div></div>`).join("");
     $$("#ecards [data-install]").forEach(b => b.onclick = () => installEngine(b.dataset.install, b));
-    $$("#ecards [data-howto]").forEach(b => b.onclick = async () => { try { const p = await API.req(`/api/v1/engines/${b.dataset.howto}/install?sizes=false`); $(`#inst-${b.dataset.howto}`).innerHTML = `<div class="notes">${esc(p.manual || "Not installable from here.")}</div>`; } catch (e) { toast(e.message, "bad"); } });
+    $$("#ecards [data-howto]").forEach(b => b.onclick = async () => { try { const p = await API.req(`/api/v1/engines/${b.dataset.howto}/install?sizes=false`); $(`#inst-${b.dataset.howto}`).innerHTML = `<div class="notes">${esc(p.manual ? "This engine comes with FireVoice itself. Reinstall FireVoice with GPU support if it is missing." : "Not installable from here.")}</div>`; } catch (e) { toast(e.message, "bad"); } });
     $$("#ecards [data-uninstall]").forEach(b => b.onclick = async () => {
       const keep = !confirm(`Remove ${engName(b.dataset.uninstall)}'s Python environment?\n\nOK also deletes its downloaded weights; Cancel keeps the weights.`);
       if (!confirm(`Remove ${engName(b.dataset.uninstall)} now?`)) return;
@@ -946,10 +946,13 @@ async function loadEngines() {
   } catch (e) { toast(e.message, "bad"); }
 }
 
+// install steps in plain words: the plan's own text names packages, model repos and folders
+const STEP_LABEL = { venv: "A private workspace for the engine", code: "The engine's program files", torch: "Graphics card support",
+  packages: "The engine's software", weights: "The engine's model", check: "A quick check that it works" };
 async function installEngine(name, btn) {
   try {
     const plan = await API.req(`/api/v1/engines/${name}/install`);
-    const todo = plan.steps.filter(s => !s.done).map(s => "• " + s.what).join("\n");
+    const todo = plan.steps.filter(s => !s.done).map(s => "• " + (STEP_LABEL[s.step] || "Finishing touches")).join("\n");
     const code = plan.repo_code ? `
 
 This engine runs code from its own repository (pinned to a fixed version). Install only engines you trust.` : "";

@@ -165,7 +165,7 @@ def report(a: np.ndarray, sr: int, ref: Optional[np.ndarray] = None, ref_sr: Opt
     out["drift"] = drift(a, sr, ref, ref_sr)
     notes = []
     if out["mos"] and out["mos"]["overall"] < 3.0:
-        notes.append(f"sounds rough (DNSMOS overall {out['mos']['overall']})")
+        notes.append(f"sounds rough (listener score {out['mos']['overall']} of 5)")
     if out["mos"] and out["mos"]["background"] < 3.5:
         notes.append("noticeable background noise")
     if out["similarity"] and not out["similarity"]["same_speaker"]:
