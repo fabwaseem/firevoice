@@ -140,6 +140,25 @@ Updates are required. At start the app asks the feed
 After an update the app updates its private backend runtime once (only the FireVoice package is reinstalled; torch and
 the rest stay), with progress on screen.
 
+## Dictation
+
+Dictation types what you say into any program (Settings are on the Dictation page). The pieces:
+
+* **Hotkey and typing, in the desktop shell** (`src-tauri/src/dictation.rs`): a global hotkey (press to start and stop,
+  or hold), the microphone read natively (so it works with the window hidden), keystrokes or paste into the focused
+  program, a tray icon that keeps the hotkey alive when the window is closed, and the small overlay window
+  (`overlay.html`, `src/overlay/`) that never takes keyboard focus.
+* **Live transcription, in the backend** (`backend/src/firevoice/dictation.py`, `WS /api/v1/dictate`): the audio
+  streams in; every 0.3 s the unsettled part is transcribed again with the loaded Whisper model, and a word is released
+  once two passes agree on it, so text that has been given out is never taken back. The window is cut as words settle,
+  so a pass costs the same at the first second and the fifth minute.
+* **The app side** (`src/views/DictationView.tsx`, `src/stores/dictation.ts`, `src/components/dictation/`): settings,
+  history and totals, saved on this computer; the settings are sent to the shell whenever they change.
+
+Two modes: "as you speak" types each word as it becomes certain; "when you stop" transcribes the whole dictation once
+more (beam search, with your names as hints) and inserts it in one go. While Ctrl or Alt is held down nothing is typed
+(it would trigger shortcuts), so in hold-to-talk mode the words wait for the key to come up.
+
 ## Security
 
 The release window has a strict content security policy (scripts only from the app; network and media to any
@@ -156,7 +175,8 @@ src/
   components/ui/  design-system primitives (Radix + Tailwind tokens)
   components/shell/  sidebar, player bar, page header
   components/<view>/ view-specific pieces
-  views/          Home, Speak, Voices, Transcribe, Jobs, Engines, Styles, Settings
+  views/          Home, Speak, Voices, Transcribe, Dictation, Jobs, Engines, Styles, Settings
+  overlay/        the dictation overlay window (its own page: overlay.html)
 src-tauri/        Rust shell, capabilities, icons
 ```
 

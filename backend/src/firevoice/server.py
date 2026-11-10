@@ -27,6 +27,8 @@ App API (/api/v1)
   POST   /api/v1/tts/stream               TTS request -> Server-Sent Events, one event per sentence chunk as it is ready
   POST   /api/v1/tts/stream.pcm           TTS request -> raw 16-bit PCM bytes as they are ready (X-Sample-Rate header)
   POST   /api/v1/stt                      multipart: file, language, beam_size -> text + word times
+  WS     /api/v1/dictate                  live dictation: microphone PCM in, text out as it becomes certain
+  POST   /api/v1/dictate/warm             load the speech model so the first dictation starts at once
   POST   /api/v1/jobs                     {"kind": "tts"|"batch"|"design", "payload": {...}, "title": ""}
   GET    /api/v1/jobs                     ?status=&kind=&limit=
   GET    /api/v1/jobs/events              SSE of every job event (?since=<seq> to resume)
@@ -169,7 +171,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         def __pydantic_init_subclass__(cls, **kwargs):
             _expose(**{cls.__name__: cls})
 
-    _expose(Request=Request, UploadFile=UploadFile, Response=Response)
+    from fastapi import WebSocket, WebSocketDisconnect
+    _expose(Request=Request, UploadFile=UploadFile, Response=Response, WebSocket=WebSocket)
 
     from . import __version__
 
@@ -868,6 +871,106 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
             return Response(text, media_type=mt, headers=hh)
         return {**r, "history_id": hid}
 
+    # ------------------------------------------------------------------ live dictation
+    @app.post("/api/v1/dictate/warm", dependencies=deps, tags=["stt"])
+    async def dictate_warm():
+        """Load the speech model now, so the first dictation starts at once. -> {"model", "device"}"""
+        return await run_in_threadpool(svc.dictation_warm)
+
+    @app.websocket("/api/v1/dictate")
+    async def dictate(ws: WebSocket):
+        """Live dictation: speech in as it is spoken, text out as soon as it is certain.
+
+        Client: first {"type": "start", "language": "auto"|code, "keyterms": [...], "commands": true, "fillers": true,
+        "refine": false, "sample_rate": 16000}; then binary messages of 16-bit little-endian mono PCM at that rate, as
+        the microphone delivers them; {"type": "stop"} when the speaker is done; {"type": "cancel"} to drop it all.
+        Server: {"type": "ready"}; {"type": "partial", "commit", "text", "tentative"} whenever something changes:
+        "commit" is new text that is final (append it; it is never taken back), "text" everything final so far,
+        "tentative" the still-changing guess after it; {"type": "final", "commit", "text", "replace", "seconds",
+        "language"} after stop, then the connection closes. With "refine" a short dictation is transcribed once more
+        as a whole at the end: "replace": true then means "text" is the better version of everything (for clients
+        that insert only at the end). "commands" turns spoken "new line" / "new paragraph" into line breaks, "fillers"
+        drops um and uh. {"type": "error", "code", "message"} on failure. Auth: ?token= or the usual headers."""
+        import asyncio
+
+        import numpy as np
+        given = (ws.headers.get("authorization", "").removeprefix("Bearer ").strip() or ws.headers.get("x-api-key") or ws.query_params.get("token"))
+        if token and not _same(given, token):
+            await ws.close(code=4401)
+            return
+        await ws.accept()
+        try:
+            first = await ws.receive_json()
+            if first.get("type") != "start":
+                raise FireVoiceError("bad_request", 'the first message must be {"type": "start"}')
+            rate = int(first.get("sample_rate") or 16000)
+            if not 8000 <= rate <= 96000:
+                raise FireVoiceError("bad_request", "sample_rate must be between 8000 and 96000")
+            live = await run_in_threadpool(lambda: svc.dictation(
+                language=first.get("language"), keyterms=first.get("keyterms") or None, commands=bool(first.get("commands", True)),
+                fillers=bool(first.get("fillers", True)), refine=bool(first.get("refine", False))))
+        except FireVoiceError as err:
+            await ws.send_json({"type": "error", "code": err.code, "message": err.message})
+            await ws.close()
+            return
+        except WebSocketDisconnect:
+            return
+        except Exception as err:  # noqa: BLE001
+            from .service import friendly_error
+            await ws.send_json({"type": "error", "code": "internal", "message": friendly_error(err)})
+            await ws.close()
+            return
+        await ws.send_json({"type": "ready"})
+        state = {"stop": False, "cancel": False, "gone": False}
+
+        async def receive():
+            from .asr import _resample16k
+            try:
+                while True:
+                    m = await ws.receive()
+                    if m.get("type") == "websocket.disconnect":
+                        state["gone"] = True
+                        return
+                    if m.get("bytes"):
+                        pcm = np.frombuffer(m["bytes"][: len(m["bytes"]) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
+                        live.feed(_resample16k(pcm, rate))
+                    elif m.get("text"):
+                        t = json.loads(m["text"]).get("type")
+                        if t in ("stop", "cancel"):
+                            state[t] = True
+                            return
+            except (WebSocketDisconnect, RuntimeError):
+                state["gone"] = True
+
+        rx = asyncio.ensure_future(receive())
+        try:
+            while not rx.done():
+                ev = await run_in_threadpool(live.step)
+                if ev:
+                    await ws.send_json({"type": "partial", **ev})
+                else:
+                    await asyncio.sleep(0.04)
+            if state["stop"]:
+                ev = await run_in_threadpool(live.finish)
+                await ws.send_json({"type": "final", **ev, "seconds": round(live.total, 2), "language": live.language})
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        except Exception as err:  # noqa: BLE001
+            import logging
+            logging.getLogger("firevoice").exception("dictation failed")
+            from .service import friendly_error
+            try:
+                await ws.send_json({"type": "error", "code": "internal", "message": friendly_error(err)})
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            rx.cancel()
+            if not state["gone"]:
+                try:
+                    await ws.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
     # ------------------------------------------------------------------ OpenAI-compatible
     class OAISpeech(BaseModel):
         model_config = ConfigDict(extra="ignore")
@@ -914,8 +1017,6 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return {"text": r.get("text_roman") or r["text"]}
 
     # ------------------------------------------------------------------ WebSocket: text in as it arrives, audio out
-    from fastapi import WebSocket, WebSocketDisconnect
-    _expose(WebSocket=WebSocket)
 
     @app.websocket("/api/v1/tts/ws")
     async def tts_ws(ws: WebSocket):

@@ -365,6 +365,53 @@ It returns:
  "words": [{"text", "start", "end", "speaker"?}], "segments": [{"start", "end", "text", "speaker"?}]}
 ```
 
+### Live dictation (speech in as it is spoken)
+
+`WS /api/v1/dictate` turns a microphone stream into text as it is spoken. A word is sent only once two passes over the
+audio agree on it, and what has been sent is never taken back, so a client can type it straight into another program.
+`POST /api/v1/dictate/warm` loads the speech model ahead of time (the desktop app calls it at start-up), so the first
+dictation begins at once.
+
+Client messages:
+
+1. `{"type": "start", "language": "auto", "keyterms": [], "commands": true, "fillers": true, "refine": false, "sample_rate": 16000}`
+   first. `language` is `auto` (detected from the first words) or a code; `keyterms` are names and jargon to spell
+   right (the pronunciation dictionary's words are added); `commands` turns the spoken "new line" / "new paragraph"
+   into line breaks; `fillers` drops um and uh; `sample_rate` is the rate of the audio you send (8000 to 96000).
+2. Binary messages of 16-bit little-endian mono PCM at that rate, as the microphone delivers them, any size.
+3. `{"type": "stop"}` when the speaker is done, or `{"type": "cancel"}` to drop everything.
+
+Server messages:
+
+- `{"type": "ready"}` once the session is set up.
+- `{"type": "partial", "commit", "text", "tentative"}` whenever something changes. `commit` is new text that is final:
+  append it. `text` is everything that is final so far. `tentative` is the still-changing guess that follows it; show it
+  greyed, never insert it.
+- `{"type": "final", "commit", "text", "replace", "seconds", "language"}` after `stop`, then the server closes. With
+  `"refine": true` a dictation of up to 26 seconds is transcribed once more as a whole; `"replace": true` then means
+  `text` is the better version of everything, for clients that insert only at the end.
+- `{"type": "error", "code", "message"}` on failure.
+
+Auth is the usual `?token=` or headers. Typical delay from speaking a word to receiving it is 0.4 s on a recent GPU.
+
+```python
+import asyncio, json, websockets
+
+async def dictate(pcm_chunks, rate=16000):
+    async with websockets.connect("ws://127.0.0.1:8787/api/v1/dictate") as ws:
+        await ws.send(json.dumps({"type": "start", "sample_rate": rate}))
+        await ws.recv()                                   # {"type": "ready"}
+        for chunk in pcm_chunks:                          # bytes, 16-bit mono
+            await ws.send(chunk)
+        await ws.send(json.dumps({"type": "stop"}))
+        async for raw in ws:
+            m = json.loads(raw)
+            if m["type"] == "partial":
+                print(m["commit"], end="", flush=True)
+            elif m["type"] == "final":
+                return m["text"]
+```
+
 ### WebSocket streaming (text in as it arrives)
 
 `WS /api/v1/tts/ws` is for LLM output and live agents: send text in pieces, get audio back sentence by sentence while

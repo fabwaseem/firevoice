@@ -430,6 +430,27 @@ class FireVoice:
                 self._aligner = FasterWhisperAligner(self.asr_model, device=self.asr_device, concurrency=2)
             return self._aligner
 
+    # -------------------------------------------------------------------- dictation
+    def dictation(self, language: Optional[str] = None, keyterms: Optional[list] = None, commands: bool = True, fillers: bool = True,
+                  refine: bool = False):
+        """A live dictation (dictation.py) on the shared Whisper model. Words the pronunciation dictionary knows are
+        passed along as terms to spell right, after the caller's own."""
+        from .dictation import LiveTranscriber
+        terms = [str(k).strip() for k in (keyterms or []) if str(k).strip()]
+        try:
+            terms += [r["match"] for r in self.dictionary.rules() if r.get("match") and r["match"] not in terms]
+        except Exception:
+            pass
+        lang = None if not language or language == "auto" else language
+        return LiveTranscriber(self.aligner().transcribe_window, language=lang, keyterms=terms[:60], commands=commands, fillers=fillers,
+                               refine=refine)
+
+    def dictation_warm(self) -> dict:
+        """Load the Whisper model and run it once, so the first dictation starts without a wait."""
+        a = self.aligner()
+        a.transcribe_window(np.zeros(8000, dtype=np.float32), language="en")
+        return {"model": getattr(a, "model_name", "?"), "device": getattr(a, "device", "?")}
+
     # -------------------------------------------------------------------- tts
     def prepare(self, req: TTSRequest) -> tuple[str, Style, dict, list[str]]:
         """Validate a request without rendering: -> (engine, style, engine params, warnings)."""

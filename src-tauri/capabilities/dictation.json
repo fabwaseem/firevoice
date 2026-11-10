@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "dictation",
+  "description": "The dictation overlay: it only listens to the app's dictation events.",
+  "windows": [
+    "dictation"
+  ],
+  "permissions": [
+    "core:event:default"
+  ]
+}

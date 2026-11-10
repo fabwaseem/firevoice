@@ -33,6 +33,10 @@ class NullAligner:
     def __init__(self, text_hint: Optional[str] = None):
         pass
 
+    def transcribe_window(self, audio: np.ndarray, language: Optional[str] = None, prompt: Optional[str] = None,
+                          hotwords: Optional[str] = None, beam: int = 1) -> tuple[list[tuple[str, float, float]], Optional[str]]:
+        return [], language
+
     def transcribe(self, audio: np.ndarray, sr: int, text: str = "", language: Optional[str] = None) -> list[Word]:
         words = text.split()
         if not words:
@@ -112,6 +116,25 @@ class FasterWhisperAligner:
             from .align import refine
             out = refine(a, 16000, out)
         return out
+
+    def transcribe_window(self, audio: np.ndarray, language: Optional[str] = None, prompt: Optional[str] = None,
+                          hotwords: Optional[str] = None, beam: int = 1) -> tuple[list[tuple[str, float, float]], Optional[str]]:
+        """One fast pass over a short stretch of 16 kHz speech, for live dictation (dictation.py): -> (words as
+        (text, start, end), language). Built for speed: one decoding temperature, no retries, and silence is cut
+        out first, which also keeps the model from inventing words where nobody spoke."""
+        kw = {"initial_prompt": prompt} if prompt else {}
+        if hotwords:
+            kw["hotwords"] = hotwords
+        args = dict(word_timestamps=True, language=language, beam_size=beam, temperature=0.0, condition_on_previous_text=False,
+                    vad_filter=True, vad_parameters={"min_silence_duration_ms": 400, "speech_pad_ms": 200})
+        with self._sem:
+            try:
+                segs, info = self.m.transcribe(audio, **args, **kw)
+            except TypeError:                    # an older faster-whisper without hotwords
+                kw.pop("hotwords", None)
+                segs, info = self.m.transcribe(audio, **args, **kw)
+            words = [(w.word.strip(), float(w.start), float(w.end)) for s in segs for w in (s.words or [])]
+        return words, getattr(info, "language", language)
 
     def transcribe_text(self, audio: np.ndarray, sr: int, beam_size: int = 3) -> tuple[str, list[Word]]:
         """Full STT: text plus word times (for `firevoice transcribe`)."""

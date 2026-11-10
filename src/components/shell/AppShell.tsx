@@ -10,6 +10,7 @@ import { OfflineBanner } from "./OfflineBanner";
 import { BackendManager } from "./BackendManager";
 import { usePlayer } from "@/stores/player";
 import { useStagger } from "@/lib/stagger";
+import { useDictationBridge } from "@/components/dictation/useDictationBridge";
 
 export function AppShell() {
   const theme = useSettings((s) => s.theme);
@@ -24,6 +25,7 @@ export function AppShell() {
   }, [theme]);
 
   useJobFeed();
+  useDictationBridge();
 
   // Each view starts at the top; the scroll container is <main>, not the window.
   const { pathname } = useLocation();

@@ -118,7 +118,7 @@ function DetailBody({ voice, onClose }: { voice: Voice; onClose: () => void }) {
               type="button"
               onClick={() => playClip()}
               aria-label={isPlaying(voice.voice_id) ? "Pause reference" : "Play reference"}
-              className="absolute -right-2 -bottom-2 flex size-9 items-center justify-center rounded-full bg-white text-ink shadow-md hover:scale-105"
+              className="absolute -right-2 -bottom-2 flex size-9 items-center justify-center rounded-full bg-white text-[#16171c] shadow-md hover:scale-105"
             >
               {isPlaying(voice.voice_id) ? <Pause className="size-4 fill-current" /> : <Play className="ml-0.5 size-4 fill-current" />}
             </button>

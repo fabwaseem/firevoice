@@ -28,6 +28,7 @@ const SettingsView = page(() => import("@/views/SettingsView"), "SettingsView");
 const HistoryView = page(() => import("@/views/HistoryView"), "HistoryView");
 const StatsView = page(() => import("@/views/StatsView"), "StatsView");
 const ToolsView = page(() => import("@/views/ToolsView"), "ToolsView");
+const DictationView = page(() => import("@/views/DictationView"), "DictationView");
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +49,7 @@ const router = createHashRouter([
       { path: "voices", element: <VoicesView /> },
       { path: "voices/:voiceId", element: <VoicesView /> },
       { path: "transcribe", element: <TranscribeView /> },
+      { path: "dictation", element: <DictationView /> },
       { path: "jobs", element: <JobsView /> },
       { path: "jobs/:jobId", element: <JobsView /> },
       { path: "engines", element: <EnginesView /> },

@@ -23,6 +23,22 @@
         "decorations": true,
         "transparent": false,
         "backgroundColor": "#f3f4f8"
+      },
+      {
+        "label": "dictation",
+        "title": "FireVoice dictation",
+        "url": "overlay.html",
+        "width": 460,
+        "height": 132,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "focusable": false
       }
     ],
     "security": {

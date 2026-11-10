@@ -60,7 +60,7 @@ export function VoiceCard({ voice, onOpen, index = 0 }: { voice: Voice; onOpen: 
           aria-label={playing ? `Pause ${voice.name}` : `Play ${voice.name} reference`}
           disabled={voice.has_ref === false}
           className={cn(
-            "absolute right-2 bottom-2 flex size-10 items-center justify-center rounded-full bg-white text-ink shadow-md transition-[opacity,transform] hover:scale-105 active:scale-95 disabled:opacity-0",
+            "absolute right-2 bottom-2 flex size-10 items-center justify-center rounded-full bg-white text-[#16171c] shadow-md transition-[opacity,transform] hover:scale-105 active:scale-95 disabled:opacity-0",
             playing ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
           )}
         >

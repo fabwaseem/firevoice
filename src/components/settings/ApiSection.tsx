@@ -35,6 +35,8 @@ function examples(base: string, token: string | null): Record<Example, string> {
       '- POST /api/v1/tts                  {"text", "voice", "style", "format": "mp3"} -> the audio file as bytes',
       '                                    add "response": "json" to get base64 audio with word timings instead',
       "- POST /api/v1/stt                  multipart form, field \"file\" -> text with word timings",
+      '- WS   /api/v1/dictate             live speech to text: send {"type":"start","sample_rate":16000}, then 16-bit mono PCM as binary',
+      '                                    messages, then {"type":"stop"}; text arrives as {"type":"partial","commit":...} pieces',
       '- POST /api/v1/jobs                 {"kind": "tts", "payload": {"request": {...}, "format": "mp3"}} for long scripts;',
       "                                    then GET /api/v1/jobs/{id} until done and GET /api/v1/jobs/{id}/audio",
       "- POST /v1/audio/speech             OpenAI-compatible speech; POST /v1/audio/transcriptions likewise",
