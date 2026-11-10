@@ -84,18 +84,45 @@ A request is fully validated before rendering starts: unknown fields, styles, vo
 | | |
 |---|---|
 | `GET /api/v1/engines` | Every engine. See the field list below. |
-| `GET /api/v1/engines/{name}` | One engine. Aliases work: `voxcpm`, `qwen`, `turbo`, `indextts`. |
+| `GET /api/v1/engines/{name}` | One engine. FireVoice names (`Inferno`, any case) and aliases (`voxcpm`, `qwen`, `turbo`, `indextts`) work wherever an engine id does. |
 | `POST /api/v1/engines/{name}/load` | Body `{"workers": 2}` (optional). Blocks until the engine is ready. |
 | `POST /api/v1/engines/{name}/unload` | Returns `409` while the engine is busy. |
 
 Fields on each engine:
 
-- **Identity:** `name`, `title`, `license`, `commercial`.
+- **Identity:** `name` (the engine id), `title` (its FireVoice name, the same as `brand`), `model` (the model behind it, for credit), `tagline`, `license`, `commercial`.
+- **Tier:** `tier` = `{quality: Studio | Pro | Standard, size: XS-XL (GPU memory per worker), speed: Instant | Fast | Real-time | Slow, params, rtf, vram_gb}`; `null` for engines without a name.
 - **Capabilities:** `clone`, `needs_reference`, `needs_transcript`, `design`, `instruct`, `tags`, `presets`, `languages`.
 - **Performance:** `sample_rate`, `vram_gb`, `speed_rtf`.
 - **Install status:** `ready`, `problems`.
 - **Runtime:** `loaded`, plus `workers` and `active_requests` while loaded.
 - **`params`:** the settings schema. Each entry is `{name, type, default, min, max, step, choices, length, labels, label, help}`, with `type` one of `float`, `int`, `bool`, `str`, `enum` or `vector`.
+
+FireVoice names. Quality weighs listening, voice match and DNSMOS on one passage and voice, sample rate and features;
+speed is the real-time factor of a warm single take on an RTX 5080 (2026-11-10). The names follow the heat: the biggest,
+best engines carry the hottest names, quick small ones the quickest flames, slow ones the slow burns.
+
+| name | engine | model | quality | size | speed (RTF) |
+|---|---|---|---|---|---|
+| Inferno | `voxcpm2` | VoxCPM2 2B | Studio | L | Real-time (0.41) |
+| Magma | `moss` | MOSS-TTS Local v1.5 | Studio | XL | Real-time (0.71) |
+| Firestorm | `indextts25` | IndexTTS-2.5 | Studio | M | Real-time (0.55) |
+| Smoulder | `breeze` | Breeze TTS 2 3B | Studio | L | Slow (5.98) |
+| Torch | `chatterbox` | Chatterbox 500M | Pro | S | Real-time (0.46) |
+| Flare | `omnivoice` | OmniVoice 0.6B | Pro | S | Fast (0.18) |
+| Firebrand | `indextts2` | IndexTTS-2 | Pro | M | Real-time (0.95) |
+| Hearth | `dots` | dots.tts SOAR 2B | Pro | L | Slow (1.21) |
+| Beacon | `qwen3-tts` | Qwen3-TTS 1.7B Base | Pro | M | Slow (1.74) |
+| Forge | `qwen3-tts-design` | Qwen3-TTS 1.7B VoiceDesign | Pro | M | Slow (2.34) |
+| Phoenix | `maya1` | Maya1 3B | Pro | XL | Slow (1.75) |
+| Candle | `ming` | Ming-3.0-tts 0.5B | Pro | S | Slow (1.35) |
+| Flash | `chatterbox-turbo` | Chatterbox Turbo 350M | Standard | S | Fast (0.20) |
+| Flicker | `f5` | F5-TTS v1 | Standard | S | Fast (0.29) |
+| Spark | `kokoro` | Kokoro 82M | Standard | XS | Instant (0.04) |
+| Mirage | `chatterbox-vc` | Chatterbox voice changer | | | |
+| Crackle | `audioldm2` | AudioLDM 2 | | | |
+| Bonfire | `musicgen` | MusicGen small | | | |
+| Crucible | `separator` | UVR RoFormer | | | |
 
 Installing engines:
 

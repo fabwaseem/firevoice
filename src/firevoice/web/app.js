@@ -255,7 +255,7 @@ function bindPreview(root) {
 // engine
 function engine() { return S.engines.find(e => e.name === S.engine) || S.engines[0]; }
 function renderEngineSelect() {
-  $("#engine").innerHTML = S.engines.map(e => `<option value="${e.name}" ${e.ready ? "" : "disabled"}>${esc(e.title)}${e.loaded ? "  ● loaded" : ""}${e.ready ? "" : "  (not installed)"}</option>`).join("");
+  $("#engine").innerHTML = S.engines.map(e => `<option value="${e.name}" ${e.ready ? "" : "disabled"}>${esc(e.title)}${e.tier ? ` · ${e.tier.quality} · ${e.tier.speed}` : ""}${e.loaded ? "  ● loaded" : ""}${e.ready ? "" : "  (not installed)"}</option>`).join("");
   $("#engine").value = S.engine; renderEngineInfo();
 }
 function renderEngineInfo() {
@@ -270,7 +270,7 @@ function renderEngineInfo() {
 $("#engine").onchange = () => { S.engine = $("#engine").value; renderEngineInfo(); renderKnobs(); saveForm(); };
 function checkCompat() {
   const e = engine(); if (!e) return null; let msg = null;
-  if (S.voiceMode === "design" && !e.design && !e.presets?.length) msg = `${e.title} cannot design voices; pick VoxCPM2, OmniVoice, Qwen3 VoiceDesign, Breeze or Maya1.`;
+  if (S.voiceMode === "design" && !e.design && !e.presets?.length) msg = `${e.title} cannot design voices; pick ${S.engines.filter(x => x.design).map(x => x.title).join(", ")}.`;
   if (S.voiceMode === "library" && !e.clone && S.voice !== "default") msg = `${e.title} cannot clone a library voice; switch the voice to Design.`;
   $("#engine-note").classList.toggle("warn-row", !!msg); if (msg) $("#engine-note").textContent = msg;
   return msg;
@@ -901,10 +901,12 @@ async function loadEngines() {
     const g = s.gpu || {};
     $("#sys-metrics").innerHTML = [["GPU", g.name ? g.name.replace("NVIDIA GeForce ", "") : "none"], ["VRAM used", g.vram_total_gb ? `${(g.vram_used_gb ?? 0).toFixed(1)}<small> / ${g.vram_total_gb.toFixed(1)} GB</small>` : "-"],
       ["GPU load", g.utilization != null ? `${g.utilization}<small>%</small>` : "-"], ["Temperature", g.temperature_c != null ? `${g.temperature_c}<small>°C</small>` : "-"],
-      ["Loaded", s.loaded_engines.join(", ") || "none"], ["Voices", s.voices], ["Styles", s.styles], ["Uptime", fmtTime(s.uptime_seconds)], ["Version", s.version]]
+      ["Loaded", s.loaded_engines.map(n => (all.engines.find(e => e.name === n) || {}).title || n).join(", ") || "none"], ["Voices", s.voices], ["Styles", s.styles], ["Uptime", fmtTime(s.uptime_seconds)], ["Version", s.version]]
       .map(([l, v]) => `<div class="metric"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
-    $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t">${esc(e.title)}</div><div class="n">${esc(e.name)}${TASK[e.task] ? ` · ${TASK[e.task]}` : ""}</div></div>
+    $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t">${esc(e.title)}</div><div class="n">${esc(e.model || e.title)} · ${esc(e.name)}${TASK[e.task] ? ` · ${TASK[e.task]}` : ""}</div></div>
         ${e.loaded ? '<span class="tag ok">loaded</span>' : e.ready ? '<span class="tag">ready</span>' : '<span class="tag bad">not installed</span>'}</div>
+      ${e.tier && e.tier.quality !== "-" ? `<div class="tags"><span class="tag ${e.tier.quality === "Studio" ? "ok" : ""}">${esc(e.tier.quality)}</span><span class="tag">size ${esc(e.tier.size)}</span><span class="tag">${esc(e.tier.speed)}</span></div>` : ""}
+      ${e.tagline ? `<div class="small dim" style="margin:4px 0">${esc(e.tagline)}</div>` : ""}
       <div class="tags">${["clone", "design", "instruct", "tags"].filter(k => e[k]).map(k => `<span class="tag acc">${k}</span>`).join("")}<span class="tag">${esc(e.license)}</span>${e.commercial ? "" : '<span class="tag warn">non-commercial</span>'}</div>
       <div class="notes">${esc(e.notes || e.description || "")}${e.problems?.length ? `<div style="color:var(--bad)">${esc(e.problems.join("; "))}</div>` : ""}</div>
       <div class="stats"><span>RTF <b>${e.speed_rtf ?? "-"}</b></span><span><b>${e.sample_rate / 1000}</b> kHz</span><span>~<b>${e.vram_gb}</b> GB</span><span><b>${e.languages.includes("*") ? "600+" : e.languages.length}</b> lang</span>${e.loaded ? `<span><b>${e.workers}</b> worker(s)</span>` : ""}</div>

@@ -905,13 +905,16 @@ def cmd_engines(a) -> int:
         finally:
             svc.close()
     if a.action == "info" and a.name:
-        rows = [r for r in rows if r["name"] == a.name] or rows
+        rows = [r for r in rows if a.name.lower() in (r["name"], (r.get("brand") or "").lower())] or rows
     if a.json:
         print(json.dumps(rows if a.action != "info" else rows[0], indent=1))
         return 0
     if a.action == "info":
         e = rows[0]
-        print(f"{e['name']}  ({e['title']})  {'ready' if e['ready'] else 'NOT READY: ' + '; '.join(e['problems'])}")
+        t = e.get("tier") or {}
+        print(f"{e['title']}  ({e['name']}: {e.get('model') or e['title']})  {'ready' if e['ready'] else 'NOT READY: ' + '; '.join(e['problems'])}")
+        if t:
+            print(f"  {t['quality']} quality, size {t['size']}, {t['speed']}" + (f": {e['tagline']}" if e.get("tagline") else ""))
         print(f"  licence {e['license']} ({'commercial ok' if e['commercial'] else 'non-commercial'}), {e['sample_rate']} Hz, ~{e['vram_gb']} GB VRAM per worker"
               + (f", measured RTF {e['speed_rtf']}" if e.get("speed_rtf") else ""))
         caps = [k for k in ("clone", "design", "instruct", "tags", "needs_transcript") if e.get(k)]
@@ -925,12 +928,16 @@ def cmd_engines(a) -> int:
             rng = f"{p['min']}..{p['max']}" if p.get("min") is not None else (", ".join(map(str, p["choices"])) if p.get("choices") else "")
             print(f"    {p['name']:22} {p['type']:7} default {str(p['default']):10} {rng:24} {p.get('help') or p.get('label') or ''}")
         return 0
-    print(f"{'engine':18} {'ready':6} {'licence':26} {'comm':5} {'sr':6} {'rtf':6} {'clone':6} {'design':7} {'instr':6} languages")
+    print(f"{'name':10} {'engine':18} {'quality':9} {'size':5} {'speed':10} {'ready':6} {'licence':26} {'comm':5} {'sr':6} {'rtf':6} {'clone':6} {'design':7} {'instr':6} languages")
     for e in rows:
         langs = "many" if "*" in e["languages"] else ",".join(e["languages"][:6]) + ("…" if len(e["languages"]) > 6 else "")
-        print(f"{e['name']:18} {'yes' if e['ready'] else 'no':6} {e['license'][:26]:26} {'yes' if e['commercial'] else 'no':5} {e['sample_rate']:<6} "
+        t = e.get("tier") or {}
+        print(f"{e.get('brand') or '-':10} {e['name']:18} {t.get('quality', '-'):9} {t.get('size', '-'):5} {t.get('speed', '-'):10} "
+              f"{'yes' if e['ready'] else 'no':6} {e['license'][:26]:26} {'yes' if e['commercial'] else 'no':5} {e['sample_rate']:<6} "
               f"{str(e.get('speed_rtf') or '-'):6} {'yes' if e['clone'] else '-':6} {'yes' if e['design'] else '-':7} {'yes' if e['instruct'] else '-':6} {langs}")
-    print(f"default engine: {DEFAULT_ENGINE}   (`firevoice engines info NAME` for parameters)")
+    from .core.brands import name_of
+    print(f"default engine: {name_of(DEFAULT_ENGINE)} ({DEFAULT_ENGINE})   (`firevoice engines info NAME` for parameters; "
+          "names like Inferno work wherever an engine id does)")
     return 0
 
 

@@ -124,6 +124,10 @@ def get_engine(name: str) -> EngineSpec:
     aliases = {"turbo": "chatterbox-turbo", "qwen": "qwen3-tts", "qwen3": "qwen3-tts", "voxcpm": "voxcpm2", "indextts": "indextts2", "dots-soar": "dots"}
     if n in aliases:
         return d[aliases[n]]
+    from .brands import engine_for
+    b = engine_for(n)                      # a FireVoice name: "Inferno" -> voxcpm2
+    if b in d:
+        return d[b]
     raise ValueError(f"unknown engine {name!r}; known: {', '.join(sorted(d))}")
 
 

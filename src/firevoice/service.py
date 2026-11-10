@@ -194,7 +194,7 @@ class FireVoice:
             raise FireVoiceError("bad_request", "describe the sound")
         if kind not in ("sfx", "music"):
             raise FireVoiceError("bad_request", "kind must be 'sfx' (effects, ambience) or 'music'")
-        eng = engine or ("musicgen" if kind == "music" else "audioldm2")
+        eng = self._resolve_engine(engine) if engine else ("musicgen" if kind == "music" else "audioldm2")
         if _task(eng) != "sfx":
             raise FireVoiceError("bad_request", f"{eng} does not make sound effects or music")
         if not catalog.info(eng).status()["ready"]:
@@ -250,7 +250,11 @@ class FireVoice:
             raise FireVoiceError("not_found", str(e))
         inf = catalog.info(spec.name)
         loaded = self._loaded.get(spec.name)
-        d = {**inf.to_dict(), "name": spec.name, "license": spec.license, "commercial": spec.commercial, "vram_gb": spec.vram_gb,
+        from .core import brands
+        br = brands.describe(spec.name, spec.vram_gb)
+        d = {**inf.to_dict(), "model": inf.title, **br, "title": br["brand"] or inf.title,
+             "speed_rtf": (br["tier"] or {}).get("rtf") or inf.speed_rtf,
+             "name": spec.name, "license": spec.license, "commercial": spec.commercial, "vram_gb": spec.vram_gb,
              "default_workers": spec.default_workers, "description": spec.description, **inf.status(), "default": spec.name == self._resolve_engine(None),
              "loaded": loaded is not None, "installable": self._installable(spec.name)}
         if loaded is not None:
@@ -2054,22 +2058,22 @@ class FireVoice:
 
         def pick(name: str, why: str) -> dict:
             e = engines.get(name, {})
-            return {"engine": name, "title": e.get("title", name), "reason": why, "ready": bool(e.get("ready")),
+            return {"engine": name, "title": e.get("title", name), "model": e.get("model"), "tier": e.get("tier"), "reason": why, "ready": bool(e.get("ready")),
                     "installable": bool(e.get("installable")), "vram_gb": e.get("vram_gb")}
         if not g:
-            rec = pick("kokoro", "No NVIDIA GPU found: Kokoro is small enough to run on the CPU (preset voices, no cloning).")
+            rec = pick("kokoro", "No NVIDIA GPU found: Spark is small enough to run on the CPU (preset voices, no cloning).")
             alts = []
         elif (vram or 0) >= 9:
-            rec = pick("voxcpm2", f"{vram:.0f} GB of VRAM fits VoxCPM2, the most natural engine here: 48 kHz, cloning, "
+            rec = pick("voxcpm2", f"{vram:.0f} GB of VRAM fits Inferno, the most natural engine here: 48 kHz, cloning, "
                                   "voice design and style instructions in 30 languages.")
             alts = [pick("chatterbox-turbo", "Faster, smaller and ready without a download."),
                     pick("qwen3-tts", "Strong 3-second cloning in 10 languages.")]
         elif (vram or 0) >= 4.5:
-            rec = pick("chatterbox-turbo", f"{vram:.0f} GB of VRAM: Chatterbox Turbo clones voices quickly and comes with the backend.")
+            rec = pick("chatterbox-turbo", f"{vram:.0f} GB of VRAM: Flash clones voices quickly and comes with the backend.")
             alts = [pick("qwen3-tts", "Better cloning in 10 languages, if it fits next to other apps."),
                     pick("kokoro", "Tiny and very fast, preset voices only.")]
         else:
-            rec = pick("kokoro", f"Only {vram or 0:.0f} GB of VRAM: Kokoro needs about 1 GB (preset voices, no cloning).")
+            rec = pick("kokoro", f"Only {vram or 0:.0f} GB of VRAM: Spark needs about 1 GB (preset voices, no cloning).")
             alts = [pick("chatterbox-turbo", "Cloning, if about 4 GB of VRAM is free.")]
         ff = paths.ffmpeg()
         problems = []
