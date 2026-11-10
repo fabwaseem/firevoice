@@ -903,9 +903,7 @@ async function loadEngines() {
       ["Loaded", s.loaded_engines.map(n => (all.engines.find(e => e.name === n) || {}).title || n).join(", ") || "none"], ["Voices", s.voices], ["Styles", s.styles], ["Uptime", fmtTime(s.uptime_seconds)], ["Version", s.version]]
       .map(([l, v]) => `<div class="metric"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
     const langs = e => e.languages.includes("*") ? "Many languages" : `${e.languages.length} language${e.languages.length === 1 ? "" : "s"}`;
-    // the model behind the name and its licence, on hover only (the licences ask for credit)
-    const credit = e => [e.model, e.license && `licence ${e.license}`].filter(Boolean).join(" · ");
-    $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t" title="${esc(credit(e))}">${esc(e.title)}</div></div>
+    $("#ecards").innerHTML = all.engines.map(e => `<div class="ecard ${e.loaded ? "loaded" : ""}"><div class="row"><div style="flex:1"><div class="t">${esc(e.title)}</div></div>
         ${e.loaded ? '<span class="tag ok">loaded</span>' : e.ready ? '<span class="tag">ready</span>' : '<span class="tag bad">not installed</span>'}</div>
       ${e.tagline ? `<div class="notes">${esc(e.tagline)}</div>` : ""}
       <div class="tags">${e.tier && e.tier.quality !== "-" ? `<span class="tag ${e.tier.quality === "Studio" ? "acc" : ""}">${esc(e.tier.quality)}</span><span class="tag">size ${esc(e.tier.size)}</span><span class="tag">${esc(e.tier.speed)}</span>` : ""}${e.clone ? '<span class="tag">clones voices</span>' : ""}${e.design ? '<span class="tag">designs voices</span>' : ""}${e.task === "tts" ? `<span class="tag">${langs(e)}</span>` : ""}</div>
