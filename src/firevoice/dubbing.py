@@ -87,7 +87,7 @@ def subtitles(lines: list[dict], fmt: str = "srt") -> str:
     for k, ln in enumerate(lines, 1):
         who = f"{ln['speaker']}: " if ln.get("speaker") and len({x.get('speaker') for x in lines}) > 1 else ""
         head = f"{k}\n" if fmt == "srt" else ""
-        rows.append(f"{head}{ts(ln['at'], sep)} --> {ts(ln['at'] + ln['duration'], sep)}\n{who}{ln['translation']}\n")
+        rows.append(f"{head}{ts(ln['at'], sep)} --> {ts(ln['at'] + ln['duration'], sep)}\n{who}{ln.get('translation_roman') or ln['translation']}\n")
     return ("" if fmt == "srt" else "WEBVTT\n\n") + "\n".join(rows)
 
 

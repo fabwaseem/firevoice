@@ -112,7 +112,7 @@ DESIGN_EXAMPLES = {"radio host": {"summary": "Design and lock a new voice", "val
     "name": "my-radio-host", "description": "a cheerful young woman radio host, bright and quick", "engine": "voxcpm2"}}}
 
 STATUS = {"bad_request": 400, "unauthorized": 401, "not_found": 404, "conflict": 409, "too_large": 413, "unavailable": 503, "internal": 500}
-MAX_UPLOAD = 60 * 1024 * 1024
+MAX_UPLOAD = 1024 * 1024 * 1024        # uploads stream to disk, so long recordings are fine
 
 
 def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Optional[list[str]] = None, playground: Optional[bool] = None):
@@ -163,7 +163,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         # every failure keeps the documented {"error": {code, message}} shape, never a plain-text 500
         import logging
         logging.getLogger("firevoice").exception("unhandled error")
-        return err("internal", f"{type(e).__name__}: {str(e)[:300]}", 500)
+        from .service import friendly_error
+        return err("internal", friendly_error(e), 500)
 
     @app.exception_handler(RequestValidationError)
     async def _val(_req, e: RequestValidationError):
@@ -358,14 +359,26 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 **({"X-Render-Id": i["render_id"]} if i.get("render_id") else {})}
 
     async def save_upload(f: UploadFile) -> str:
-        data = await f.read()
-        if len(data) > MAX_UPLOAD:
-            raise FireVoiceError("too_large", f"upload is {len(data) // 1024 // 1024} MB; the limit is {MAX_UPLOAD // 1024 // 1024} MB")
-        if not data:
-            raise FireVoiceError("bad_request", "the uploaded file is empty")
+        """Stream an upload to a temp file in 1 MB pieces, stopping at the size limit (never all in memory)."""
         suffix = Path(f.filename or "audio.wav").suffix or ".wav"
+        size = 0
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as t:
-            t.write(data)
+            try:
+                while True:
+                    chunk = await f.read(1 << 20)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > MAX_UPLOAD:
+                        raise FireVoiceError("too_large", f"This file is larger than the {MAX_UPLOAD // 1024 // 1024} MB limit.")
+                    t.write(chunk)
+            except BaseException:
+                t.close()
+                Path(t.name).unlink(missing_ok=True)
+                raise
+        if not size:
+            Path(t.name).unlink(missing_ok=True)
+            raise FireVoiceError("bad_request", "The uploaded file is empty.")
         return t.name
 
     def to_wav(path: str) -> str:
@@ -374,9 +387,14 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         if path.lower().endswith((".wav", ".flac")):
             return path
         out = path + ".wav"
-        p = subprocess.run([A._ffmpeg(), "-y", "-v", "error", "-i", path, "-ac", "1", out], capture_output=True)
+        try:
+            p = subprocess.run([A._ffmpeg(), "-y", "-v", "error", "-i", path, "-ac", "1", out], capture_output=True, timeout=600)
+        except subprocess.TimeoutExpired:
+            Path(out).unlink(missing_ok=True)
+            raise FireVoiceError("bad_request", "Reading this file took too long. Try a shorter recording or another format.")
         if p.returncode != 0:
-            raise FireVoiceError("bad_request", "could not decode the uploaded audio: " + p.stderr.decode(errors="replace")[-200:])
+            Path(out).unlink(missing_ok=True)
+            raise FireVoiceError("bad_request", "This file couldn't be read as audio or video. Try MP3, WAV, M4A or MP4.")
         return out
 
     def sse(gen):
@@ -497,9 +515,11 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     def options():
         defaults = TTSRequest(text="").to_dict()
         defaults.pop("text")
+        voices = svc.voices.list()
+        from .service import _engine_names
         return {"engines": svc.engines(), "styles": svc.style_list(), "formats": list(A.FORMATS), "defaults": {**defaults, "format": "mp3"},
-                "default_engine": svc.system()["default_engine"], "engine_names": svc.system()["engine_names"], "voice_count": len(svc.voices.list()),
-                "languages": sorted({v.get("language") or "en" for v in svc.voices.list()})}
+                "default_engine": svc._resolve_engine(None), "engine_names": _engine_names(), "voice_count": len(voices),
+                "languages": sorted({v.get("language") or "en" for v in voices})}
 
     # ------------------------------------------------------------------ engines
     @app.get("/api/v1/engines", dependencies=deps, tags=["engines"])
@@ -819,7 +839,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 Path(x).unlink(missing_ok=True)
         hh = {"X-History-Id": hid, "Access-Control-Expose-Headers": "X-History-Id"} if hid else {}
         if format == "text":
-            return Response(r["text"], media_type="text/plain; charset=utf-8", headers=hh)
+            return Response(r.get("text_roman") or r["text"], media_type="text/plain; charset=utf-8", headers=hh)
         if format in ("srt", "vtt"):
             text, mt = svc.subtitles(_speaker_words(r["words"]), format)
             return Response(text, media_type=mt, headers=hh)
@@ -860,15 +880,15 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
         if response_format == "text":
-            return Response(r["text"], media_type="text/plain; charset=utf-8")
+            return Response(r.get("text_roman") or r["text"], media_type="text/plain; charset=utf-8")
         if response_format in ("srt", "vtt"):
-            text, mt = svc.subtitles(r["words"], response_format)
+            text, mt = svc.subtitles(_roman(r["words"]), response_format)
             return Response(text, media_type=mt)
         if response_format == "verbose_json":
-            return {"task": "transcribe", "language": r["language"], "duration": r["duration"], "text": r["text"],
-                    "words": [{"word": w["text"], "start": w["start"], "end": w["end"]} for w in r["words"]],
-                    "segments": [{"id": i, "start": s["start"], "end": s["end"], "text": s["text"]} for i, s in enumerate(r["segments"])]}
-        return {"text": r["text"]}
+            return {"task": "transcribe", "language": r["language"], "duration": r["duration"], "text": r.get("text_roman") or r["text"],
+                    "words": [{"word": w["text"], "start": w["start"], "end": w["end"]} for w in _roman(r["words"])],
+                    "segments": [{"id": i, "start": s["start"], "end": s["end"], "text": s["text"]} for i, s in enumerate(_roman(r["segments"]))]}
+        return {"text": r.get("text_roman") or r["text"]}
 
     # ------------------------------------------------------------------ WebSocket: text in as it arrives, audio out
     from fastapi import WebSocket, WebSocketDisconnect
@@ -1621,9 +1641,15 @@ def _same(given: Optional[str], expected: Optional[str]) -> bool:
     return bool(given) and bool(expected) and hmac.compare_digest(str(given).encode(), str(expected).encode())
 
 
+def _roman(items: list) -> list:
+    """Urdu comes out in Roman letters: words or segments with a `roman` reading use it as their text."""
+    return [{**w, "text": w.get("roman") or w["text"]} for w in items]
+
+
 def _speaker_words(words: list) -> list:
     """Words for subtitles; with speaker labels, a cue starts at each change of speaker and names them."""
     out, last = [], None
+    words = _roman(words)
     for w in words:
         sp = w.get("speaker")
         if sp and sp != last:

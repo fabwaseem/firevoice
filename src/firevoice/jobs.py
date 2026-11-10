@@ -380,7 +380,10 @@ class JobManager:
         except FireVoiceError as e:
             self._finish(j, "failed", error={"code": e.code, "message": e.message})
         except Exception as e:  # noqa: BLE001
-            self._finish(j, "failed", error={"code": "internal", "message": f"{type(e).__name__}: {str(e)[:400]}"})
+            import logging
+            logging.getLogger("firevoice").exception("job %s failed", j.id)
+            from .service import friendly_error
+            self._finish(j, "failed", error={"code": "internal", "message": friendly_error(e)})
 
     def _run_tts(self, j: Job, cancel: threading.Event) -> None:
         from .service import TTSRequest

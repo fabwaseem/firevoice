@@ -137,6 +137,12 @@ def _name(engine: str) -> str:
     return name_of(engine)
 
 
+def _forget_status() -> None:
+    """Engine status is cached for a few seconds; an install or removal shows at once."""
+    from .core import catalog
+    catalog._STATUS.clear()
+
+
 def manifest(engine: str) -> Manifest:
     from .core.registry import get_engine
     name = get_engine(engine).name
@@ -463,6 +469,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
         if fh:
             fh.close()
     progress(steps, steps, "installed")
+    _forget_status()
     return {"engine": m.engine, "venv": str(paths.engines_dir() / m.venv), "built_venv": build,
             "weights": [f for _, f, _ in todo_weights], "seconds": round(time.time() - t0, 1)}
 
@@ -485,6 +492,7 @@ def uninstall(engine: str, weights: bool = False) -> dict:
                     shutil.rmtree(w)
                     removed.append(str(w))
     shared = sorted(e for e, x in MANIFESTS.items() if x.venv == m.venv and e != m.engine)
+    _forget_status()
     return {"engine": m.engine, "removed": removed, "also_affects": shared}
 
 

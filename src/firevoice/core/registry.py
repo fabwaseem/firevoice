@@ -52,7 +52,6 @@ class EngineSpec:
 def builtin_engines() -> dict[str, EngineSpec]:
     main_py = sys.executable
     specs = [
-        EngineSpec("null", "null", main_py, default_workers=2, license="MIT", commercial=True, vram_gb=0, description="silence for tests"),
         EngineSpec("chatterbox-turbo", "chatterbox-turbo", main_py, default_workers=2, license="MIT", commercial=True, vram_gb=3.8,
                    description="Resemble Chatterbox Turbo 350M: fast, [laugh]/[sigh] tags, PerTh watermark"),
         EngineSpec("chatterbox", "chatterbox", main_py, default_workers=2, license="MIT", commercial=True, vram_gb=4.0,
@@ -97,23 +96,59 @@ def builtin_engines() -> dict[str, EngineSpec]:
         EngineSpec("chatterbox-vc", "chatterbox-vc", main_py, default_workers=1, license="MIT", commercial=True, vram_gb=3.0,
                    description="Chatterbox voice changer: speech to speech, keeps timing and delivery, swaps the voice"),
     ]
+    if os.environ.get("FIREVOICE_TEST_ENGINES") == "1":
+        # a silent engine for the test suite only: never offered by a normal server
+        specs.insert(0, EngineSpec("null", "null", main_py, default_workers=2, license="MIT", commercial=True, vram_gb=0, description="silence for tests"))
     return {s.name: s for s in specs}
 
 
 def user_engines() -> dict[str, EngineSpec]:
+    """Extra engines from <home>/engines.json. A file or an entry that cannot be read is logged and skipped: one bad
+    line never takes the built-in engines down with it."""
     f = home() / "engines.json"
     if not f.exists():
         return {}
+    import logging
+    log = logging.getLogger("firevoice")
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("expected an object of engine name -> settings")
+    except Exception as e:
+        log.warning("ignoring %s: %s", f, e)
+        return {}
     out = {}
-    for name, d in json.loads(f.read_text(encoding="utf-8")).items():
-        out[name] = EngineSpec(name=name, **{k: v for k, v in d.items() if k != "name"})
+    for name, d in data.items():
+        try:
+            out[name] = EngineSpec(name=name, **{k: v for k, v in d.items() if k != "name"})
+        except Exception as e:
+            log.warning("ignoring engine %r in %s: %s", name, f, e)
     return out
 
 
+_CACHE: dict = {"key": None, "engines": None}
+
+
+def _cache_key() -> tuple:
+    def mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+    h = home()
+    return (str(h), mtime(h / "engines.json"), mtime(h / "settings.json"), os.environ.get("FIREVOICE_ENGINES_DIR"),
+            os.environ.get("FIREVOICE_WEIGHTS_DIR"), os.environ.get("FIREVOICE_TEST_ENGINES"))
+
+
 def all_engines() -> dict[str, EngineSpec]:
-    d = builtin_engines()
-    d.update(user_engines())
-    return d
+    """Every engine, built-in and user-defined. Rebuilt only when something it depends on changes (the data folder,
+    engines.json, settings.json, the engine folder variables), not on every lookup."""
+    key = _cache_key()
+    if _CACHE["key"] != key or _CACHE["engines"] is None:
+        d = builtin_engines()
+        d.update(user_engines())
+        _CACHE["key"], _CACHE["engines"] = key, d
+    return dict(_CACHE["engines"])
 
 
 def get_engine(name: str) -> EngineSpec:
@@ -128,7 +163,8 @@ def get_engine(name: str) -> EngineSpec:
     b = engine_for(n)                      # a FireVoice name: "Inferno" -> voxcpm2
     if b in d:
         return d[b]
-    raise ValueError(f"unknown engine {name!r}; known: {', '.join(sorted(d))}")
+    from .brands import name_of
+    raise ValueError(f"unknown engine {name!r}; available: {', '.join(sorted(name_of(e) for e in d))}")
 
 
 def describe() -> list[dict]:

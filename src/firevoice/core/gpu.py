@@ -28,7 +28,21 @@ def free_vram_gb(index: int = 0) -> Optional[float]:
     return None
 
 
+_GPU_CACHE: dict = {}
+
+
 def gpu_info(index: int = 0) -> dict:
+    """GPU name, memory and load. Read at most every 2 s: status bars ask often and nvidia-smi takes ~100 ms."""
+    import time as _t
+    hit = _GPU_CACHE.get(index)
+    if hit and _t.monotonic() - hit[0] < 2.0:
+        return dict(hit[1])
+    info = _gpu_info(index)
+    _GPU_CACHE[index] = (_t.monotonic(), info)
+    return dict(info)
+
+
+def _gpu_info(index: int = 0) -> dict:
     smi = shutil.which("nvidia-smi")
     if smi:
         try:

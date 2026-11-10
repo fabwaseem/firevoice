@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import itertools
+import logging
 import os
 import queue
 import shutil
@@ -56,6 +57,9 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         proc.wait(timeout=5)
     except Exception:
         pass
+
+
+_log = logging.getLogger("firevoice")
 
 
 @dataclass
@@ -122,10 +126,10 @@ class _Worker:
         self.voices.clear()
         ready = self._read(timeout=self.pool.spec.start_timeout)
         if not ready or ready.get("event") != P.READY:
-            raise RuntimeError(f"worker {self.index} did not start (see {self.log})")
+            raise RuntimeError(f"{self.pool.spec.name} did not start; its log is {self.log}")
         r = self.request({"op": "load"}, timeout=self.pool.spec.load_timeout)
         if not r.get("ok"):
-            raise RuntimeError(f"worker {self.index} failed to load: {r.get('error')} (see {self.log})")
+            raise RuntimeError(f"{self.pool.spec.name} could not load: {r.get('error')} (log: {self.log})")
         self.sr = int(r["sr"])
         self.caps = r.get("caps", {})
 
@@ -296,7 +300,7 @@ class EnginePool:
         t0 = time.perf_counter()
         fit = self.fit_workers()
         if fit < self.n:
-            sys.stderr.write(f"[firevoice] {self.spec.name}: only {fit} of {self.n} model copies fit in free VRAM, running {fit}\n")
+            _log.warning("%s: only %d of %d copies fit in free GPU memory, running %d", self.spec.name, fit, self.n, fit)
             self.n = fit
         first = _Worker(self, 0)
         first.start()           # fail fast on the first; the rest start in parallel
@@ -320,7 +324,7 @@ class EnginePool:
             t.join()
         if errs and len(self.workers) < self.n:
             # fewer copies fit than asked (VRAM): run with what we have, say so
-            sys.stderr.write(f"[firevoice] {self.spec.name}: {len(self.workers)}/{self.n} workers started ({errs[0][:160]})\n")
+            _log.warning("%s: %d of %d copies started (%s)", self.spec.name, len(self.workers), self.n, errs[0][:160])
         self.workers.sort(key=lambda w: w.index)
         for w in self.workers:
             th = threading.Thread(target=self._loop, args=(w,), daemon=True, name=f"{self.spec.name}-{w.index}")
@@ -343,7 +347,7 @@ class EnginePool:
             except queue.Empty:
                 break
             if job is not None and not job.future.done():
-                job.future.set_exception(RuntimeError(f"{self.spec.name}: engine stopped"))
+                job.future.set_exception(RuntimeError(f"{self.spec.name} was stopped before this finished"))
         for _ in self.workers:
             self._put(None)
         for w in self.workers:
@@ -400,7 +404,7 @@ class EnginePool:
                 job.future.set_exception(Cancelled("render cancelled"))
                 continue
             if self._stopping:
-                job.future.set_exception(RuntimeError(f"{self.spec.name}: engine stopped"))
+                job.future.set_exception(RuntimeError(f"{self.spec.name} was stopped before this finished"))
                 continue
             while time.time() < self.oom_until and w.index > 0:
                 time.sleep(0.2)       # backoff: only worker 0 keeps going after an OOM
@@ -434,14 +438,14 @@ class EnginePool:
                     if any(not getattr(x, "dead", False) for x in self.workers):
                         self._put(job)            # another worker takes it, without spending a retry
                     else:
-                        self.broken = f"{self.spec.name}: every worker failed to restart ({str(r.get('error'))[:160]})"
+                        self.broken = f"{self.spec.name} stopped working and could not restart ({str(r.get('error'))[:160]})"
                         job.future.set_exception(RuntimeError(self.broken))
                         self._fail_queued(self.broken)
                     return
             job.attempts += 1
             if job.parts_sent:
                 # part of this take was already played to someone: a fresh take would not match it, so fail instead
-                job.future.set_exception(RuntimeError(f"{self.spec.name}: {r.get('error')} (after streaming had started)"))
+                job.future.set_exception(RuntimeError(f"{self.spec.name} failed partway through: {r.get('error')}"))
                 continue
             if kind != "bad_input" and job.attempts <= self.max_retries and not self._stopping and not (job.group and job.group.is_set()):
                 with self.lock:
@@ -460,7 +464,7 @@ class EnginePool:
                 w.start()
                 return True
             except Exception as e:
-                sys.stderr.write(f"[firevoice] restart of {self.spec.name}-{w.index} failed ({attempt + 1}/3): {str(e)[:200]}\n")
+                _log.warning("restart of %s-%d failed (%d/3): %s", self.spec.name, w.index, attempt + 1, str(e)[:200])
                 time.sleep(2 * (attempt + 1))
         return False
 

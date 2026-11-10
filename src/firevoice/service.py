@@ -200,7 +200,7 @@ class FireVoice:
         if _task(eng) != "sfx":
             raise FireVoiceError("bad_request", f"{_nm(eng)} does not make sound effects or music")
         if not catalog.info(eng).status()["ready"]:
-            raise FireVoiceError("unavailable", f"{_nm(eng)} is not installed: install it from Engines (POST /api/v1/engines/{eng}/install)")
+            raise FireVoiceError("unavailable", f"{_nm(eng)} isn't installed yet. Install it from Engines.")
         seed = int(seed if seed is not None else random.randint(1, 2**31 - 1))
         dp = catalog.info(eng).param("duration")
         top = float(dp.max) if dp is not None and dp.max else 30.0
@@ -266,11 +266,25 @@ class FireVoice:
                      broken=getattr(p, "broken", None))
         return d
 
+    # the default engine when the configured one is not installed: best first
+    _FALLBACK = ("voxcpm2", "chatterbox-turbo", "omnivoice", "chatterbox", "qwen3-tts", "indextts25", "kokoro")
+
     def _resolve_engine(self, name: Optional[str]) -> str:
         try:
-            return get_engine(name or self.default_engine).name
+            if name:
+                return get_engine(name).name
+            d = get_engine(self.default_engine).name
         except ValueError as e:
             raise FireVoiceError("not_found", str(e))
+        try:
+            if catalog.info(d).status()["ready"]:
+                return d
+            for alt in self._FALLBACK:
+                if alt != d and catalog.info(alt).status()["ready"]:
+                    return alt
+        except Exception:
+            pass
+        return d
 
     def engine_install_plan(self, name: str, sizes: bool = True) -> dict:
         """What installing an engine would do and download, and what is already there."""
@@ -356,7 +370,9 @@ class FireVoice:
             inf = catalog.info(name)
             st = inf.status()
             if not st["ready"]:
-                raise FireVoiceError("unavailable", f"{_nm(name)} is not installed: {'; '.join(st['problems'])}")
+                import logging
+                logging.getLogger("firevoice").info("%s not ready: %s", name, "; ".join(st["problems"]))
+                raise FireVoiceError("unavailable", f"{_nm(name)} isn't installed yet. Install it from Engines.")
             spec = get_engine(name)
             want = workers or self.workers.get(name) or spec.default_workers
             self._make_room(spec.vram_gb * 1 + self.vram_reserve_gb, keep=name)
@@ -448,7 +464,7 @@ class FireVoice:
             if v != "default" and not self.voices.exists(v):
                 raise FireVoiceError("not_found", f"unknown voice {v!r}")
             if v == "default" and self.voices.default_id() is None and inf.needs_reference:
-                raise FireVoiceError("bad_request", "no default voice set; pass a voice id or set one with `firevoice voices default NAME`")
+                raise FireVoiceError("bad_request", "No default voice is set yet. Pick a voice, or mark one as the default in Voices.")
             if not inf.clone and v != "default":
                 raise FireVoiceError("bad_request", f"{_nm(eng)} cannot clone a voice; use voice 'design:<description>'" +
                                      (f" or a preset ({', '.join(inf.presets[:5])}...)" if inf.presets else ""))
@@ -503,7 +519,7 @@ class FireVoice:
         except ValueError as e:
             raise FireVoiceError("bad_request", str(e))
         except Exception as e:
-            raise FireVoiceError("internal", f"{type(e).__name__}: {str(e)[:400]}")
+            raise FireVoiceError("internal", friendly_error(e))
         finally:
             with self._lock:
                 ld.active -= 1
@@ -615,7 +631,7 @@ class FireVoice:
         """Is there an AI-audio watermark in this file, and is it FireVoice's?"""
         from . import watermark
         if not watermark.available():
-            raise FireVoiceError("unavailable", "the watermark detector needs the audioseal package (pip install firevoice[watermark])")
+            raise FireVoiceError("unavailable", "Watermark checks aren't available in this installation.")
         a, sr = self._read(path)
         return watermark.detect(a, sr)
 
@@ -732,7 +748,11 @@ class FireVoice:
                 aud = r.audio if r.sr == out_sr else A.resample(r.audio, r.sr, out_sr)
                 aud, speed = dubbing.fit(aud, out_sr, dubbing.slot(lines, i, total))
                 pieces.append((ln["start"], aud))
-                rows.append({**ln, "translation": texts[i], "voice": v, "speed": speed, "duration": round(len(aud) / out_sr, 3)})
+                row = {**ln, "translation": texts[i], "voice": v, "speed": speed, "duration": round(len(aud) / out_sr, 3)}
+                if (tgt or "").lower().startswith("ur"):
+                    from .urdu import to_roman
+                    row["translation_roman"] = to_roman(texts[i])   # what people read: Roman letters
+                rows.append(row)
             track, placed = dubbing.assemble(pieces, out_sr, total)
             for row, at in zip(rows, placed):
                 row["at"] = at
@@ -790,7 +810,7 @@ class FireVoice:
         try:
             r = quality.report(a, sr, ref, rsr)
         except ImportError as e:
-            raise FireVoiceError("unavailable", f"quality checks need {e.name or 'an optional package'} (pip install firevoice[desktop])")
+            raise FireVoiceError("unavailable", "Quality checks aren't available in this installation.")
         return {**r, "voice": self.voices.canonical(voice) if voice and ref is not None else None}
 
     def render_quality(self, rid: str) -> dict:
@@ -886,7 +906,7 @@ class FireVoice:
         except FireVoiceError:
             raise
         except Exception as e:
-            raise FireVoiceError("internal", f"{type(e).__name__}: {str(e)[:400]}")
+            raise FireVoiceError("internal", friendly_error(e))
         finally:
             with self._lock:
                 ld.active -= 1
@@ -1257,7 +1277,7 @@ class FireVoice:
         for i in cues:   # sound cues need their engine; say so before rendering any speech
             eng = "musicgen" if turns[i]["kind"] == "music" else "audioldm2"
             if not catalog.info(eng).status()["ready"]:
-                raise FireVoiceError("unavailable", f"the script has a [{turns[i]['kind']}: ...] cue but {_nm(eng)} is not installed (Engines)")
+                raise FireVoiceError("unavailable", f"The script has a [{turns[i]['kind']}: ...] cue, but {_nm(eng)} isn't installed yet. Install it from Engines.")
         reqs = []
         for i in speech:
             t = turns[i]
@@ -1421,7 +1441,7 @@ class FireVoice:
             except FireVoiceError as e:
                 q.put({"type": "error", "code": e.code, "message": e.message})
             except Exception as e:
-                q.put({"type": "error", "code": "internal", "message": f"{type(e).__name__}: {e}"})
+                q.put({"type": "error", "code": "internal", "message": friendly_error(e)})
 
         th = threading.Thread(target=run, daemon=True, name="fv-stream")
         th.start()
@@ -1663,7 +1683,7 @@ class FireVoice:
         if mode not in ("vocals", "denoise", "dereverb"):
             raise FireVoiceError("bad_request", "mode must be vocals, denoise or dereverb")
         if not catalog.info("separator").status()["ready"]:
-            raise FireVoiceError("unavailable", "the voice separator is not installed: install it from Engines (POST /api/v1/engines/separator/install)")
+            raise FireVoiceError("unavailable", "Crucible (voice separation) isn't installed yet. Install it from Engines.")
         fd, other = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         ld = self._pool("separator", hold=True)
@@ -1910,7 +1930,7 @@ class FireVoice:
             raise FireVoiceError("conflict", f"voice {name!r} already exists")
         desc = description or info["description"]
         self.voices.add(name, p, consent=True, description=desc, gender=gender, tags=["designed", f"designed:{info['engine']}"],
-                        source=f"designed with {info['engine']}", license="synthetic", transcript=info["text"], transcribe=False,
+                        source=f"designed with {_nm(info['engine'])}", license="synthetic", transcript=info["text"], transcribe=False,
                         extra={"language": language or info.get("language") or None, "design_prompt": desc})
         return self.voice(name)
 
@@ -2048,8 +2068,8 @@ class FireVoice:
             for ld in self._loaded.values():
                 for w in getattr(ld.pool, "workers", []):
                     try:
-                        w.voices.discard(voice_id)
-                        w.voices = {v for v in w.voices if not str(v).startswith(voice_id + ":")}
+                        # worker keys are "<voice id>#<fingerprint>" (and older "<id>:<style>" forms)
+                        w.voices = {v for v in w.voices if str(v) != voice_id and not str(v).startswith((voice_id + "#", voice_id + ":"))}
                     except Exception:
                         pass
 
@@ -2251,6 +2271,27 @@ def _loop_to(a: np.ndarray, n: int, sr: int, xfade_s: float = 1.5) -> np.ndarray
     return out[:n]
 
 
+def friendly_error(e: BaseException, limit: int = 300) -> str:
+    """A message a person can act on, from any exception: common failures get plain wording, engine ids become their
+    FireVoice names, and Python exception names stay in the log. The full detail is logged by the caller."""
+    import re as _re
+    text = str(e) or ""
+    low = text.lower()
+    if "out of memory" in low or "cuda oom" in low or type(e).__name__ == "OutOfMemoryError":
+        return "The GPU ran out of memory. Unload an engine you are not using (Engines) or close other GPU apps, then try again."
+    if isinstance(e, TimeoutError) or "timed out" in low:
+        return "This took too long and was stopped. Try a shorter text, or try again when the GPU is less busy."
+    if isinstance(e, FileNotFoundError):
+        return f"A file it needed is missing: {Path(getattr(e, 'filename', '') or text).name or 'unknown file'}"
+    if isinstance(e, PermissionError):
+        return "FireVoice was not allowed to read or write a file it needs. Check that the data folder is writable."
+    from .core.brands import BRANDS
+    for eid, b in BRANDS.items():
+        text = _re.sub(rf"(?<![\w-]){_re.escape(eid)}(?![\w-])", b.name, text)
+    text = text.strip() or "Something went wrong."
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
 def _nm(engine: str) -> str:
     """An engine's FireVoice name for messages ("voxcpm2" -> "Inferno")."""
     from .core.brands import name_of
@@ -2287,7 +2328,9 @@ def _clip_checks(a: np.ndarray, sr: int, ref_path: Optional[str]) -> tuple:
         try:
             from resemblyzer import VoiceEncoder, preprocess_wav
             import soundfile as sf
-            enc = _clip_checks.__dict__.setdefault("enc", VoiceEncoder(device="cpu"))
+            enc = _clip_checks.__dict__.get("enc")
+            if enc is None:                      # built once: setdefault would build a new encoder on every call
+                enc = _clip_checks.__dict__["enc"] = VoiceEncoder(device="cpu")
             r, rsr = sf.read(ref_path, dtype="float32", always_2d=False)
             r = r.mean(axis=1) if r.ndim > 1 else r
             sim = float(enc.embed_utterance(preprocess_wav(y, 16000)) @ enc.embed_utterance(preprocess_wav(r, rsr)))

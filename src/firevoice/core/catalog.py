@@ -64,6 +64,9 @@ class Param:
         return v
 
 
+_STATUS: dict = {}     # (engine, venv, weights, folders) -> (when, status)
+
+
 @dataclass
 class EngineInfo:
     name: str
@@ -90,7 +93,18 @@ class EngineInfo:
 
     def status(self) -> dict:
         """Ready means it can start: its venv has a Python (or, for engines in the main venv, its package imports)
-        and its weights are complete. Engines without pinned weights download them on first load."""
+        and its weights are complete. Engines without pinned weights download them on first load. Cached for a few
+        seconds: checking walks the weights folder, and every engine list asks."""
+        import time as _t
+        key = (self.name, self.venv, self.weights, str(ENVS), str(_weights_path(self.weights)) if self.weights else None)
+        hit = _STATUS.get(key)
+        if hit and _t.monotonic() - hit[0] < 3.0:
+            return dict(hit[1])
+        st = self._status()
+        _STATUS[key] = (_t.monotonic(), st)
+        return dict(st)
+
+    def _status(self) -> dict:
         if self.venv is None:
             import importlib.util
             venv_ok = self.requires is None or importlib.util.find_spec(self.requires) is not None
@@ -218,7 +232,8 @@ def validate_params(engine: str, params: Optional[dict]) -> tuple[dict, list[str
     for k, v in (params or {}).items():
         p = e.param(k)
         if p is None:
-            warn.append(f"engine {e.name} has no documented parameter {k!r}; passed through as-is")
+            from .brands import name_of
+            warn.append(f"{name_of(e.name)} has no setting called {k!r}; it was passed through as-is")
             out[k] = v
             continue
         v = p.coerce(v)

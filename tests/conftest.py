@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("FIREVOICE_TEST_ENGINES", "1")   # the silent "null" engine exists only for tests
+
 import pytest
 
 from firevoice.asr import NullAligner
