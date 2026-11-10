@@ -440,6 +440,9 @@ class FireVoice:
             raise FireVoiceError("bad_request", f"text is {len(req.text)} characters; the limit is {self.max_text_chars} (use a job for long scripts)")
         eng = self._resolve_engine(req.engine)
         inf = catalog.info(eng)
+        if inf.task != "tts":   # a voice changer, sound or audio-tool engine cannot read text: it would come back silent
+            raise FireVoiceError("bad_request", f"{_nm(eng)} doesn't read text aloud ({_TASK_WORDS.get(inf.task, 'it is not a speech engine')}). "
+                                 "Pick a speech engine such as Inferno or Flash.")
         try:
             from .dictionary import parse_rules
             parse_rules(req.dictionary)
@@ -2348,6 +2351,10 @@ def friendly_error(e: BaseException, limit: int = 300) -> str:
         text = _re.sub(rf"(?<![\w-]){_re.escape(eid)}(?![\w-])", b.name, text)
     text = text.strip() or "Something went wrong."
     return text[:limit] + ("…" if len(text) > limit else "")
+
+
+_TASK_WORDS = {"vc": "it changes the voice of a recording", "sfx": "it makes music and sound effects",
+               "tool": "it separates and cleans audio"}
 
 
 def _nm(engine: str) -> str:

@@ -274,3 +274,12 @@ def test_cors_exposes_history_id(c):
     # runs the separation twice
     r = c.get("/health", headers={"Origin": "http://localhost:1420"})
     assert "X-History-Id" in r.headers.get("access-control-expose-headers", "")
+
+
+def test_tts_refuses_engines_that_cannot_read_text(c):
+    # the voice changer engine reads no text; it used to come back silent (and a dialogue then came out as loud noise)
+    r = c.post("/api/v1/tts", json={"text": "Hello there.", "engine": "chatterbox-vc"})
+    assert r.status_code == 400
+    assert "doesn't read text" in r.json()["error"]["message"]
+    r = c.post("/api/v1/dialogue", json={"script": "A: Hi.\nB: Hello.", "defaults": {"engine": "chatterbox-vc"}})
+    assert r.status_code == 400
