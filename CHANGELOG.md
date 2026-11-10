@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.2 (2026-11-10)
+
+Uninstalling can now remove everything.
+
+- The uninstaller's checkbox now reads "Also delete all FireVoice data: voices, history, engines and models". Ticked, it removes FireVoice's data folder and any engine or model folders you moved in Settings, as well as the app's own settings. Left unticked, your voices, history, engines and models stay, ready for a reinstall.
+- Updates never delete any data.
+
 ## 1.5.1 (2026-11-10)
 
 A small housekeeping update.
