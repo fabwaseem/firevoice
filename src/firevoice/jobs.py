@@ -14,6 +14,7 @@ Kinds and payloads
 from __future__ import annotations
 
 import json
+import os
 import queue
 import re
 import shutil
@@ -48,11 +49,41 @@ class Job:
     message: str = ""
     error: Optional[dict] = None
     result: dict = field(default_factory=dict)
+    owner: Optional[int] = None     # process id of the server running it (another live server's jobs are left alone)
 
     def view(self) -> dict:
         d = asdict(self)
         d["elapsed"] = round((self.finished or time.time()) - self.started, 2) if self.started else None
         return d
+
+    def brief(self) -> dict:
+        """The view without long payload text: what every event and the job list carry (the record keeps it all)."""
+        d = self.view()
+        d["payload"] = {k: (v[:300] + "…" if isinstance(v, str) and len(v) > 300 else v) for k, v in (self.payload or {}).items()
+                        if not (isinstance(v, (list, dict)) and len(json.dumps(v, default=str)) > 2000)}
+        return d
+
+
+def _pid_alive(pid: Optional[int]) -> bool:
+    """Is another process with this id running? (Never signals it.)"""
+    if not pid or pid == os.getpid():
+        return False
+    if os.name == "nt":
+        import ctypes
+        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))      # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        code = ctypes.c_ulong()
+        try:
+            ok = ctypes.windll.kernel32.GetExitCodeProcess(h, ctypes.byref(code))
+            return bool(ok) and code.value == 259                              # STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(h)
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except OSError:
+        return False
 
 
 class JobManager:
@@ -71,6 +102,7 @@ class JobManager:
         # client resuming with an old `since` (or Last-Event-ID) gets every event of the new run, never silence.
         self.seq = int(time.time() * 1000)
         self._load_history()
+        self._sweep_uploads()
         self.threads = [threading.Thread(target=self._loop, daemon=True, name=f"fv-job-{i}") for i in range(max(1, concurrency))]
         for t in self.threads:
             t.start()
@@ -156,7 +188,7 @@ class JobManager:
                 raise FireVoiceError("conflict", f"{m.venv} is already being installed (job {busy[0].id})")
             payload = {**payload, "engine": m.engine}
             title = title or f"install {name_of(m.engine)}"
-        job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload)
+        job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload, owner=os.getpid())
         with self.lock:
             self.jobs[job.id] = job
             self.cancels[job.id] = threading.Event()
@@ -171,7 +203,7 @@ class JobManager:
     def list(self, status: Optional[str] = None, kind: Optional[str] = None, limit: int = 100) -> list[dict]:
         with self.lock:
             js = sorted(self.jobs.values(), key=lambda j: -j.created)
-        return [j.view() for j in js if (not status or j.status == status) and (not kind or j.kind == kind)][:limit]
+        return [j.brief() for j in js if (not status or j.status == status) and (not kind or j.kind == kind)][:limit]
 
     def get(self, job_id: str) -> dict:
         return self._job(job_id).view()
@@ -258,7 +290,7 @@ class JobManager:
     def _emit(self, j: Job, typ: str) -> None:
         with self.cond:
             self.seq += 1
-            self.events_log.append({"seq": self.seq, "type": typ, "time": time.time(), "job": j.view()})
+            self.events_log.append({"seq": self.seq, "type": typ, "time": time.time(), "job": j.brief()})
             self.cond.notify_all()
 
     def _save(self, j: Job) -> None:
@@ -275,15 +307,31 @@ class JobManager:
                 d.pop("elapsed", None)
                 j = Job(**d)
             except Exception as e:
-                import sys
-                sys.stderr.write(f"[firevoice] skipped unreadable job record {f}: {e}\n")
+                import logging
+                logging.getLogger("firevoice").warning("skipped unreadable job record %s: %s", f, e)
                 continue
+            if j.status not in TERMINAL and _pid_alive(j.owner):
+                continue                    # another running server (sharing this data folder) owns it
             if j.status not in TERMINAL:
                 j.status, j.finished = "failed", time.time()
                 j.error = {"code": "interrupted", "message": "the server stopped while this job was queued or running"}
                 self._save(j)
             self.jobs[j.id] = j
             self.cancels[j.id] = threading.Event()
+
+    def _sweep_uploads(self, older_than: float = 6 * 3600) -> None:
+        from .service import home
+        up = home() / "uploads"
+        if not up.is_dir():
+            return
+        live = {str(j.payload.get("input", "")) for j in self.jobs.values() if j.status not in TERMINAL}
+        cut = time.time() - older_than
+        for d in up.iterdir():
+            try:
+                if d.is_dir() and d.stat().st_mtime < cut and not any(x.startswith(str(d)) for x in live):
+                    shutil.rmtree(d, ignore_errors=True)
+            except OSError:
+                pass
 
     def _progress(self, j: Job, step: int, steps: int, message: str = "") -> None:
         with self.lock:

@@ -60,6 +60,9 @@ from .types import Cancelled
 TAGS = [
     {"name": "system", "description": "Health, GPU and everything a UI needs in one call (`/api/v1/options`)."},
     {"name": "engines", "description": "Engine catalog, capabilities, parameter schemas, install status, load and unload."},
+    {"name": "history", "description": "Everything made, kept until you delete it: speech renders, sound and music, voice changer, dialogue, transcripts, separated and cleaned audio."},
+    {"name": "sound", "description": "Sound effects, ambience and music from a description (Crackle, Bonfire)."},
+    {"name": "dubbing", "description": "Dub a recording or video into another language, keeping timing and speakers."},
     {"name": "voices", "description": "Voice library: upload (with consent), design from a description, edit, per-style clips, previews."},
     {"name": "styles", "description": "Delivery styles: built in plus your own."},
     {"name": "tts", "description": "Text to speech: whole file, streamed chunks (SSE) or raw PCM. One request shape for every engine."},
@@ -301,6 +304,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         format: Literal["wav", "mp3", "flac", "ogg", "opus", "m4a"] = "mp3"
         response: Literal["audio", "json", "zip"] = Field("audio", description="audio = the mix; json = mix, turns, words (stems with stems=true); zip = mix, stems, subtitles, turns")
         stems: bool = False
+        save: bool = Field(True, description="keep the result in History (default); false skips it")
 
     class StyleBuild(BaseModel):
         engine: Optional[str] = None
@@ -511,6 +515,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         engine: Optional[str] = None
         params: dict = Field(default_factory=dict)
         format: str = "mp3"
+        save: bool = Field(True, description="keep the result in History (default); false skips it")
 
     @app.post("/api/v1/sound", dependencies=deps, tags=["sound"])
     async def sound(request: Request, body: SoundBody):
@@ -526,9 +531,14 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 cancel.set()
         a, sr, info = task.result()
         fmt = body.format if body.format in A.FORMATS else "mp3"
-        return Response(svc.encode(a, fmt, sr=sr), media_type=A.media_type(fmt),
-                        headers={"X-Seed": str(info["seed"]), "X-Engine": info["engine"], "X-Duration": str(info["duration"]),
-                                 "X-License": str(info["license"])})
+        data = await run_in_threadpool(svc.encode, a, fmt, None, sr)
+        h = {"X-Seed": str(info["seed"]), "X-Engine": info["engine"], "X-Duration": str(info["duration"]), "X-License": str(info["license"])}
+        if body.save:
+            item = await run_in_threadpool(lambda: svc.history.add(
+                "music" if body.kind == "music" else "sound", body.prompt, audio={"audio": a}, sr=sr,
+                meta={"prompt": body.prompt, "kind": body.kind, "seed": info["seed"], "engine": info["engine"], "duration": info["duration"]}))
+            h["X-History-Id"] = item["id"]
+        return Response(data, media_type=A.media_type(fmt), headers={**h, "Access-Control-Expose-Headers": ", ".join(h)})
 
     @app.get("/api/v1/engines/{name}", dependencies=deps, tags=["engines"])
     def engine(name: str):
@@ -783,22 +793,37 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                   keyterms: str = Form("", description="comma-separated names and terms to spell right"),
                   diarize: bool = Form(False, description="label who speaks when (Speaker 1, Speaker 2...)"),
                   speakers: Optional[int] = Form(None, description="how many speakers, when known"),
-                  format: Literal["json", "text", "srt", "vtt"] = Form("json")):
+                  format: Literal["json", "text", "srt", "vtt"] = Form("json"),
+                  save: bool = Form(True, description="keep the result in History (default); false skips it")):
         """Speech to text: text, language, word times, segments (with speakers when diarize=true), or subtitles."""
         p = await save_upload(file)
+        hid = None
         try:
-            wav = to_wav(p)
+            wav = await run_in_threadpool(to_wav, p)
             r = await run_in_threadpool(lambda: svc.transcribe(wav, None, language, beam_size, prompt=prompt or None,
                                                                keyterms=[k for k in keyterms.split(",") if k.strip()], diarize=diarize, speakers=speakers))
+            if save:
+                def keep():
+                    import soundfile as _sf
+                    a, asr = _sf.read(wav, dtype="float32", always_2d=False)
+                    if getattr(a, "ndim", 1) > 1:
+                        a = a.mean(axis=1)
+                    srt, _ = svc.subtitles(_speaker_words(r["words"]), "srt")
+                    return svc.history.add("transcript", Path(file.filename or "recording").name, audio={"audio": a}, sr=asr,
+                                           texts={"transcript.json": r, "transcript.srt": srt, "transcript.txt": r.get("text_roman") or r["text"]},
+                                           meta={"language": r.get("language"), "words": len(r.get("words") or []), "diarize": diarize},
+                                           compressed=("audio",))["id"]
+                hid = await run_in_threadpool(keep)
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
+        hh = {"X-History-Id": hid, "Access-Control-Expose-Headers": "X-History-Id"} if hid else {}
         if format == "text":
-            return Response(r["text"], media_type="text/plain; charset=utf-8")
+            return Response(r["text"], media_type="text/plain; charset=utf-8", headers=hh)
         if format in ("srt", "vtt"):
             text, mt = svc.subtitles(_speaker_words(r["words"]), format)
-            return Response(text, media_type=mt)
-        return r
+            return Response(text, media_type=mt, headers=hh)
+        return {**r, "history_id": hid}
 
     # ------------------------------------------------------------------ OpenAI-compatible
     class OAISpeech(BaseModel):
@@ -1080,6 +1105,52 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     def render_delete(rid: str):
         return svc.render_delete(rid)
 
+    # ------------------------------------------------------------------ history
+    @app.get("/api/v1/history", dependencies=deps, tags=["history"])
+    def history(kind: Optional[str] = Query(None, description="comma-separated: speech, sound, music, changer, dialogue, transcript, separate, clean"),
+                limit: int = Query(100, ge=1, le=1000), before: Optional[float] = Query(None, description="only items created before this time (for paging)"),
+                q: Optional[str] = Query(None, description="text in the title")):
+        """Everything made, newest first. Speech items (kind "speech") are kept renders: play them at /api/v1/renders/{id}/audio.
+        Other items keep their files here: /api/v1/history/{id}/files/{name}."""
+        return {"items": svc.history_list(kind, limit, before, q)}
+
+    @app.get("/api/v1/history/{hid}", dependencies=deps, tags=["history"])
+    def history_item(hid: str):
+        """One history item: kind, title, when, length, its files and what it was made from."""
+        return svc.history_item(hid)
+
+    @app.get("/api/v1/history/{hid}/files/{name}", dependencies=deps, tags=["history"])
+    def history_file(hid: str, name: str, format: str = "mp3", download: bool = False):
+        """A file of a history item. Audio comes in any format (`format`, default mp3); text and JSON as they are."""
+        path, f = svc.history_file(hid, name)
+        if f["type"] != "audio":
+            mt = "application/json" if f["type"] == "json" else "text/plain; charset=utf-8"
+            h = {"Content-Disposition": f'attachment; filename="{f["file"]}"'} if download else {}
+            return Response(path.read_bytes(), media_type=mt, headers=h)
+        fmt = format if format in A.FORMATS else "mp3"
+        if path.suffix.lstrip(".") == A.FORMATS[fmt][2]:
+            data = path.read_bytes()
+        else:
+            import soundfile as _sf
+            a, sr = _sf.read(str(path), dtype="float32", always_2d=False)
+            if getattr(a, "ndim", 1) > 1:
+                a = a.mean(axis=1)
+            data = svc.encode(a, fmt, sr=sr)
+        h = {"Content-Disposition": f'attachment; filename="{hid}-{name}.{A.FORMATS[fmt][2]}"'} if download else {}
+        return Response(data, media_type=A.media_type(fmt), headers={**h, "Cache-Control": "private, max-age=86400"})
+
+    class HistoryPatch(BaseModel):
+        title: str = Field(..., min_length=1, max_length=200)
+
+    @app.patch("/api/v1/history/{hid}", dependencies=deps, tags=["history"])
+    def history_rename(hid: str, body: HistoryPatch):
+        return svc.history_rename(hid, body.title)
+
+    @app.delete("/api/v1/history/{hid}", dependencies=deps, tags=["history"])
+    def history_delete(hid: str):
+        """Delete a history item and its files. Speech items are deleted with DELETE /api/v1/renders/{id}."""
+        return svc.history_delete(hid)
+
     # ------------------------------------------------------------------ dialogue and tags
     @app.post("/api/v1/dialogue/parse", dependencies=deps, tags=["dialogue"])
     def dialogue_parse(body: DialogueParse):
@@ -1101,13 +1172,23 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
             if not done and await request.is_disconnected():
                 cancel.set()
         d = task.result()
-        mix = svc.encode(d["audio"], body.format, sr=d["sr"])
+        mix = await run_in_threadpool(svc.encode, d["audio"], body.format, None, d["sr"])
         dur = round(len(d["audio"]) / d["sr"], 3)
+        hid = None
+        if body.save:
+            first = next((t["text"] for t in d["turns"] if t.get("kind") not in ("sfx", "music")), "Dialogue")
+            stems = {f"stem-{re.sub(r'[^A-Za-z0-9 _-]+', '', n).strip() or 'speaker'}": a for n, a in d["stems"].items()}
+            hid = (await run_in_threadpool(lambda: svc.history.add(
+                "dialogue", first[:80], audio={"mix": d["audio"], **stems}, sr=d["sr"],
+                texts={"turns.json": {"turns": d["turns"], "cast": d["cast"], "script": body.script},
+                       "dialogue.srt": svc.dialogue_subtitles(d["turns"], "srt")},
+                meta={"speakers": [n for n in d["stems"] if n not in ("SFX", "Music")], "turns": len(d["turns"])})))["id"]
+        hh = {"X-History-Id": hid, "Access-Control-Expose-Headers": "X-History-Id, X-Duration, X-Sample-Rate"} if hid else {}
         if body.response == "audio":
-            return Response(mix, media_type=A.media_type(body.format), headers={"X-Duration": str(dur), "X-Sample-Rate": str(d["sr"])})
+            return Response(mix, media_type=A.media_type(body.format), headers={"X-Duration": str(dur), "X-Sample-Rate": str(d["sr"]), **hh})
         if body.response == "json":
             out = {"audio_base64": base64.b64encode(mix).decode(), "format": body.format, "duration": dur, "sample_rate": d["sr"],
-                   "turns": d["turns"], "words": d["words"], "cast": d["cast"]}
+                   "turns": d["turns"], "words": d["words"], "cast": d["cast"], "history_id": hid}
             if body.stems:
                 out["stems"] = {n: base64.b64encode(svc.encode(a, body.format, sr=d["sr"])).decode() for n, a in d["stems"].items()}
             return out
@@ -1188,20 +1269,30 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     @app.post("/api/v1/audio/separate", dependencies=deps, tags=["audio tools"])
     async def audio_separate(file: UploadFile = File(...), mode: Literal["vocals", "denoise", "dereverb"] = Form("vocals"),
-                             stem: Literal["voice", "rest", "zip"] = Form("voice"), format: str = Form("wav")):
+                             stem: Literal["voice", "rest", "zip"] = Form("voice"), format: str = Form("wav"),
+                             save: bool = Form(True, description="keep the result in History (default); false skips it")):
         """Split a recording: vocals (voice | music and effects), denoise (voice | noise), dereverb (voice | room echo).
-        `stem` picks the voice, the rest, or a zip with both. Needs the separator engine (Engines)."""
+        `stem` picks the voice, the rest, or a zip with both; with save, History keeps both (X-History-Id), so the other
+        track is at /api/v1/history/{id}/files/rest without separating again. Needs Crucible (Engines)."""
         import io
         import zipfile
         p = await save_upload(file)
         try:
-            voice, rest, sr = await run_in_threadpool(svc.audio_separate, to_wav(p), mode)
+            voice, rest, sr = await run_in_threadpool(lambda: svc.audio_separate(to_wav(p), mode))
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
+        hh = {}
+        if save:
+            label = {"vocals": "voice and music", "denoise": "voice and noise", "dereverb": "voice and room echo"}[mode]
+            item = await run_in_threadpool(lambda: svc.history.add(
+                "separate", f"{Path(file.filename or 'recording').name} ({label})", audio={"voice": voice, "rest": rest}, sr=sr,
+                meta={"mode": mode, "source": file.filename}))
+            hh = {"X-History-Id": item["id"], "Access-Control-Expose-Headers": "X-History-Id"}
         fmt = format if format in A.FORMATS else "wav"
         if stem != "zip":
-            return Response(svc.encode(voice if stem == "voice" else rest, fmt, sr=sr), media_type=A.media_type(fmt))
+            data = await run_in_threadpool(svc.encode, voice if stem == "voice" else rest, fmt, None, sr)
+            return Response(data, media_type=A.media_type(fmt), headers=hh)
         buf = io.BytesIO()
         ext = A.FORMATS[fmt][2]
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
@@ -1231,27 +1322,33 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 Path(x).unlink(missing_ok=True)
 
     @app.post("/api/v1/audio/clean", dependencies=deps, tags=["audio tools"])
-    async def audio_clean(file: UploadFile = File(...), strength: str = Form("medium"), format: str = Form("wav")):
+    async def audio_clean(file: UploadFile = File(...), strength: str = Form("medium"), format: str = Form("wav"),
+                          save: bool = Form(True, description="keep the result in History (default); false skips it")):
         """Take out steady noise, hum and rumble, trim the silent ends and set the level. Headers X-Quality-Before and
         X-Quality-After carry the check before and after (JSON)."""
         p = await save_upload(file)
         try:
-            out, sr, check = await run_in_threadpool(svc.audio_clean, to_wav(p), strength)
+            out, sr, check = await run_in_threadpool(lambda: svc.audio_clean(to_wav(p), strength))
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
-        return Response(svc.encode(out, format, sr=sr), media_type=A.media_type(format),
-                        headers={"X-Quality-Before": json.dumps(check["before"]), "X-Quality-After": json.dumps(check["after"])})
+        h = {"X-Quality-Before": json.dumps(check["before"]), "X-Quality-After": json.dumps(check["after"])}
+        if save:
+            item = await run_in_threadpool(lambda: svc.history.add("clean", Path(file.filename or "recording").name, audio={"audio": out}, sr=sr,
+                                                                   meta={"strength": strength, "before": check["before"], "after": check["after"]}))
+            h["X-History-Id"] = item["id"]
+        data = await run_in_threadpool(svc.encode, out, format, None, sr)
+        return Response(data, media_type=A.media_type(format), headers={**h, "Access-Control-Expose-Headers": ", ".join(h)})
 
     @app.post("/api/v1/voice-changer", dependencies=deps, tags=["audio tools"])
     async def voice_changer(request: Request, file: UploadFile = File(...), voice: str = Form("default"), format: str = Form("mp3"),
-                            lufs: Optional[float] = Form(-16.0)):
+                            lufs: Optional[float] = Form(-16.0), save: bool = Form(True, description="keep the result in History (default); false skips it")):
         """Speech to speech: keeps the words, timing and delivery of your recording and swaps the voice for a library voice."""
         import asyncio
         p = await save_upload(file)
-        wav = to_wav(p)
         cancel = threading.Event()
         try:
+            wav = await run_in_threadpool(to_wav, p)
             task = asyncio.ensure_future(run_in_threadpool(lambda: svc.voice_convert(wav, voice, lufs=lufs, cancel=cancel)))
             while not task.done():
                 done, _ = await asyncio.wait({task}, timeout=0.5)
@@ -1261,7 +1358,15 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         finally:
             for x in (p, p + ".wav"):
                 Path(x).unlink(missing_ok=True)
-        return Response(svc.encode(out, format, sr=sr), media_type=A.media_type(format), headers={"X-Duration": str(round(len(out) / sr, 3)), "X-Sample-Rate": str(sr)})
+        h = {"X-Duration": str(round(len(out) / sr, 3)), "X-Sample-Rate": str(sr)}
+        if save:
+            vname = (svc.voices.get(voice) or {}).get("name") if voice != "default" and svc.voices.exists(voice) else None
+            item = await run_in_threadpool(lambda: svc.history.add(
+                "changer", f"{Path(file.filename or 'recording').name} as {vname or 'the default voice'}", audio={"audio": out}, sr=sr,
+                meta={"voice": voice, "voice_name": vname, "source": file.filename}))
+            h["X-History-Id"] = item["id"]
+        data = await run_in_threadpool(svc.encode, out, format, None, sr)
+        return Response(data, media_type=A.media_type(format), headers={**h, "Access-Control-Expose-Headers": ", ".join(h)})
 
     # ------------------------------------------------------------------ projects
     @app.get("/api/v1/projects", dependencies=deps, tags=["projects"])

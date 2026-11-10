@@ -14,6 +14,7 @@ import json
 import itertools
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -96,6 +97,7 @@ class _Worker:
     # -- process -------------------------------------------------------------
     def start(self) -> None:
         spec = self.pool.spec
+        self.pool.scratch.mkdir(parents=True, exist_ok=True)   # removed when the pool last stopped
         cmd = [spec.python, "-X", "utf8", "-m", "firevoice.core.worker", "--engine", spec.adapter, "--scratch", str(self.pool.scratch), "--parent-pid", str(os.getpid())]
         if self.pool.device:
             cmd += ["--device", self.pool.device]
@@ -110,6 +112,11 @@ class _Worker:
         for k, v in spec.env.items():
             env[k] = v
         self.log.parent.mkdir(parents=True, exist_ok=True)
+        try:                                   # keep one older log; a log never grows past about 5 MB
+            if self.log.exists() and self.log.stat().st_size > 5_000_000:
+                os.replace(self.log, self.log.with_suffix(self.log.suffix + ".1"))
+        except OSError:
+            pass
         self._logf = open(self.log, "a", encoding="utf-8", errors="replace")
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._logf, text=True, encoding="utf-8", bufsize=1, cwd=str(spec.cwd) if spec.cwd else None, env=env)
         self.voices.clear()
@@ -242,6 +249,7 @@ class EnginePool:
         self.device = device
         from ..paths import worker_src
         self.src_dir = worker_src()   # src/ in a checkout; an isolated copy of the package when installed
+        self._own_scratch = scratch is None      # a folder made here is removed again on stop
         self.scratch = Path(scratch) if scratch else Path(tempfile.mkdtemp(prefix="firevoice-"))
         self.scratch.mkdir(parents=True, exist_ok=True)
         self.log_dir = Path(log_dir) if log_dir else _home() / "logs"
@@ -340,6 +348,8 @@ class EnginePool:
             self._put(None)
         for w in self.workers:
             w.stop()
+        if self._own_scratch:
+            shutil.rmtree(self.scratch, ignore_errors=True)
 
     def __enter__(self):
         return self.start()

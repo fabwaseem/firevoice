@@ -61,7 +61,7 @@ def qa_words(asked: str, heard: str) -> dict:
 
 
 class RenderStore:
-    def __init__(self, root: Path, keep: int = 200):
+    def __init__(self, root: Path, keep: Optional[int] = None):
         self.root = Path(root)
         self.keep = keep
         self._lock = threading.RLock()
@@ -157,7 +157,9 @@ class RenderStore:
                 continue          # a project paragraph: listed with its project
             out.append({"id": m["id"], "created": m["created"], "title": m.get("title", ""), "engine": m["engine"],
                         "voice": m["request"].get("voice"), "style": m["request"].get("style"), "passages": len(m["chunks"]),
-                        "takes": sum(len(c["takes"]) for c in m["chunks"]), "flagged": sum(1 for c in m["chunks"] if _flagged(c))})
+                        "takes": sum(len(c["takes"]) for c in m["chunks"]), "flagged": sum(1 for c in m["chunks"] if _flagged(c)),
+                        "duration": round(sum(next((t.get("duration") or 0 for t in c["takes"] if t["n"] == c.get("chosen")), 0)
+                                              for c in m["chunks"]), 2)})
         return out
 
     def get(self, rid: str) -> dict:
@@ -230,8 +232,10 @@ class RenderStore:
         write_json_atomic(d / "render.json", meta)
 
     def _prune(self) -> None:
-        """Keep the newest `keep` renders. Renders pinned to a project, or with a locked passage, are never removed
-        and do not count toward the limit."""
+        """With a `keep` limit, keep the newest `keep` renders (pinned and locked ones never count or go). Without one
+        (the default) nothing is ever removed: renders are history, deleted only by the user."""
+        if not self.keep:
+            return
         free = []
         for p in sorted((p for p in self.root.glob("*") if (p / "render.json").exists()), reverse=True):
             try:

@@ -43,10 +43,19 @@ def settings_file() -> Path:
 
 
 def settings() -> dict:
+    f = settings_file()
     try:
-        d = json.loads(settings_file().read_text(encoding="utf-8"))
+        d = json.loads(f.read_text(encoding="utf-8"))
         return d if isinstance(d, dict) else {}
+    except FileNotFoundError:
+        return {}
     except Exception:
+        # unreadable: keep a copy (settings.json.corrupt-<time>) rather than let the next save overwrite it
+        try:
+            import time as _t
+            os.replace(f, f.with_name(f"{f.name}.corrupt-{_t.strftime('%Y%m%d-%H%M%S')}"))
+        except OSError:
+            pass
         return {}
 
 

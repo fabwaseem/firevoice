@@ -84,8 +84,13 @@ class Dictionary:
                 return []
             try:
                 data = json.loads(self.path.read_text(encoding="utf-8"))
-            except Exception as e:
-                raise ValueError(f"cannot read {self.path}: {e}")
+            except Exception:
+                import logging
+
+                from .voices import back_up_unreadable
+                kept = back_up_unreadable(self.path)
+                logging.getLogger("firevoice").warning("pronunciation dictionary could not be read; moved to %s and started empty", kept)
+                return []
             return [clean_rule(r) for r in (data.get("rules") or [])]
 
     def _save(self, rules: list[dict]) -> None:

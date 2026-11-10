@@ -169,6 +169,8 @@ class FireVoice:
         from .takestore import RenderStore
         self.dictionary = Dictionary(home() / "dictionary.json")
         self.renders = RenderStore(home() / "takes")
+        from .history import History
+        self.history = History(home() / "history")
         from .projects import ProjectStore
         self.projects = ProjectStore(home() / "projects")
         self.jobs = JobManager(self)
@@ -916,6 +918,63 @@ class FireVoice:
                 continue
             self.render_retake(rid, i, cancel=cancel)
         return self.render_get(rid)
+
+    # -------------------------------------------------------------------- history
+    def history_list(self, kind: Optional[str] = None, limit: int = 100, before: Optional[float] = None, q: Optional[str] = None) -> list[dict]:
+        """Everything made, newest first: speech renders (kind "speech", from the kept-render store) and the outputs in
+        the history store (sound, music, changer, dialogue, transcript, separate, clean)."""
+        kinds = set(kind.split(",")) if kind else None
+        out = [] if kinds and kinds <= set(self._history_kinds()) else self._speech_history(limit, before, q)
+        if not kinds or kinds - {"speech"}:
+            out += self.history.list(",".join(k for k in kinds if k != "speech") if kinds else None, limit, before, q)
+        out.sort(key=lambda m: m.get("created", 0), reverse=True)
+        return out[:limit]
+
+    @staticmethod
+    def _history_kinds() -> tuple:
+        from .history import KINDS
+        return KINDS
+
+    def _speech_history(self, limit: int, before: Optional[float], q: Optional[str]) -> list[dict]:
+        needle = (q or "").strip().lower()
+        out = []
+        for r in self.renders.list(limit=100_000):
+            if before is not None and r["created"] >= before:
+                continue
+            if needle and needle not in (r.get("title") or "").lower():
+                continue
+            out.append({"id": r["id"], "kind": "speech", "source": "render", "title": r.get("title") or "Speech", "created": r["created"],
+                        "duration": r.get("duration"), "files": {"audio": {"type": "audio"}},
+                        "meta": {"engine": r.get("engine"), "engine_name": _nm(r.get("engine") or ""), "voice": r.get("voice"),
+                                 "style": r.get("style"), "passages": r.get("passages"), "flagged": r.get("flagged")}})
+            if len(out) >= limit:
+                break
+        return out
+
+    def history_item(self, hid: str) -> dict:
+        try:
+            return self.history.get(hid)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def history_file(self, hid: str, stem: str) -> tuple:
+        try:
+            return self.history.file(hid, stem)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def history_rename(self, hid: str, title: str) -> dict:
+        try:
+            return self.history.rename(hid, title)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+
+    def history_delete(self, hid: str) -> dict:
+        try:
+            self.history.delete(hid)
+        except KeyError as e:
+            raise FireVoiceError("not_found", str(e).strip("'\""))
+        return {"id": hid, "deleted": True}
 
     def render_delete(self, rid: str) -> dict:
         self.render_get(rid)
@@ -1738,7 +1797,8 @@ class FireVoice:
         self.voice(voice_id)
         if not (transcript or "").strip():
             raise FireVoiceError("bad_request", "the transcript is empty; it must be the exact words spoken in the reference clip")
-        (Path(self.voices.get(voice_id)["dir"]) / "ref.txt").write_text(transcript.strip(), encoding="utf-8")
+        from .voices import write_text_atomic
+        write_text_atomic(Path(self.voices.get(voice_id)["dir"]) / "ref.txt", transcript.strip())
         self._forget_voice(voice_id)
         return self.voice(voice_id)
 
@@ -1828,7 +1888,8 @@ class FireVoice:
             A.write_audio(d / f"{k + 1}.wav", r.audio, r.sr)
             cands.append({"n": k + 1, "seed": s, "duration": round(r.duration, 2)})
         info = {"batch": batch, "description": description, "text": line, "engine": eng, "language": language, "candidates": cands}
-        (d / "batch.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
+        from .voices import write_json_atomic
+        write_json_atomic(d / "batch.json", info)
         return info
 
     def design_candidate_path(self, batch: str, n: int) -> Path:
@@ -2023,7 +2084,8 @@ class FireVoice:
             raise FireVoiceError("bad_request", str(e))
         d = _user_style_dir()
         d.mkdir(parents=True, exist_ok=True)
-        (d / f"{name}.json").write_text(json.dumps({**data, "name": name}, indent=1, ensure_ascii=False), encoding="utf-8")
+        from .voices import write_json_atomic
+        write_json_atomic(d / f"{name}.json", {**data, "name": name})
         all_styles(refresh=True)
         return self.style(name)
 

@@ -49,6 +49,35 @@ def write_json_atomic(path: Path, obj, ensure_ascii: bool = False) -> None:
     os.replace(tmp, path)
 
 
+def write_text_atomic(path: Path, text: str) -> None:
+    """Text via a temp file and rename (a crash never leaves half a transcript)."""
+    path = Path(path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def write_wav_atomic(path: Path, data, sr: int) -> None:
+    """A 16-bit WAV via a temp file and rename."""
+    path = Path(path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp.wav")
+    sf.write(str(tmp), data, sr, subtype="PCM_16", format="WAV")
+    os.replace(tmp, path)
+
+
+def back_up_unreadable(path: Path) -> Optional[Path]:
+    """Move a file that cannot be read aside (name.corrupt-<time>), so nothing overwrites it and it can be recovered."""
+    path = Path(path)
+    if not path.exists():
+        return None
+    dst = path.with_name(f"{path.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+    try:
+        os.replace(path, dst)
+        return dst
+    except OSError:
+        return None
+
+
 def _slug(s: str) -> str:
     return re.sub(r"[^a-z0-9_-]+", "-", s.lower()).strip("-") or "voice"
 
@@ -169,7 +198,7 @@ class VoiceLibrary:
         voice_id = self.canonical(voice_id)
         self.get(voice_id)
         self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / "default.txt").write_text(_slug(voice_id), encoding="utf-8")
+        write_text_atomic(self.root / "default.txt", _slug(voice_id))
 
     def default_id(self) -> Optional[str]:
         f = self.root / "default.txt"
@@ -213,11 +242,11 @@ class VoiceLibrary:
         peak = float(np.abs(data).max()) or 1.0
         data = data / peak * 0.9
         d.mkdir(parents=True, exist_ok=True)
-        sf.write(str(d / "ref.wav"), data, REF_SR, subtype="PCM_16")
+        write_wav_atomic(d / "ref.wav", data, REF_SR)
         if transcript is None and transcribe:
             transcript = self._transcribe(data, REF_SR)
         if transcript:
-            (d / "ref.txt").write_text(transcript.strip(), encoding="utf-8")
+            write_text_atomic(d / "ref.txt", transcript.strip())
         meta = {"voice_id": vid, "name": name, "category": "cloned", "description": description, "gender": gender, "tags": tags or [], "source": source,
                 "license": license, "consent": True, "created": int(time.time()), "ref_seconds": round(len(data) / REF_SR, 2), **extra}
         write_json_atomic(d / "meta.json", meta)
@@ -234,11 +263,11 @@ class VoiceLibrary:
         data = data / (float(np.abs(data).max()) or 1.0) * 0.9
         (d / "refs").mkdir(exist_ok=True)
         p = d / "refs" / f"{_slug(style)}.wav"
-        sf.write(str(p), data, REF_SR, subtype="PCM_16")
+        write_wav_atomic(p, data, REF_SR)
         if transcript is None and transcribe:
             transcript = self._transcribe(data, REF_SR)
         if transcript:
-            p.with_suffix(".txt").write_text(transcript.strip(), encoding="utf-8")
+            write_text_atomic(p.with_suffix(".txt"), transcript.strip())
         return str(p)
 
     def update(self, voice_id: str, **fields) -> dict:
