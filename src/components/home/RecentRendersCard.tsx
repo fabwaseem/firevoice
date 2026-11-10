@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { History, Play, Pause } from "lucide-react";
 import { ArtTile, Badge, Card, CardBody, CardHeader, EmptyState, Skeleton, Tooltip } from "@/components/ui";
-import { useJobs } from "@/lib/api/hooks";
+import { useJobs, useEngineName } from "@/lib/api/hooks";
 import { api } from "@/lib/api/client";
 import type { Job } from "@/lib/api/types";
 import { usePlayer } from "@/stores/player";
@@ -15,17 +15,18 @@ const STATUS_TONE: Record<Job["status"], "ok" | "info" | "warn" | "bad" | "neutr
   cancelled: "neutral",
 };
 
-function jobSubtitle(j: Job): string | undefined {
+function jobSubtitle(j: Job, nameOf: (id?: string | null) => string): string | undefined {
   const r = (j.result ?? {}) as Record<string, unknown>;
   const p = (j.payload ?? {}) as Record<string, unknown>;
   const req = (p.request ?? {}) as Record<string, unknown>;
   const engine = (r.engine as string) ?? (req.engine as string);
   const voice = (r.voice as string) ?? (req.voice as string);
-  return [engine, voice].filter(Boolean).join(" · ") || undefined;
+  return [nameOf(engine), voice].filter(Boolean).join(" · ") || undefined;
 }
 
 export function RecentRendersCard() {
   const jobs = useJobs({ limit: 6 });
+  const nameOf = useEngineName();
   const player = usePlayer();
   const list = jobs.data?.jobs ?? [];
 
@@ -34,7 +35,7 @@ export function RecentRendersCard() {
       player.toggle();
       return;
     }
-    player.load({ id: j.id, title: j.title || titleCase(j.kind), subtitle: jobSubtitle(j), src: api.jobAudioUrl(j.id), href: `/jobs/${j.id}` });
+    player.load({ id: j.id, title: j.title || titleCase(j.kind), subtitle: jobSubtitle(j, nameOf), src: api.jobAudioUrl(j.id), href: `/jobs/${j.id}` });
   };
 
   return (
@@ -89,7 +90,7 @@ export function RecentRendersCard() {
                   </div>
                   <Link to={`/jobs/${j.id}`} className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-medium text-ink">{j.title || titleCase(j.kind)}</span>
-                    <span className="block truncate text-[12px] text-muted">{jobSubtitle(j) ?? titleCase(j.kind)} · {relTime(j.finished ?? j.created)}</span>
+                    <span className="block truncate text-[12px] text-muted">{jobSubtitle(j, nameOf) ?? titleCase(j.kind)} · {relTime(j.finished ?? j.created)}</span>
                   </Link>
                   <Badge tone={STATUS_TONE[j.status]} dot={j.status === "running"}>
                     {j.status === "running" ? `${Math.round(j.progress * 100)}%` : j.status}

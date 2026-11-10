@@ -16,9 +16,24 @@ export interface EngineParam {
   help?: string;
 }
 
+/** Measured axes behind an engine's FireVoice name. */
+export interface EngineTier {
+  quality: "Studio" | "Pro" | "Standard" | "-";
+  size: "XS" | "S" | "M" | "L" | "XL" | "-";
+  speed: "Instant" | "Fast" | "Real-time" | "Slow" | "-";
+  params: string | null;
+  rtf: number | null;
+  vram_gb: number | null;
+}
+
 export interface Engine {
   name: string;
+  /** The FireVoice name ("Inferno"); the model behind it is `model`. */
   title: string;
+  brand?: string | null;
+  model?: string;
+  tagline?: string;
+  tier?: EngineTier | null;
   license?: string;
   commercial?: boolean;
   clone: boolean;
@@ -100,6 +115,8 @@ export interface EnginePick {
   ready: boolean;
   installable: boolean;
   vram_gb?: number | null;
+  model?: string | null;
+  tier?: EngineTier | null;
 }
 
 export interface SetupReport {

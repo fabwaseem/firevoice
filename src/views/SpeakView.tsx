@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { motion } from "motion/react";
 import { AudioLines, Clock, Gauge, Layers, ListPlus, Radio, Repeat, Square, Zap } from "lucide-react";
-import { useCreateJob, useEngines, useHealth, useOptions, useStyles } from "@/lib/api/hooks";
+import { useCreateJob, useEngines, useHealth, useOptions, useStyles, useEngineName } from "@/lib/api/hooks";
 import type { TTSRequest } from "@/lib/api/types";
 import { useStudio } from "@/stores/studio";
 import { useSettings } from "@/stores/settings";
@@ -30,6 +30,7 @@ export function SpeakView() {
 
   const engines = enginesQ.data ?? options.data?.engines ?? [];
   const styles = stylesQ.data ?? options.data?.styles ?? [];
+  const nameOf = useEngineName();
   const engineName = s.engine ?? options.data?.default_engine ?? null;
   const engine = engines.find((e) => e.name === engineName);
   const style = styles.find((x) => x.name === s.style);
@@ -159,7 +160,7 @@ export function SpeakView() {
                   {state.stats.seconds != null && <Stat icon={<Zap className="size-3.5" />} label="Rendered in" value={fmtDuration(state.stats.seconds)} />}
                   {state.stats.rtf != null && <Stat icon={<Gauge className="size-3.5" />} label="Speed" value={state.stats.rtf > 0 ? `${(1 / state.stats.rtf).toFixed(1)}× realtime` : "–"} />}
                   {state.stats.takes != null && <Stat icon={<Repeat className="size-3.5" />} label="Takes / retries" value={`${state.stats.takes} / ${state.stats.retries ?? 0}`} />}
-                  {state.stats.engine && <Stat label="Engine" value={state.stats.engine} />}
+                  {state.stats.engine && <Stat label="Engine" value={nameOf(state.stats.engine)} />}
                   {state.stats.warnings.map((w) => <Badge key={w} tone="warn">{w}</Badge>)}
                 </div>
               )}

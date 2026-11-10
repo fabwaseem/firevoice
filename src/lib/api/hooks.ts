@@ -125,6 +125,12 @@ export function useEngines(task: "tts" | "sfx" | "vc" | "all" = "tts") {
   return useQuery({ queryKey: [...qk.engines, task], queryFn: () => api.engines(task), refetchInterval: 10_000, retry: 1 });
 }
 
+/** Engine id -> its FireVoice name ("voxcpm2" -> "Inferno"); unknown ids come back unchanged. */
+export function useEngineName() {
+  const all = useEngines("all");
+  return (id?: string | null) => (id ? (all.data ?? []).find((e) => e.name === id)?.title ?? id : "");
+}
+
 export function useVoices(filters?: { language?: string; gender?: string; kind?: string; tag?: string; q?: string }) {
   const clean = Object.fromEntries(Object.entries(filters ?? {}).filter(([, v]) => v)) as Record<string, string>;
   return useQuery({ queryKey: qk.voices(clean), queryFn: () => api.voices(clean), staleTime: 30_000, retry: 1 });

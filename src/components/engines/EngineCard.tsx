@@ -40,10 +40,21 @@ export function EngineCard({ engine }: { engine: Engine }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-semibold tracking-[-0.01em] text-ink">{engine.title}</h3>
-          <p className="truncate font-mono text-[12px] text-muted">{engine.name}</p>
+          <p className="truncate text-[12px] text-muted" title={`engine id: ${engine.name}`}>
+            {engine.model ?? engine.title} · <span className="font-mono">{engine.name}</span>
+          </p>
         </div>
         <StatusBadge engine={engine} />
       </div>
+
+      {engine.tier && engine.tier.quality !== "-" && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Badge tone={engine.tier.quality === "Studio" ? "fire" : "neutral"}>{engine.tier.quality}</Badge>
+          <Badge tone="neutral">Size {engine.tier.size}{engine.tier.params ? ` · ${engine.tier.params}` : ""}</Badge>
+          <Badge tone="neutral">{engine.tier.speed}</Badge>
+        </div>
+      )}
+      {engine.tagline && <p className="mt-2 text-[12.5px] leading-relaxed text-muted">{engine.tagline}</p>}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {engine.license && <Badge tone={engine.commercial ? "ok" : "warn"}>{engine.license}</Badge>}
