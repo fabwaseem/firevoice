@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.4 (2026-11-10)
+
+An API for your own tools and AI agents, and a tidier app.
+
+- Settings has a new API section: the address, a ready-made set of instructions to paste into your AI agent, examples for curl, Python and JavaScript, and a button that opens the full API docs.
+- With the sidebar in compact mode, the FireVoice logo opens it: point at the logo and it becomes the open button.
+- The engine log is easier to read: no more hundreds of progress lines per model load, and it no longer grows without limit.
+- Dubbing and transcription with several speakers start faster: a helper model is now loaded once instead of once per segment.
+- The voice engine is used through the app or its API only. The command-line tool and the playground web page are gone; the API docs at /docs remain.
+- After this update FireVoice updates its voice engine once, with progress on screen.
+- FireVoice is now under a proprietary license.
+
 ## 1.5.3 (2026-11-10)
 
 A new first-run experience.
