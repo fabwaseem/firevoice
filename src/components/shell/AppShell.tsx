@@ -8,7 +8,6 @@ import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { OfflineBanner } from "./OfflineBanner";
 import { BackendManager } from "./BackendManager";
-import { Welcome } from "@/components/onboarding/Welcome";
 import { usePlayer } from "@/stores/player";
 import { useStagger } from "@/lib/stagger";
 
@@ -50,7 +49,6 @@ export function AppShell() {
             style={{ paddingBottom: hasTrack ? 116 : 28 }}
           >
             <BackendManager />
-            <Welcome />
             <OfflineBanner />
             <Suspense fallback={<PageLoading />}>
               {/* keyed by page: each page (and its sections, staggered) eases in when opened */}

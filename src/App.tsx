@@ -4,6 +4,7 @@ import { createHashRouter, RouterProvider } from "react-router";
 import { AppShell } from "@/components/shell/AppShell";
 import { RouteError } from "@/components/shell/RouteError";
 import { UpdateGate } from "@/components/shell/UpdateGate";
+import { StartupGate } from "@/components/onboarding/StartupGate";
 import { HomeView } from "@/views/HomeView";
 
 // Pages load when first opened, so the app starts from a small bundle. Home ships with it.
@@ -70,7 +71,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <UpdateGate>
-        <RouterProvider router={router} />
+        <StartupGate>
+          <RouterProvider router={router} />
+        </StartupGate>
       </UpdateGate>
     </QueryClientProvider>
   );

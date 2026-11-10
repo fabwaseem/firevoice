@@ -2204,20 +2204,20 @@ class FireVoice:
             return {"engine": name, "title": e.get("title", name), "model": e.get("model"), "tier": e.get("tier"), "reason": why, "ready": bool(e.get("ready")),
                     "installable": bool(e.get("installable")), "vram_gb": e.get("vram_gb")}
         if not g:
-            rec = pick("kokoro", "No NVIDIA GPU found: Spark is small enough to run on the CPU (preset voices, no cloning).")
+            rec = pick("kokoro", "No NVIDIA graphics card found, so Spark is the pick: it is small enough to run without one, with ready-made voices.")
             alts = []
         elif (vram or 0) >= 9:
-            rec = pick("voxcpm2", f"{vram:.0f} GB of VRAM fits Inferno, the most natural engine here: 48 kHz, cloning, "
-                                  "voice design and style instructions in 30 languages.")
-            alts = [pick("chatterbox-turbo", "Faster, smaller and ready without a download."),
-                    pick("qwen3-tts", "Strong 3-second cloning in 10 languages.")]
+            rec = pick("voxcpm2", "Your graphics card has room for Inferno, the most natural-sounding engine: it copies and designs "
+                                  "voices, follows style directions and speaks 30 languages.")
+            alts = [pick("chatterbox-turbo", "Faster and smaller, and ready right away with nothing to download."),
+                    pick("qwen3-tts", "Copies a voice from just 3 seconds of speech, in 10 languages.")]
         elif (vram or 0) >= 4.5:
-            rec = pick("chatterbox-turbo", f"{vram:.0f} GB of VRAM: Flash clones voices quickly and comes with the backend.")
-            alts = [pick("qwen3-tts", "Better cloning in 10 languages, if it fits next to other apps."),
-                    pick("kokoro", "Tiny and very fast, preset voices only.")]
+            rec = pick("chatterbox-turbo", "Flash fits your graphics card: it copies voices quickly and is ready right away.")
+            alts = [pick("qwen3-tts", "Copies voices more closely in 10 languages, if your graphics card has room next to other apps."),
+                    pick("kokoro", "Tiny and very fast, with ready-made voices.")]
         else:
-            rec = pick("kokoro", f"Only {vram or 0:.0f} GB of VRAM: Spark needs about 1 GB (preset voices, no cloning).")
-            alts = [pick("chatterbox-turbo", "Cloning, if about 4 GB of VRAM is free.")]
+            rec = pick("kokoro", "Your graphics card has little memory, so Spark is the pick: it needs about 1 GB and uses ready-made voices.")
+            alts = [pick("chatterbox-turbo", "Copies voices, if about 4 GB of graphics memory is free.")]
         ff = paths.ffmpeg()
         problems = []
         if not ff:

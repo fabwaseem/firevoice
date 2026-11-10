@@ -217,3 +217,22 @@
 .tool-working-bar { height: 100%; transform-origin: center; animation: levels 1s ease-in-out infinite; }
 .tool-active-in { animation: fade-up 0.28s var(--ease-out-quart) both; }
 @media (prefers-reduced-motion: reduce) { .tool-working-bar, .tool-active-in { animation: none; } }
+
+/* Onboarding: the dark brand panel, the living waveform, and steps easing in */
+.onb-brand {
+  background:
+    radial-gradient(120% 70% at 0% 0%, rgba(255, 106, 61, 0.28), transparent 60%),
+    radial-gradient(90% 60% at 100% 100%, rgba(255, 154, 92, 0.16), transparent 65%),
+    #0d0e12;
+}
+.onb-hero {
+  background:
+    radial-gradient(70% 55% at 50% -10%, color-mix(in oklab, var(--fire) 26%, transparent), transparent 70%),
+    radial-gradient(50% 40% at 85% 110%, color-mix(in oklab, var(--fire-2) 14%, transparent), transparent 70%),
+    var(--bg);
+}
+.onb-bar { transform-origin: center; animation: levels 1.6s ease-in-out infinite; }
+.onb-in { animation: fade-up 0.45s var(--ease-out-quart) both; }
+.onb-rise { animation: fade-up 0.6s var(--ease-out-quart) both; }
+.onb-glow { box-shadow: 0 0 0 1px color-mix(in oklab, var(--fire) 35%, transparent), 0 24px 70px -18px color-mix(in oklab, var(--fire) 70%, transparent); }
+@media (prefers-reduced-motion: reduce) { .onb-bar, .onb-in, .onb-rise { animation: none; } }
