@@ -261,7 +261,8 @@ def test_desktop_backend_serves_api_and_docs_but_no_playground(svc, monkeypatch)
     assert c.get("/", follow_redirects=False).headers["location"] == "/docs"
     assert c.get("/docs").status_code == 200 and c.get("/openapi.json").status_code == 200
     assert c.get("/api/v1/samples/speech.mp3").status_code == 200        # the app's Try a sample buttons still work
-    assert c.get("/health").json()["api_version"] == 4
+    from firevoice import API_VERSION
+    assert c.get("/health").json()["api_version"] == API_VERSION
     monkeypatch.delenv("FIREVOICE_DESKTOP")
     c2 = TestClient(create_app(svc))
     assert c2.get("/playground").status_code == 200 and c2.get("/", follow_redirects=False).headers["location"] == "/playground"
