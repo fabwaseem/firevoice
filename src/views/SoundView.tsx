@@ -104,8 +104,8 @@ export function SoundView() {
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_160px_auto] sm:items-end">
           <div>
-            <Label htmlFor="snd-len" hint={`${seconds}s`}>Length</Label>
-            <input id="snd-len" type="range" min={1} max={30} step={0.5} value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} className="w-full accent-[var(--fire)]" />
+            <Label htmlFor="snd-len" hint={seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")} min` : `${seconds}s`}>Length</Label>
+            <input id="snd-len" type="range" min={1} max={kind === "music" ? 180 : 30} step={kind === "music" ? 1 : 0.5} value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} className="w-full accent-[var(--fire)]" />
           </div>
           <div>
             <Label htmlFor="snd-seed" hint="empty = new">Seed</Label>
