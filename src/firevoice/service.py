@@ -174,6 +174,10 @@ class FireVoice:
         from .projects import ProjectStore
         self.projects = ProjectStore(home() / "projects")
         self.jobs = JobManager(self)
+        # every operation leaves a usage line (Stats); FIREVOICE_USAGE=off turns it off
+        if os.environ.get("FIREVOICE_USAGE", "on") != "off":
+            from . import usage
+            usage.instrument(self)
 
     # -------------------------------------------------------------------- engines
     def engine_names(self, task: str = "tts") -> list[str]:
@@ -939,6 +943,59 @@ class FireVoice:
             self.render_retake(rid, i, cancel=cancel)
         return self.render_get(rid)
 
+    # -------------------------------------------------------------------- stats
+    def stats(self, days: Optional[int] = 30) -> dict:
+        """Every number for the Stats screen: usage over the range (usage.summary), the library as it is now, and what
+        FireVoice keeps on disk."""
+        from . import usage
+        s = usage.summary(days)
+        voices = self.voices.list()
+        styles = self.style_list()
+        try:
+            projects = self.project_list()
+        except Exception:
+            projects = []
+        try:
+            rules = len(self.dictionary.rules())
+        except Exception:
+            rules = 0
+        try:
+            engines = self.engines("all")
+        except Exception:
+            engines = []
+        names = {v["voice_id"]: v.get("name") or v["voice_id"] for v in voices}
+        for row in s["voices"]:
+            k = str(row["key"])
+            if k == "default":
+                row["name"] = "Default voice"
+            elif k.startswith("design:"):
+                row["name"] = "Designed on the fly"
+            else:
+                try:                                   # older renders kept the voice by name, newer ones by id
+                    row["name"] = names.get(self.voices.canonical(k), names.get(k, k))
+                except Exception:
+                    row["name"] = names.get(k, k)
+        for row in s["engines"]:
+            row["name"] = _nm(row["key"])
+        style_titles = {st["name"]: st.get("title") or st["name"] for st in styles}
+        for row in s["styles"]:
+            row["name"] = style_titles.get(row["key"], row["key"])
+        speech_engines = [e for e in engines if e.get("task", "tts") == "tts"]
+        library = {
+            "voices": len(voices), "cloned": sum(1 for v in voices if v.get("category") == "cloned"),
+            "designed": sum(1 for v in voices if v.get("category") == "designed"),
+            "favorites": sum(1 for v in voices if v.get("favorite")),
+            "voice_languages": len({v.get("language") or "en" for v in voices}),
+            "styles": len(styles), "custom_styles": sum(1 for st in styles if not st.get("builtin", True)),
+            "projects": len(projects), "chapters": sum(int(p.get("chapters") or 0) for p in projects),
+            "paragraphs": sum(int(p.get("paragraphs") or 0) for p in projects), "project_words": sum(int(p.get("words") or 0) for p in projects),
+            "dictionary_rules": rules, "history_items": sum(1 for _ in self.history.root.glob("*/item.json")) if self.history.root.exists() else 0,
+            "kept_renders": sum(1 for _ in (home() / "takes").glob("*/render.json")), "jobs": len(self.jobs.jobs),
+            "engines_ready": sum(1 for e in speech_engines if e.get("ready")), "engines_total": len(speech_engines),
+            "tools_ready": sum(1 for e in engines if e.get("task") in ("sfx", "vc", "tool") and e.get("ready")),
+        }
+        return {**s, "library": library, "storage": _storage()}
+
     # -------------------------------------------------------------------- history
     def history_list(self, kind: Optional[str] = None, limit: int = 100, before: Optional[float] = None, q: Optional[str] = None) -> list[dict]:
         """Everything made, newest first: speech renders (kind "speech", from the kept-render store) and the outputs in
@@ -1287,6 +1344,7 @@ class FireVoice:
                 if c.get(k) not in (None, ""):
                     d[k] = c[k]
             req = TTSRequest.from_dict(d)
+            setattr(req, "_usage_inner", True)     # counted as part of the dialogue (Stats), not as its own speech
             self.prepare(req)                      # fail before rendering anything
             reqs.append(req)
         done = {"n": 0}
@@ -2296,6 +2354,37 @@ def _nm(engine: str) -> str:
     """An engine's FireVoice name for messages ("voxcpm2" -> "Inferno")."""
     from .core.brands import name_of
     return name_of(engine)
+
+
+_STORAGE: dict = {}
+
+
+def _storage() -> dict:
+    """Bytes FireVoice keeps, per folder (measured at most once a minute: walking the folders takes a moment)."""
+    import time as _t
+    hit = _STORAGE.get("v")
+    if hit and _t.monotonic() - hit[0] < 60:
+        return hit[1]
+
+    def size(p: Path) -> int:
+        total = 0
+        try:
+            for root, _dirs, files in os.walk(p):
+                for f in files:
+                    try:
+                        total += os.path.getsize(os.path.join(root, f))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+        return total
+    h = home()
+    parts = {"voices": h / "voices", "speech": h / "takes", "history": h / "history", "jobs": h / "renders", "projects": h / "projects",
+             "logs": h / "logs"}
+    folders = {k: size(p) for k, p in parts.items()}
+    v = {"folders": folders, "data_total": sum(folders.values()), "home": str(h)}
+    _STORAGE["v"] = (_t.monotonic(), v)
+    return v
 
 
 def _engine_names() -> dict:

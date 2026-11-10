@@ -1125,6 +1125,14 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     def render_delete(rid: str):
         return svc.render_delete(rid)
 
+    # ------------------------------------------------------------------ stats
+    @app.get("/api/v1/stats", dependencies=deps, tags=["system"])
+    def stats(days: int = Query(30, ge=0, le=3650, description="the last N days; 0 for all time")):
+        """Every number: speech, sound, music, voice changes, dialogues, dubs and transcripts made; time, words and speed;
+        engines, voices, styles and languages used; daily activity; when you work; records and streaks; the library;
+        and disk use. Built from the usage log (seeded from history on first run)."""
+        return svc.stats(days or None)
+
     # ------------------------------------------------------------------ history
     @app.get("/api/v1/history", dependencies=deps, tags=["history"])
     def history(kind: Optional[str] = Query(None, description="comma-separated: speech, sound, music, changer, dialogue, transcript, separate, clean"),
