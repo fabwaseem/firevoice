@@ -1,17 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, Mic, Mic2, Square, Upload, Wand2 } from "lucide-react";
+import { Mic, Mic2, Square, Upload, Wand2 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { errMessage, useVoices } from "@/lib/api/hooks";
 import type { ClipCheck } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { useStudio } from "@/stores/studio";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { WatermarkCheck } from "@/components/tools/WatermarkCheck";
-import { QualityCheck } from "@/components/tools/QualityReport";
-import { SeparateCard } from "@/components/tools/SeparateCard";
-import { Badge, Button, Card, Label, NativeSelect } from "@/components/ui";
+import { AudioPlayer, Badge, Button, Card, Label, NativeSelect } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
 import { RecentHistory } from "@/components/history/HistoryList";
 import { useReleaseOnReplace, useSessionState } from "@/stores/session";
@@ -106,7 +103,7 @@ export function VoiceChangerView() {
           )}
           {source && (
             <div className="mt-4 space-y-2">
-              <audio controls src={source.url} className="w-full" />
+              <AudioPlayer src={source.url} label="Your recording" />
               <p className="text-[12.5px] text-muted">{source.name}</p>
               {check && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
@@ -130,21 +127,13 @@ export function VoiceChangerView() {
           <Button className="mt-3" variant="primary" leading={<Wand2 className="size-4" />} onClick={convert} disabled={!source || busy} loading={busy}>Change voice</Button>
           {result && (
             <div className="mt-4 space-y-2">
-              <audio controls autoPlay src={result.url} className="w-full" />
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost" leading={<Download className="size-4" />} onClick={() => void saveBlob(result.blob, `${vname}-voice-changer.mp3`)}>Download</Button>
-                <span className="text-[12.5px] text-muted">{result.duration}s in {vname} · saved in History</span>
-              </div>
+              <AudioPlayer autoPlay src={result.url} label="New voice" onDownload={() => void saveBlob(result.blob, `${vname}-voice-changer.mp3`)} />
+              <p className="text-[12.5px] text-muted">{result.duration}s in {vname} · saved in History</p>
             </div>
           )}
         </Card>
       </div>
       <RecentHistory kinds={["changer"]} title="Recent voice changes" limit={5} empty="Voice changes are saved automatically and listed here." />
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <SeparateCard />
-        <QualityCheck />
-        <WatermarkCheck />
-      </div>
     </div>
   );
 }

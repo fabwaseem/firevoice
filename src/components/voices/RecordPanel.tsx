@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Trash2 } from "lucide-react";
 import { Recorder } from "@/lib/audio";
 import { cn, fmtTime } from "@/lib/utils";
-import { Button } from "@/components/ui";
+import { AudioPlayer, Button } from "@/components/ui";
 
 /** Microphone recorder with a live level meter and playback preview. Emits the recorded blob. */
 export function RecordPanel({ value, onChange }: { value: Blob | null; onChange: (b: Blob | null) => void }) {
@@ -95,7 +95,7 @@ export function RecordPanel({ value, onChange }: { value: Blob | null; onChange:
 
       {previewUrl && !recording && (
         <div className="mt-3 flex items-center gap-2">
-          <audio controls src={previewUrl} className="h-9 min-w-0 flex-1" />
+          <AudioPlayer src={previewUrl} size="sm" label="Recording" className="min-w-0 flex-1" />
           <Button variant="ghost" size="icon-sm" aria-label="Discard recording" onClick={() => onChange(null)}>
             <Trash2 className="size-4" />
           </Button>

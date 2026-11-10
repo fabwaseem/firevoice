@@ -6,6 +6,25 @@ import { api, downloadFile, safeFileName } from "@/lib/api/client";
 import { errMessage, useActiveInstall, useInstallEngine, useInstallPlan, useJob, useUninstallEngine } from "@/lib/api/hooks";
 import { Button, ConfirmDialog, Dialog, ProgressBar, Switch } from "@/components/ui";
 
+/** What each install step is, in plain words. The plan's own text names packages, model repos and folders, which
+ * the app never shows. */
+const STEP_LABEL: Record<string, string> = {
+  venv: "A private workspace for the engine",
+  code: "The engine's program files",
+  torch: "Graphics card support",
+  packages: "The engine's software",
+  weights: "The engine's model",
+  check: "A quick check that it works",
+};
+const stepLabel = (step: string) => STEP_LABEL[step] ?? "Finishing touches";
+
+/** A plain reason an engine is not ready (the backend's own reasons name folders and packages). */
+function notReadyReason(problems: string[] | undefined): string {
+  const p = (problems ?? []).join(" ");
+  if (/weights/i.test(p) && !/venv|package/i.test(p)) return "Its model still needs downloading.";
+  return "Not installed on this computer yet.";
+}
+
 /** Install, follow and remove an engine from its card. The backend does the work as an `install` job; this only
  * starts it and shows the job's progress (the jobs event feed keeps that job's cache fresh). */
 export function InstallPanel({ engine }: { engine: Engine }) {
@@ -63,17 +82,13 @@ export function InstallPanel({ engine }: { engine: Engine }) {
 
       {!engine.ready && !running && (
         <div className="mt-3 rounded-md bg-surface-2 px-3 py-2">
-          {(engine.problems ?? []).map((p) => (
-            <p key={p} className="text-[12px] text-muted">
-              {p}
-            </p>
-          ))}
+          <p className="text-[12px] text-muted">{notReadyReason(engine.problems)}</p>
           {engine.installable ? (
             <Button size="sm" variant="soft" className="mt-2" leading={<HardDriveDownload className="size-4" />} onClick={() => setPlanOpen(true)}>
               Install…
             </Button>
           ) : (
-            <p className="mt-1 text-[12px] text-faint">{plan.data?.manual ?? "This engine cannot be installed from the app yet."}</p>
+            <p className="mt-1 text-[12px] text-faint">This engine comes with FireVoice itself. Reinstall FireVoice if it is missing.</p>
           )}
         </div>
       )}
@@ -108,7 +123,7 @@ export function InstallPanel({ engine }: { engine: Engine }) {
                 <li key={i} className="flex items-start gap-2">
                   {s.done ? <Check className="mt-0.5 size-4 shrink-0 text-ok" /> : <span className="mt-1.5 size-2 shrink-0 rounded-full bg-faint" />}
                   <span className={s.done ? "text-faint line-through" : "text-ink-2"}>
-                    {s.what}
+                    {stepLabel(s.step)}
                     {s.gb ? <span className="text-faint"> ({s.gb} GB)</span> : null}
                   </span>
                 </li>
@@ -119,7 +134,6 @@ export function InstallPanel({ engine }: { engine: Engine }) {
                 About <b className="text-ink">{plan.data.estimated_gb} GB</b> to download, less when another engine already downloaded the same parts.
               </p>
             )}
-            {plan.data.notes && <p className="text-faint">{plan.data.notes}</p>}
             {plan.data.repo_code && (
               <p className="rounded-md bg-warn-soft px-3 py-2 text-warn">
                 This engine runs code from its own repository, pinned to a fixed version. Install only engines you trust.

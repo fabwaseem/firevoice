@@ -20,6 +20,7 @@ import {
   PanelLeftOpen,
   Repeat2,
   Settings,
+  Wrench,
   Sun,
   Waves,
 } from "lucide-react";
@@ -44,6 +45,7 @@ const GROUPS: { title?: string; items: Item[] }[] = [
       { to: "/dub", label: "Dubbing", icon: Languages },
       { to: "/sound", label: "Sound", icon: Waves },
       { to: "/transcribe", label: "Transcribe", icon: Mic },
+      { to: "/tools", label: "Tools", icon: Wrench },
     ],
   },
   {

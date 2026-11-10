@@ -25,6 +25,7 @@ const ProjectEditorView = page(() => import("@/views/ProjectEditorView"), "Proje
 const SettingsView = page(() => import("@/views/SettingsView"), "SettingsView");
 const HistoryView = page(() => import("@/views/HistoryView"), "HistoryView");
 const StatsView = page(() => import("@/views/StatsView"), "StatsView");
+const ToolsView = page(() => import("@/views/ToolsView"), "ToolsView");
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +55,7 @@ const router = createHashRouter([
       { path: "dictionary", element: <DictionaryView /> },
       { path: "projects", element: <ProjectsView /> },
       { path: "changer", element: <VoiceChangerView /> },
+      { path: "tools", element: <ToolsView /> },
       { path: "dialogue", element: <DialogueView /> },
       { path: "dub", element: <DubbingView /> },
       { path: "sound", element: <SoundView /> },

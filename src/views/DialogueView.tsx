@@ -8,7 +8,7 @@ import type { DialogueResult } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { useStudio } from "@/stores/studio";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { ArtTile, Badge, Button, Card, EmptyState, Label, NativeSelect, Slider, Textarea } from "@/components/ui";
+import { ArtTile, AudioPlayer, Badge, Button, Card, EmptyState, Label, NativeSelect, Slider, Textarea } from "@/components/ui";
 import { cn, fmtTime } from "@/lib/utils";
 import { RecentHistory } from "@/components/history/HistoryList";
 import { useReleaseOnReplace, useSessionState } from "@/stores/session";
@@ -160,7 +160,7 @@ export function DialogueView() {
           </Button>
           {result && (
             <div className="mt-4 space-y-2">
-              <audio ref={player} controls autoPlay src={result.url} className="w-full" onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
+              <AudioPlayer ref={player} autoPlay src={result.url} label="Dialogue" onTimeUpdate={setNow} onDownload={() => void saveBlob(result.blob, "dialogue.mp3")} />
               <div className="max-h-80 space-y-0.5 overflow-y-auto">
                 {result.turns.map((t, i) => {
                   const on = now >= t.start && (i === result.turns.length - 1 || now < result.turns[i + 1].start);

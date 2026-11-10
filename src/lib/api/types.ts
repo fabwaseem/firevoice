@@ -68,7 +68,7 @@ export interface Engine {
 }
 
 export interface InstallStep {
-  step: "venv" | "torch" | "packages" | "weights" | "check";
+  step: "venv" | "code" | "torch" | "packages" | "weights" | "check";
   what: string;
   done: boolean;
   gb?: number | null;

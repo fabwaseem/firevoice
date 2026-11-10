@@ -7,7 +7,7 @@ import { statusLabel } from "@/components/jobs/jobUtils";
 import { errMessage, useJob, useVoices } from "@/lib/api/hooks";
 import type { DubLine } from "@/lib/api/types";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { Badge, Button, Card, Label, NativeSelect, ProgressBar, Switch } from "@/components/ui";
+import { AudioPlayer, Badge, Button, Card, Label, NativeSelect, ProgressBar, Switch } from "@/components/ui";
 import { TrySample } from "@/components/tools/TrySample";
 import { useSessionState } from "@/stores/session";
 
@@ -161,7 +161,7 @@ export function DubbingView() {
               {video ? (
                 <video controls src={api.jobFileUrl(jobId, video)} className="max-h-[420px] w-full rounded-xl bg-black" />
               ) : (
-                <audio controls autoPlay src={api.jobFileUrl(jobId, result.audio)} className="w-full" />
+                <AudioPlayer autoPlay src={api.jobFileUrl(jobId, result.audio)} label="Dub" />
               )}
               <div className="flex flex-wrap items-center gap-2">
                 {result.files.filter((n) => n !== "lines.json").map((n) => (

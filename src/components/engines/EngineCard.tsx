@@ -19,7 +19,7 @@ function usage(engine: Engine): Use {
   if (engine.name === "musicgen") return { label: "Open Sound", to: "/sound", icon: Music, where: ["Sound (music)", "Dialogue music beds"] };
   if (engine.task === "sfx") return { label: "Open Sound", to: "/sound", icon: Waves, where: ["Sound (effects)", "Dialogue sound cues"] };
   if (engine.task === "tool")
-    return { label: "Open audio tools", to: "/changer", icon: Layers, where: ["Separate voice and music", "Clean a voice (Best)", "Dubbing (keep the music)"] };
+    return { label: "Open Tools", to: "/tools", icon: Layers, where: ["Tools (separate voice)", "Clean a voice (Best)", "Dubbing (keep the music)"] };
   return { label: "Use in Speak", to: "/speak", icon: AudioLines, where: ["Speak", "Dialogue", "Projects", "Dubbing"], speak: true };
 }
 
