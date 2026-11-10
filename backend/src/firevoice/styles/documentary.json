@@ -1,0 +1,22 @@
+{
+ "name": "documentary",
+ "title": "Documentary",
+ "description": "Polished, authoritative narrator with cinematic pacing; nature and history documentaries.",
+ "pace": 0.96,
+ "pause": 1.3,
+ "temperature": 0.7,
+ "cfg": 2.2,
+ "instruct": "Narrate like a polished documentary narrator, authoritative, cinematic pacing, warm gravitas.",
+ "desc": "rich, authoritative documentary-narrator voice",
+ "emo_vector": [
+  0.1,
+  0,
+  0,
+  0,
+  0,
+  0.1,
+  0.1,
+  0.7
+ ],
+ "sample": "Deep beneath the data center, a single cable carries the conversations of forty million people. It is thinner than a garden hose. [pause 400ms] And right now, somewhere along its length, someone is trying to listen in."
+}

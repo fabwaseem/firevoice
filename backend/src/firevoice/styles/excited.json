@@ -1,0 +1,26 @@
+{
+ "name": "excited",
+ "title": "Excited",
+ "description": "High energy, fast, bright; for hype moments and big reveals.",
+ "pace": 1.05,
+ "pause": 0.8,
+ "temperature": 0.95,
+ "cfg": 1.8,
+ "instruct": "Speak with high energy and genuine excitement, fast, bright and enthusiastic.",
+ "desc": "energetic, bright, enthusiastic delivery",
+ "emo_vector": [
+  0.8,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.5,
+  0
+ ],
+ "tags": [
+  "laugh",
+  "gasp"
+ ],
+ "sample": "No way. No way! It actually worked on the first try? [laugh] Do you understand how rare that is? I've been fighting this bug for three days and it just... compiled. Clean. Zero warnings. I might frame this terminal."
+}

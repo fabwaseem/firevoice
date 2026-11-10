@@ -1,0 +1,26 @@
+{
+ "name": "sports",
+ "title": "Sports Commentator",
+ "description": "Punchy, urgent, rising energy; play-by-play excitement.",
+ "pace": 1.08,
+ "pause": 0.75,
+ "temperature": 0.95,
+ "cfg": 1.8,
+ "instruct": "Commentate like an excited sports announcer, punchy, urgent, building energy, loud and fast.",
+ "desc": "punchy, urgent sports-commentator voice",
+ "emo_vector": [
+  0.6,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.7,
+  0
+ ],
+ "tags": [
+  "gasp",
+  "laugh"
+ ],
+ "sample": "And the pull request is open! The tests are running, the build is green, and... oh! Oh, a merge conflict on line forty! Can she resolve it? She's typing, she's typing... [gasp] merged! Unbelievable scenes!"
+}

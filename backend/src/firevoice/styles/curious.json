@@ -1,0 +1,25 @@
+{
+ "name": "curious",
+ "title": "Curious",
+ "description": "Wondering, exploratory, rising intonation; good for questions and discovery.",
+ "pace": 1.02,
+ "pause": 1.0,
+ "temperature": 0.85,
+ "cfg": 2.0,
+ "instruct": "Speak with curiosity and wonder, as if discovering something fascinating, lively intonation.",
+ "desc": "curious, inquisitive, wondering tone",
+ "emo_vector": [
+  0.4,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.5,
+  0.2
+ ],
+ "tags": [
+  "hmm"
+ ],
+ "sample": "So wait. [hmm] If the server never stores your actual password, how does it know you typed the right one? That's the part that kept bugging me. And the answer turns out to be weirdly elegant."
+}

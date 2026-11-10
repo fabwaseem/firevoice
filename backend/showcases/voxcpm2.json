@@ -1,0 +1,162 @@
+{
+ "title": "VoxCPM2 showcase",
+ "engine": "voxcpm2",
+ "texts": {
+  "intro": {"title": "Intro (English)", "lang": "en", "text": "Hi, I'm one of the voices you can choose for your next video. I can explain a tricky idea, tell you a story, or just talk to you like a friend, and I'll sound like a real person the whole way through."},
+  "design_ref": {"title": "Design take", "lang": "en", "text": "Hello there, and welcome; today I want to walk you through something I genuinely love, one small step at a time, so get comfortable, grab something warm to drink, and let's begin together."},
+  "emo_line": {"title": "Emotion line", "lang": "en", "text": "I can't believe you did that. After everything we talked about, you just walked in there and told them the whole truth."},
+  "hifi_line": {"title": "Fidelity line", "lang": "en", "text": "The best part of this job is the moment it finally clicks. You try something ten times, it fails ten times, and then, on the eleventh go, everything just works."},
+  "knob_line": {"title": "Knob line", "lang": "en", "text": "Every password you have ever typed went somewhere. Some were stored safely, as a fingerprint nobody can reverse. Others were sitting in a plain text file, waiting."},
+  "story": {"title": "Long story (about 70 s)", "lang": "en", "text": "The lighthouse on Harrow Point had been dark for eleven years when Mira climbed its stairs for the first time. Everyone in the village had a theory about why it stopped. Some said the keeper simply got old. Others said he saw something out on the water one night and never wanted to see it again. Mira didn't believe in ghosts. She believed in rusted gears and broken bulbs, and in the stubborn idea that things can be fixed if you are patient enough. So she brought a toolbox, a flask of tea, and a notebook full of questions. By midnight, her hands were black with grease and the tea was long gone. Then, just as she tightened the last bolt, the great lamp shuddered, hummed, and slowly began to turn. Light swept across the bay for the first time in eleven years. And far out on the water, something blinked back."},
+  "ur_script": {"title": "Urdu (Urdu script)", "lang": "ur", "text": "السلام علیکم! آج آپ کے لیے ایک چھوٹی سی کہانی ہے۔ ایک گاؤں میں ایک بوڑھا کسان رہتا تھا، جو ہر صبح سورج نکلنے سے پہلے اپنے کھیتوں میں چلا جاتا تھا۔ لوگ پوچھتے تھے کہ اتنی جلدی کیوں؟ وہ مسکرا کر کہتا، کیونکہ صبح کی ہوا میں سب سے زیادہ سکون ہوتا ہے۔"},
+  "ur_deva": {"title": "Urdu (Devanagari)", "lang": "hi", "text": "अस्सलाम अलैकुम! आज आपके लिए एक छोटी सी कहानी है। एक गाँव में एक बूढ़ा किसान रहता था, जो हर सुबह सूरज निकलने से पहले अपने खेतों में चला जाता था। लोग पूछते थे कि इतनी जल्दी क्यों? वह मुस्कुरा कर कहता, क्योंकि सुबह की हवा में सबसे ज़्यादा सुकून होता है।"},
+  "ur_roman": {"title": "Urdu (Roman)", "lang": "ur", "text": "Assalam o Alaikum! Aaj aap ke liye aik choti si kahani hai. Aik gaon mein aik boorha kisaan rehta tha, jo har subah sooraj nikalne se pehle apne kheton mein chala jata tha. Log poochte thay ke itni jaldi kyun? Woh muskura kar kehta, kyunke subah ki hawa mein sab se zyada sukoon hota hai."},
+  "es": {"title": "Spanish", "lang": "es", "text": "Hola, ¿qué tal? Hoy quiero contarte algo curioso: el café que bebes cada mañana viajó miles de kilómetros antes de llegar a tu taza."},
+  "fr": {"title": "French", "lang": "fr", "text": "Bonjour à tous. Aujourd'hui, on va parler d'une idée toute simple qui a pourtant changé le monde : le fait de partager une recette."},
+  "de": {"title": "German", "lang": "de", "text": "Guten Morgen! Heute erkläre ich dir in wenigen Minuten, warum der Himmel blau ist und der Sonnenuntergang rot."},
+  "hi": {"title": "Hindi", "lang": "hi", "text": "नमस्ते दोस्तों! आज हम एक ऐसी कहानी सुनेंगे जो आपको सोचने पर मजबूर कर देगी।"},
+  "ar": {"title": "Arabic", "lang": "ar", "text": "مرحباً بكم! اليوم سنتحدث عن فكرة بسيطة غيّرت حياة الملايين من الناس حول العالم."},
+  "ja": {"title": "Japanese", "lang": "ja", "text": "こんにちは。今日は、毎朝飲むコーヒーがどこから来るのか、少しだけお話しします。"},
+  "zh": {"title": "Chinese", "lang": "zh", "text": "大家好！今天我想和你分享一个小故事，关于一位每天清晨都去海边散步的老人。"},
+  "tr": {"title": "Turkish", "lang": "tr", "text": "Merhaba arkadaşlar! Bugün size, her sabah içtiğiniz kahvenin uzun yolculuğunu anlatacağım."}
+ },
+ "sections": [
+  {
+   "id": "design",
+   "title": "1. Voice design (description only)",
+   "about": "No reference audio at all: each voice is invented from the text description in the row. Every take is then locked as a reusable library voice (dsg-...), so later sections and future scripts keep exactly this identity.",
+   "voices": [
+    {"name": "old-british-gent", "design": "An elderly British gentleman in his seventies, deep, gravelly and wise, speaking slowly"},
+    {"name": "young-us-woman", "design": "A young American woman in her twenties, bright, upbeat and friendly"},
+    {"name": "calm-guide-f", "design": "A calm, warm middle-aged woman, soft and soothing, like a meditation teacher"},
+    {"name": "sports-caster", "design": "An energetic male sports commentator, fast, loud and thrilled"},
+    {"name": "ghost-whisper-f", "design": "A breathy, whispering woman, intimate and unsettling, like someone telling a ghost story"},
+    {"name": "news-anchor-m", "design": "A confident male news anchor with a crisp, neutral American accent"},
+    {"name": "little-girl", "design": "A cheerful eight-year-old girl, curious and playful"},
+    {"name": "teen-boy", "design": "A nervous teenage boy, speaking quickly and a little shyly"},
+    {"name": "pak-uncle", "design": "A Pakistani man in his fifties speaking English with a warm Urdu accent, friendly and fatherly"},
+    {"name": "desi-teacher-f", "design": "A South Asian woman in her thirties with a clear, gentle Pakistani English accent, like a patient teacher"},
+    {"name": "glasgow-m", "design": "A Scottish man with a strong, friendly Glaswegian accent"},
+    {"name": "aussie-f", "design": "A relaxed Australian woman with a broad, sunny accent"},
+    {"name": "trailer-voice", "design": "An epic movie-trailer narrator, very deep male voice, slow and dramatic"},
+    {"name": "grandma", "design": "A kind elderly grandmother telling a bedtime story, warm, slow and gentle"},
+    {"name": "deadpan-m", "design": "A dry, deadpan male comedian with a flat, sarcastic delivery"},
+    {"name": "podcast-f", "design": "A smart, warm female podcast host, relaxed and conversational"},
+    {"name": "villain-m", "design": "A smooth, menacing villain with a low, silky male voice"},
+    {"name": "sleepy-m", "design": "A tired young man speaking softly late at night, slightly hoarse"},
+    {"name": "robot", "design": "A flat, synthetic robotic AI assistant voice with no emotion"},
+    {"name": "french-f", "design": "A French woman speaking English with a light Parisian accent, elegant and warm"},
+    {"name": "documentary-m", "design": "A deep, measured British documentary narrator, like a nature film"},
+    {"name": "radio-dj-f", "design": "A lively female radio DJ, bright, fast and full of energy"}
+   ],
+   "texts": ["design_ref"],
+   "set": {"instruct": ""},
+   "lock": true,
+   "lock_prefix": "dsg"
+  },
+  {
+   "id": "gallery",
+   "title": "2. Voice gallery (every voice, plain clone)",
+   "about": "Every voice in the library (real speakers from LibriTTS-R, Hi-Fi TTS, Expresso, GLOBE, FLEURS-R and Common Voice, plus the locked designs) cloned from its reference clip with no style instruction. The 'original' column plays the real reference recording.",
+   "voices": ["@cloned"],
+   "texts": ["intro"],
+   "set": {"instruct": ""}
+  },
+  {
+   "id": "styles",
+   "title": "3. Delivery styles (21 styles x 10 voices)",
+   "about": "VoxCPM2 'controllable cloning': the cloned voice plus a natural-language delivery instruction from each FireVoice style (explainer, storyteller, horror, trailer, ASMR...). Each cell reads that style's own showcase paragraph.",
+   "voices": ["lib-m-1188", "lib-f-4992", "hifi-f-92", "hifi-m-9017", "exp-f-ex02", "exp-m-ex01", "glb-f-uk-s00414", "glb-m-us-s01025", "glb-f-sas-s00530", "dsg-pak-uncle"],
+   "styles": ["conversational", "explainer", "storyteller", "audiobook", "documentary", "newscaster", "podcast", "trailer", "dramatic", "horror", "bedtime", "asmr", "calm", "excited", "sports", "curious", "reflective", "serious", "deadpan", "angry", "sad"],
+   "texts": ["@sample"]
+  },
+  {
+   "id": "emotion",
+   "title": "4. Free-form emotion instructions (same line, 9 deliveries)",
+   "about": "One fixed sentence per voice, with only the bracketed instruction changing. Shows how far an instruction alone moves the delivery while keeping the cloned identity.",
+   "voices": ["lib-f-2961", "lib-m-908", "glb-f-ie-s01515", "glb-m-za-s01884", "urd-m-cv03", "dsg-podcast-f"],
+   "texts": ["emo_line"],
+   "variants": [
+    {"label": "no instruction", "set": {"instruct": ""}},
+    {"label": "happy", "set": {"instruct": "Delighted and laughing, warm and joyful"}},
+    {"label": "sad", "set": {"instruct": "Heartbroken, quiet and tearful, voice trembling"}},
+    {"label": "angry", "set": {"instruct": "Furious, sharp and loud, barely holding back"}},
+    {"label": "whisper", "set": {"instruct": "Whispering secretly, very soft and breathy"}},
+    {"label": "shocked", "set": {"instruct": "Shocked and breathless, rising disbelief"}},
+    {"label": "sarcastic", "set": {"instruct": "Dry and sarcastic, slow and unimpressed"}},
+    {"label": "very fast", "set": {"instruct": "Speaking very fast and excitedly"}},
+    {"label": "very slow", "set": {"instruct": "Speaking very slowly and deliberately, with long pauses"}}
+   ]
+  },
+  {
+   "id": "clone_modes",
+   "title": "5. Plain clone vs ultimate clone",
+   "about": "Plain clone conditions on the reference audio only. Ultimate clone also feeds the reference transcript and continues from the clip itself, which VoxCPM2 documents as the highest-similarity mode. Compare each pair against the original.",
+   "voices": ["lib-m-1188", "lib-f-4992", "lib-m-5639", "lib-f-84", "hifi-f-92", "hifi-m-6097", "glb-m-us-s01025", "glb-f-uk-s01276", "glb-m-sco-s01863", "glb-f-au-s00290", "glb-m-sas-s01173", "glb-f-ca-s02150"],
+   "texts": ["hifi_line"],
+   "set": {"instruct": ""},
+   "variants": [
+    {"label": "plain clone"},
+    {"label": "ultimate clone", "set": {"ultimate": true}}
+   ]
+  },
+  {
+   "id": "urdu",
+   "title": "6. Urdu (native Urdu speakers)",
+   "about": "Urdu is not in VoxCPM2's 30 official languages, but Hindi is, and spoken Urdu and Hindi are close. Each native Urdu voice reads the same story three ways: Urdu script, the same Urdu words written in Devanagari, and Roman Urdu. The last column is the same speaker reading English.",
+   "voices": ["@lang:ur"],
+   "texts": ["ur_script", "ur_deva", "ur_roman", "intro"],
+   "set": {"instruct": ""}
+  },
+  {
+   "id": "urdu_more",
+   "title": "7. Urdu from designed voices and English voices",
+   "about": "Designed Pakistani voices (no reference) and English-native clones speaking the Urdu story, to hear what accent the model brings when the reference is not an Urdu speaker.",
+   "voices": [
+    {"name": "urdu-woman-design", "design": "A Pakistani woman in her thirties speaking Urdu, soft, graceful and clear"},
+    {"name": "urdu-radio-man-design", "design": "A Pakistani man speaking Urdu like a warm, confident radio host"},
+    "glb-f-sas-s00530", "glb-m-sas-s01173", "dsg-pak-uncle", "lib-f-4992"
+   ],
+   "texts": ["ur_script", "ur_deva", "ur_roman"],
+   "set": {"instruct": ""}
+  },
+  {
+   "id": "multilingual",
+   "title": "8. Cross-lingual cloning (8 languages)",
+   "about": "The same cloned voices speaking languages they never recorded: Spanish, French, German, Hindi, Arabic, Japanese, Chinese and Turkish. Listen for whether the identity survives and how native the accent sounds.",
+   "voices": ["lib-f-4992", "lib-m-1188", "hifi-f-92", "glb-m-us-s01025", "glb-f-sas-s00530", "urd-m-cv03"],
+   "texts": ["es", "fr", "de", "hi", "ar", "ja", "zh", "tr"],
+   "set": {"instruct": ""}
+  },
+  {
+   "id": "knobs",
+   "title": "9. Quality knobs: guidance (cfg) x diffusion steps",
+   "about": "cfg_value controls how strongly the model follows the text and voice prompt (default 2.0). inference_timesteps is the number of diffusion steps per frame (default 10): fewer is faster, more can be cleaner. The meta line under each clip shows its real-time factor.",
+   "voices": ["lib-f-4970", "lib-m-2803"],
+   "texts": ["knob_line"],
+   "set": {"instruct": ""},
+   "variants": [
+    {"label": "cfg 1.5, 6 steps", "set": {"cfg": 1.5, "inference_timesteps": 6}},
+    {"label": "cfg 1.5, 10 steps", "set": {"cfg": 1.5, "inference_timesteps": 10}},
+    {"label": "cfg 1.5, 16 steps", "set": {"cfg": 1.5, "inference_timesteps": 16}},
+    {"label": "cfg 2.0, 6 steps", "set": {"cfg": 2.0, "inference_timesteps": 6}},
+    {"label": "cfg 2.0, 10 steps", "set": {"cfg": 2.0, "inference_timesteps": 10}},
+    {"label": "cfg 2.0, 16 steps", "set": {"cfg": 2.0, "inference_timesteps": 16}},
+    {"label": "cfg 2.5, 6 steps", "set": {"cfg": 2.5, "inference_timesteps": 6}},
+    {"label": "cfg 2.5, 10 steps", "set": {"cfg": 2.5, "inference_timesteps": 10}},
+    {"label": "cfg 2.5, 16 steps", "set": {"cfg": 2.5, "inference_timesteps": 16}},
+    {"label": "cfg 3.0, 6 steps", "set": {"cfg": 3.0, "inference_timesteps": 6}},
+    {"label": "cfg 3.0, 10 steps", "set": {"cfg": 3.0, "inference_timesteps": 10}},
+    {"label": "cfg 3.0, 16 steps", "set": {"cfg": 3.0, "inference_timesteps": 16}}
+   ]
+  },
+  {
+   "id": "longform",
+   "title": "10. Long-form consistency (70 s story)",
+   "about": "A full story rendered sentence by sentence through the FireVoice pipeline (validated takes, natural pauses, studio chain). Listen for voice drift between sentences.",
+   "voices": ["hifi-m-9017", "lib-f-4507", "glb-m-ie-s02114", "dsg-documentary-m"],
+   "styles": ["storyteller"],
+   "texts": ["story"]
+  }
+ ]
+}

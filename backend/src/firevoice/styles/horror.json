@@ -1,0 +1,25 @@
+{
+ "name": "horror",
+ "title": "Horror",
+ "description": "Low, tense, intimate dread; slow pace, long silences, near-whisper intensity.",
+ "pace": 0.94,
+ "pause": 1.6,
+ "temperature": 0.75,
+ "cfg": 2.4,
+ "instruct": "Speak in a low, tense, menacing near-whisper, slow and dreadful, as if telling a horror story in the dark.",
+ "desc": "low, hushed, menacing horror-narrator tone",
+ "emo_vector": [
+  0,
+  0,
+  0.2,
+  0.7,
+  0,
+  0.3,
+  0.2,
+  0
+ ],
+ "tags": [
+  "gasp"
+ ],
+ "sample": "Don't turn around. [pause 500ms] Whatever you do, don't turn around. The thing behind you isn't breathing. [pause 300ms] It's counting. And it has almost reached one."
+}

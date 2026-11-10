@@ -1,0 +1,22 @@
+{
+ "name": "bedtime",
+ "title": "Bedtime",
+ "description": "Gentle, hushed, kind; children's stories and sleep narration.",
+ "pace": 0.92,
+ "pause": 1.5,
+ "temperature": 0.65,
+ "cfg": 2.2,
+ "instruct": "Speak gently and softly like reading a bedtime story to a child, kind, hushed, warm.",
+ "desc": "gentle, hushed, kind bedtime-story voice",
+ "emo_vector": [
+  0.2,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.8
+ ],
+ "sample": "And so the little robot closed its eyes, one light at a time. [pause 500ms] The stars hummed softly above the workshop. Tomorrow there would be more to fix, more to learn. [pause 400ms] But tonight, everything was exactly where it belonged."
+}

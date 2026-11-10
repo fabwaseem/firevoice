@@ -1,0 +1,22 @@
+{
+ "name": "newscaster",
+ "title": "Newscaster",
+ "description": "Brisk, neutral, precise broadcast delivery.",
+ "pace": 1.03,
+ "pause": 0.95,
+ "temperature": 0.6,
+ "cfg": 2.0,
+ "instruct": "Read like a professional news anchor, brisk, neutral, precise, confident.",
+ "desc": "crisp, neutral broadcast news voice",
+ "emo_vector": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0.9
+ ],
+ "sample": "Good evening. A major cloud provider confirmed tonight that a configuration error left thousands of customer databases publicly accessible for nearly two weeks. The company says no evidence of misuse has been found. Security researchers disagree."
+}

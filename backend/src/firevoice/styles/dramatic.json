@@ -1,0 +1,22 @@
+{
+ "name": "dramatic",
+ "title": "Dramatic",
+ "description": "Theatrical weight and contrast; big pauses, strong emphasis; speeches and reveals.",
+ "pace": 0.96,
+ "pause": 1.4,
+ "temperature": 0.9,
+ "cfg": 2.2,
+ "instruct": "Deliver with theatrical weight and gravity, strong emphasis, dramatic pauses.",
+ "desc": "theatrical, weighty, dramatic voice",
+ "emo_vector": [
+  0.1,
+  0.2,
+  0.2,
+  0.1,
+  0,
+  0.2,
+  0.3,
+  0
+ ],
+ "sample": "They told him it couldn't be done. [pause 500ms] They told him the system was too old, the code too tangled, the deadline too close. And he listened to every word. [pause 400ms] Then he did it anyway."
+}

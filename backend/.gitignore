@@ -1,0 +1,50 @@
+# --- Python --------------------------------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- environments and model weights (GBs; rebuilt with the commands in README.md) ---------------------------------
+.venv/
+.envs/
+
+# --- data and generated output -------------------------------------------------------------------------------------
+# raw speech datasets used by `firevoice voices harvest`
+.downloads/
+# sentence-level take cache
+.cache/
+# showcase renders and listening-test reports
+/samples/
+# bake-off renders and scores
+bench/out/
+bench/judge/
+bench/report.*
+out/
+renders/
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.npy
+# the two reference clips the bake-off needs
+!bench/refs/*.wav
+
+# --- logs, secrets, editors, OS ------------------------------------------------------------------------------------
+*.log
+.env
+.env.*
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+# the sample recordings the playground and desktop "Try a sample" buttons load
+!src/firevoice/web/samples/*.mp3

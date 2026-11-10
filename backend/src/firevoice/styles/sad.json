@@ -1,0 +1,26 @@
+{
+ "name": "sad",
+ "title": "Sad",
+ "description": "Quiet grief and tenderness; slow, soft, slightly broken.",
+ "pace": 0.93,
+ "pause": 1.5,
+ "temperature": 0.7,
+ "cfg": 2.2,
+ "instruct": "Speak softly with quiet sadness and tenderness, slow, slightly breaking.",
+ "desc": "soft, tender, sorrowful tone",
+ "emo_vector": [
+  0,
+  0,
+  0.8,
+  0,
+  0,
+  0.4,
+  0,
+  0
+ ],
+ "tags": [
+  "sigh",
+  "sniff"
+ ],
+ "sample": "We shut the server down on a Tuesday. [sigh] Twelve years of uptime. Twelve years of someone's late nights, their jokes in the comments, their name in the commit log. The screen went dark, and the room was very quiet."
+}

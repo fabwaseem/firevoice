@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "firevoice"
+version = "1.4.0"
+description = "Local expressive text-to-speech and speech-to-text engine: many open models behind one service, one CLI and one HTTP API (for the FireVoice desktop app)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.26",
+  "soundfile>=0.12",
+  "num2words>=0.5.13",
+]
+
+[project.optional-dependencies]
+# Install torch/torchaudio for YOUR GPU first (cu128 index on Blackwell), then:
+gpu = ["chatterbox-tts>=0.1.7"]                       # the in-venv engine; other engines live in .envs/<name>/
+asr = ["faster-whisper>=1.2"]                         # GPU Whisper for take validation + `firevoice transcribe`
+server = ["fastapi>=0.110", "uvicorn>=0.29", "websockets>=12", "uv>=0.5", "python-multipart>=0.0.9", "httpx>=0.27"]   # API + `--remote` client
+harvest = ["pyarrow<17", "librosa>=0.10"]             # `firevoice voices harvest` from HF parquet datasets
+bench = ["resemblyzer>=0.1.4", "jiwer>=3", "speechmos>=0.0.1", "py-spy"]   # bake-off scorer
+dev = ["pytest>=8", "httpx"]
+watermark = ["audioseal>=0.2"]
+dub = ["sentencepiece>=0.2"]                           # local translation for `firevoice dub` (M2M100 via transformers)                         # inaudible "made by FireVoice" mark on every output, and its detector
+# Everything the desktop app's bundled backend runs with (install CUDA torch first, as for `gpu`):
+desktop = ["firevoice[server,asr,gpu,watermark,dub]", "resemblyzer>=0.1.4", "imageio-ffmpeg>=0.5"]
+
+[project.scripts]
+firevoice = "firevoice.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/firevoice"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

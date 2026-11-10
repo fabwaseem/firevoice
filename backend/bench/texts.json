@@ -1,0 +1,46 @@
+{
+  "_about": "Bake-off text set. Each item stresses one thing a premium narration engine must get right. `style` is the intended delivery; `tags` are the paralinguistic cues an engine may or may not support (the harness strips unsupported ones).",
+  "items": [
+    {
+      "id": "explainer",
+      "style": "explainer",
+      "text": "Okay, quick question. Did the website keep your password? If they did it right, no. They kept a hash. And in four minutes you'll know exactly what that is, and why it matters to you."
+    },
+    {
+      "id": "story",
+      "style": "storyteller",
+      "text": "The old lighthouse keeper hadn't spoken to anyone in eleven years. So when the knock came, three slow taps on the iron door, he did the only thing that made sense. He put the kettle on."
+    },
+    {
+      "id": "horror",
+      "style": "horror",
+      "text": "Don't turn around. Whatever you do, don't turn around. The thing behind you isn't breathing... it's counting. And it has almost reached one."
+    },
+    {
+      "id": "excited",
+      "style": "excited",
+      "text": "No way. No way! It actually worked on the first try? Do you understand how rare that is? I've been fighting this bug for three days and it just... compiled."
+    },
+    {
+      "id": "numbers",
+      "style": "explainer",
+      "text": "In 2023, the company processed 86,142 requests per second, up 40% from the year before, at a cost of roughly $1.3 billion. Version 2.5.1 fixed the bug on the 3rd of March."
+    },
+    {
+      "id": "calm",
+      "style": "calm",
+      "text": "Take a breath. Let your shoulders drop. There's nothing you need to solve in the next ten seconds. The code will still be there. So will the coffee."
+    },
+    {
+      "id": "dialogue",
+      "style": "conversational",
+      "text": "So I asked him, \"Why would anyone store passwords in plain text?\" And he just shrugged and said, \"It was faster.\" Faster. That's the whole answer."
+    },
+    {
+      "id": "tags",
+      "style": "conversational",
+      "tags": true,
+      "text": "I mean, [chuckle] look, nobody reads the documentation. [sigh] I didn't read it either. That's how we got here."
+    }
+  ]
+}

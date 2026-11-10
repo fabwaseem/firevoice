@@ -1,0 +1,22 @@
+{
+ "name": "deadpan",
+ "title": "Deadpan",
+ "description": "Flat, dry, understated comic timing.",
+ "pace": 0.98,
+ "pause": 1.1,
+ "temperature": 0.55,
+ "cfg": 2.0,
+ "instruct": "Speak in a flat, dry, deadpan tone with understated comic timing, minimal emotion.",
+ "desc": "dry, flat, deadpan delivery",
+ "emo_vector": [
+  0,
+  0,
+  0,
+  0,
+  0.1,
+  0,
+  0,
+  0.9
+ ],
+ "sample": "The deploy went fine. [pause 300ms] If by fine you mean it deleted the production database, then yes. Completely fine. We're all fine. I've started a new career as a farmer."
+}

@@ -1,0 +1,22 @@
+{
+ "name": "calm",
+ "title": "Calm",
+ "description": "Soft, slow, soothing; meditation guides, sleep stories, reassurance.",
+ "pace": 0.93,
+ "pause": 1.5,
+ "temperature": 0.6,
+ "cfg": 2.2,
+ "instruct": "Speak slowly, softly and soothingly, like a meditation guide, gentle and unhurried.",
+ "desc": "soft, soothing, slow calming voice",
+ "emo_vector": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1.0
+ ],
+ "sample": "Take a breath. [pause 600ms] Let your shoulders drop. There's nothing you need to solve in the next ten seconds. The code will still be there. [pause 400ms] So will the coffee. For now, just this one quiet moment."
+}

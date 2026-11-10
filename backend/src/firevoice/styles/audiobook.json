@@ -1,0 +1,22 @@
+{
+ "name": "audiobook",
+ "title": "Audiobook",
+ "description": "Even, patient, long-form literary narration; consistent energy for hours.",
+ "pace": 0.97,
+ "pause": 1.2,
+ "temperature": 0.7,
+ "cfg": 2.2,
+ "instruct": "Read as a professional audiobook narrator, even, patient, literary, consistent.",
+ "desc": "even, patient, literary audiobook narrator",
+ "emo_vector": [
+  0.1,
+  0,
+  0,
+  0,
+  0,
+  0.1,
+  0,
+  0.7
+ ],
+ "sample": "Chapter one. The message arrived at 3:14 in the morning, which Marcus would later decide was the universe's idea of a joke. It contained no greeting, no signature, and only four words. [pause 400ms] Your backups are lying."
+}
