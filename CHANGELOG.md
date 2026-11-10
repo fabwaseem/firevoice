@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0 (2026-11-10)
+
+- **Faster first start.** FireVoice is ready in about a minute. Graphics card support (the big download) now finishes in the background while you look around, with live progress, speed and time left in the corner. If you close the app part way, the download picks up where it stopped.
+- **New welcome.** A cleaner, centred setup with calm music, a step to turn on dictation and try it, and a short guided tour of the app afterwards. You can take the tour again from Settings.
+- **Updates on your terms.** New versions no longer interrupt you. A card in the corner offers the update, it downloads in the background with real progress, and it installs only when you click Restart and install. Settings has Check for updates.
+- Engines reuse the graphics card download instead of fetching it again.
+
 ## 1.6.0 (2026-11-10)
 
 Dictation: speak in any program and FireVoice types what you say.
