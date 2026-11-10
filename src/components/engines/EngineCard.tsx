@@ -18,15 +18,13 @@ export function EngineCard({ engine }: { engine: Engine }) {
   const [schemaOpen, setSchemaOpen] = useState(false);
 
   const langs = engine.languages.includes("*") ? "Many languages" : `${engine.languages.length} language${engine.languages.length === 1 ? "" : "s"}`;
-  // the model behind the name and its licence, on hover only (the licences ask for credit)
-  const credit = [engine.model, engine.license && `licence ${engine.license}`].filter(Boolean).join(" · ") || undefined;
   const busy = (engine.active_requests ?? 0) > 0;
   const loading = load.isPending && load.variables?.name === engine.name;
 
   return (
     <Card className={cn("flex flex-col rounded-2xl p-5 transition-shadow hover:shadow-md", !engine.ready && "opacity-80")}>
       <div className="flex items-start justify-between gap-3">
-        <h3 className="truncate text-[16px] font-semibold tracking-[-0.01em] text-ink" title={credit}>{engine.title}</h3>
+        <h3 className="truncate text-[16px] font-semibold tracking-[-0.01em] text-ink">{engine.title}</h3>
         <StatusBadge engine={engine} />
       </div>
       {engine.tagline && <p className="mt-1 text-[13px] leading-relaxed text-muted">{engine.tagline}</p>}
