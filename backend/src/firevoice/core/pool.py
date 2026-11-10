@@ -30,7 +30,7 @@ from typing import Optional
 import numpy as np
 
 from . import protocol as P
-from ..paths import home as _home
+from ..paths import entry as _entry, home as _home
 from .registry import EngineSpec, get_engine
 from ..types import Cancelled
 
@@ -102,7 +102,7 @@ class _Worker:
     def start(self) -> None:
         spec = self.pool.spec
         self.pool.scratch.mkdir(parents=True, exist_ok=True)   # removed when the pool last stopped
-        cmd = [spec.python, "-X", "utf8", "-m", "firevoice.core.worker", "--engine", spec.adapter, "--scratch", str(self.pool.scratch), "--parent-pid", str(os.getpid())]
+        cmd = [spec.python, "-X", "utf8", *_entry("firevoice.core.worker"), "--engine", spec.adapter, "--scratch", str(self.pool.scratch), "--parent-pid", str(os.getpid())]
         if self.pool.device:
             cmd += ["--device", self.pool.device]
         if spec.adapter_kwargs:

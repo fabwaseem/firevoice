@@ -23,5 +23,9 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     // Loaded from disk inside the desktop shell, so one larger bundle is fine.
     chunkSizeWarningLimit: 1500,
+    // Release builds name their files by content hash only, so the file names say nothing about the code inside.
+    rolldownOptions: process.env.TAURI_ENV_DEBUG
+      ? undefined
+      : { output: { entryFileNames: "assets/[hash].js", chunkFileNames: "assets/[hash].js", assetFileNames: "assets/[hash][extname]" } },
   },
 });

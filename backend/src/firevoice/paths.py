@@ -144,6 +144,19 @@ def ffmpeg() -> Optional[str]:
     return ffmpeg_info()[0]
 
 
+def entry(module: str) -> list:
+    """The interpreter arguments that run `module`'s main(), for starting it as a process:
+    [python, *entry("firevoice.core.worker"), ...its arguments].
+
+    Not `-m module`: release builds ship this package compiled to extension modules, and Python cannot run one of
+    those as a script. Importing it and calling main() works for source and compiled code alike."""
+    return ["-c", f"import sys; from {module} import main; sys.exit(main())"]
+
+
+# What makes up the package's code: source in a checkout or a plain install, extension modules in a release build.
+_CODE = (".py", ".pyd", ".so")
+
+
 def worker_src() -> Path:
     """A folder to put on an engine worker's PYTHONPATH so it can import this package (the worker runs in the engine's
     own venv, which does not have FireVoice installed).
@@ -156,7 +169,7 @@ def worker_src() -> Path:
     if co is not None:
         return co / "src"
     import hashlib
-    files = sorted(f for f in PACKAGE.rglob("*.py") if "__pycache__" not in f.parts)
+    files = sorted(f for f in PACKAGE.rglob("*") if f.suffix in _CODE and "__pycache__" not in f.parts)
     h = hashlib.sha1()
     for f in files:
         st = f.stat()
@@ -174,6 +187,9 @@ def worker_src() -> Path:
             os.replace(tmp, dest)
         except OSError:          # another process finished first; theirs is identical
             shutil.rmtree(tmp, ignore_errors=True)
+        for old in dest.parent.iterdir():      # copies left by earlier versions (best effort: one may be in use)
+            if old != dest and old.is_dir() and ".tmp" not in old.name:
+                shutil.rmtree(old, ignore_errors=True)
     return dest
 
 

@@ -84,6 +84,38 @@ the new version. If any step fails, fix it and run the same command again: it re
 `--dry-run` builds everything into `release/vX.Y.Z/` and changes nothing else. `--skip-tests` and `--rebuild` do what
 they say.
 
+### What ships: no source code
+
+An installed copy holds no readable source of the app:
+
+* **Backend (Python).** `scripts/bundle-backend.mjs` compiles every module of the package to a native extension
+  module (`scripts/protect-backend.py`: Cython, then the C compiler) and builds a wheel with those and no `.py` file.
+  It compiles once per Python version that imports the package: the app's runtime and the engine venvs (3.11 and
+  3.12 today; the list comes from the recipe and `installer.py`). Docstrings are left out, except the route
+  descriptions shown at `/docs`. The playground's scripts and styles are minified. An update replaces the installed
+  package, and the copy that engine workers import, so source left by older versions goes away.
+* **UI.** Minified, no source maps, files named by hash, and packed inside the app binary.
+* **App binary (Rust).** Optimised, stripped of symbols, and built with this computer's folder names removed.
+
+The build fails rather than fall back to shipping source: if the compiler is missing, if a module does not compile,
+or if a source file is left in the wheel. A release also refuses a plain wheel or a UI build with source maps, and
+runs the backend tests against the compiled wheel that goes into the installer
+(`node scripts/test-bundled-backend.mjs` does that on its own). Building needs a C compiler; on Windows the Visual
+Studio Build Tools that Rust uses are enough.
+
+What this does not hide: compiled code can still be studied with a disassembler by someone determined, and the names
+of modules, classes and functions and the text the code contains (messages, URLs) stay visible in the binaries.
+Nothing that must stay secret (keys, tokens) belongs in the code.
+
+Two rules the compiled backend puts on the code:
+
+* Start a module as a process with `paths.entry("firevoice.some.module")`, not `python -m`: Python cannot run a
+  compiled module as a script.
+* In `server.py`, a type used in a route's signature and created inside `create_app` must be passed to `_expose()`
+  (request models do this themselves). The server checks this at startup and names the route if one is missing.
+
+`node scripts/bundle-backend.mjs --plain` stages the plain source wheel for debugging a build; a release refuses it.
+
 ### Signing key
 
 Updates are signed; the app only installs an update whose signature matches the public key built into it

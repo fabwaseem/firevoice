@@ -7,14 +7,15 @@
 //   2. tests: the app's type check and the backend's test suite (--skip-tests to leave them out)
 //   3. sets the version in all six files, adds the notes to CHANGELOG.md, commits "Release vX.Y.Z" and tags it
 //   4. builds the signed installers (NSIS for updates, MSI for manual installs) into release/vX.Y.Z/ with latest.json,
-//      the release notes and SHA256SUMS.txt
+//      the release notes and SHA256SUMS.txt. The backend ships compiled, with no Python source (bundle-backend.mjs):
+//      the build is refused if the staged wheel is not that one, and the backend tests are run again against it
 //   5. pushes main and the tag to the private code repo, then publishes the files to the public releases repo
 //   6. confirms the update feed now announces vX.Y.Z
 //
 // Options:
 //   --dry-run          build and stage everything in release/vX.Y.Z/ but commit, tag, push and publish nothing
 //                      (the version files are put back afterwards)
-//   --skip-tests       leave out step 2
+//   --skip-tests       leave out step 2 and the tests of the compiled backend in step 4
 //   --rebuild          build again even if release/vX.Y.Z/ already holds installers
 //   --feed-base URL    download URL base written into latest.json (default: the public release's own download URL;
 //                      only for testing an update against a local server)
@@ -23,7 +24,7 @@
 //   updater.key, updater.key.pub, updater.password. Losing them means installed copies can no longer update.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { compare, currentVersion, isPlain, nextVersion, root, setVersion, VERSION_FILES } from "./version.mjs";
@@ -146,11 +147,30 @@ else {
     ...process.env,
     TAURI_SIGNING_PRIVATE_KEY: readFileSync(join(KEYS, "updater.key"), "utf8").trim(),
     TAURI_SIGNING_PRIVATE_KEY_PASSWORD: readFileSync(join(KEYS, "updater.password"), "utf8").trim(),
+    // the app binary names source files in its error messages: keep this computer's folders (and user name) out of them
+    CARGO_ENCODED_RUSTFLAGS: [`--remap-path-prefix=${root}=firevoice`, `--remap-path-prefix=${homedir()}=~`].join("\x1f"),
   };
+  delete env.FIREVOICE_PLAIN_BACKEND; // a release never ships the backend as source
+  const again = dry ? "the build failed." : `the build failed. Fix it (commit the fix), then run the same command again to resume ${tag}.`;
   const r = spawnSync("pnpm", ["tauri", "build"], { cwd: root, stdio: "inherit", shell: win, env });
   if (r.status !== 0) {
     restore();
-    fail(dry ? "the build failed." : `the build failed. Fix it (commit the fix), then run the same command again to resume ${tag}.`);
+    fail(again);
+  }
+  // what went into the installers: the compiled backend, and it passes the backend's tests
+  const staged = JSON.parse(readFileSync(join(root, "src-tauri", "resources", "backend", "backend.json"), "utf8"));
+  if (staged.protected !== true || /-none-any\.whl$/.test(staged.wheel)) {
+    restore();
+    fail(`the build bundled the backend as source (${staged.wheel}). Nothing was published.`);
+  }
+  if (readdirSync(join(root, "dist"), { recursive: true }).some((f) => String(f).endsWith(".map"))) {
+    restore();
+    fail("the UI build wrote source maps (dist/**/*.map). Nothing was published.");
+  }
+  if (flag("--skip-tests")) info("tests of the compiled backend skipped");
+  else if (spawnSync("node", [join(root, "scripts", "test-bundled-backend.mjs")], { cwd: root, stdio: "inherit" }).status !== 0) {
+    restore();
+    fail(again);
   }
   if (dry) writeFileSync(DRY_MARK, "built by --dry-run; a real release builds again\n");
   else if (existsSync(DRY_MARK)) rmSync(DRY_MARK);

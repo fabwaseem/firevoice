@@ -125,5 +125,9 @@ def run(samples_dir: str, part: str = "emotion") -> int:
     return 0
 
 
+def main() -> int:
+    return run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "emotion")
+
+
 if __name__ == "__main__":
-    sys.exit(run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "emotion"))
+    sys.exit(main())

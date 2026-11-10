@@ -280,7 +280,7 @@ def run(samples_dir: str, bits: int = 8, orders: int = 1, only: list[str] | None
     return 0
 
 
-if __name__ == "__main__":
+def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("samples")
     ap.add_argument("--bits", type=int, default=8, choices=[4, 8, 16])
@@ -289,4 +289,8 @@ if __name__ == "__main__":
     ap.add_argument("--max-groups", type=int, default=0)
     ap.add_argument("--batch", type=int, default=8, help="comparisons generated together (memory-bound decoding: more = faster)")
     a = ap.parse_args()
-    sys.exit(run(a.samples, a.bits, a.orders, a.groups.split(",") if a.groups else None, a.max_groups, a.batch))
+    return run(a.samples, a.bits, a.orders, a.groups.split(",") if a.groups else None, a.max_groups, a.batch)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

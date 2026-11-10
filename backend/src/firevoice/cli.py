@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from . import audio as A
+from .paths import entry as _entry
 from .styles import all_styles, get_style
 from .voices import VoiceLibrary
 
@@ -1252,13 +1253,13 @@ def cmd_judge(a) -> int:
             metrics.run(a.samples)
         elif st in ("listen", "utmos"):
             part = "utmos" if st == "utmos" else "emotion"
-            if subprocess.run([judge_py, "-X", "utf8", "-m", "firevoice.judge.listen", a.samples, part], env=env).returncode:
+            if subprocess.run([judge_py, "-X", "utf8", *_entry("firevoice.judge.listen"), a.samples, part], env=env).returncode:
                 return 1
         elif st == "judge":
-            if subprocess.run([judge_py, "-X", "utf8", "-m", "firevoice.judge.score", a.samples, str(a.bits)], env=env).returncode:
+            if subprocess.run([judge_py, "-X", "utf8", *_entry("firevoice.judge.score"), a.samples, str(a.bits)], env=env).returncode:
                 return 1
         elif st == "tournament":
-            cmd = [judge_py, "-X", "utf8", "-m", "firevoice.judge.grm", a.samples, "--bits", str(a.bits), "--orders", str(a.orders)]
+            cmd = [judge_py, "-X", "utf8", *_entry("firevoice.judge.grm"), a.samples, "--bits", str(a.bits), "--orders", str(a.orders)]
             if a.groups:
                 cmd += ["--groups", a.groups]
             if subprocess.run(cmd, env=env).returncode:

@@ -70,10 +70,12 @@ def test_worker_src_isolated_when_installed(tmp_path, monkeypatch):
     """An installed backend must not hand workers site-packages as PYTHONPATH (stray packages there shadow the
     engine venv's stdlib); it gets a folder holding only the firevoice package."""
     monkeypatch.setenv("FIREVOICE_HOME", str(tmp_path))
-    assert paths.worker_src() == paths.checkout() / "src"            # running from this checkout
+    if paths.checkout() is not None:                                  # running from this checkout
+        assert paths.worker_src() == paths.checkout() / "src"
     monkeypatch.setattr(paths, "checkout", lambda: None)
     d = paths.worker_src()
     assert d.parent == tmp_path / "runtime" / "worker-src"
     assert [p.name for p in d.iterdir()] == ["firevoice"]
-    assert (d / "firevoice" / "core" / "worker.py").exists() and (d / "firevoice" / ".complete").exists()
+    # source in a checkout or a plain install, compiled modules in a release build
+    assert any(f.suffix in (".py", ".pyd", ".so") for f in (d / "firevoice" / "core").glob("worker.*")) and (d / "firevoice" / ".complete").exists()
     assert paths.worker_src() == d                                    # reused, not copied again

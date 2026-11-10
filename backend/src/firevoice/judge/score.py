@@ -90,5 +90,9 @@ def run(samples_dir: str, bits: int = 4, batch: int = 2) -> int:
     return 0
 
 
+def main() -> int:
+    return run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 4, int(sys.argv[3]) if len(sys.argv) > 3 else 2)
+
+
 if __name__ == "__main__":
-    sys.exit(run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 4, int(sys.argv[3]) if len(sys.argv) > 3 else 2))
+    sys.exit(main())

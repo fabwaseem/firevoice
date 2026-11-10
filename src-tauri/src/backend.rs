@@ -8,7 +8,7 @@
 //!   repo's `backend/.venv` (linked by `scripts/dev-setup.mjs`, running the code in `backend/`);
 //! * builds the bundled runtime with uv (a private Python 3.12 venv in the app's local data folder, CUDA torch, then
 //!   the backend wheel with its `desktop` extra), reporting progress as `backend-setup` events;
-//! * starts `python -m firevoice.cli serve` with its output in the app log folder, and stops it (with its engine
+//! * starts the server (`serve` in `firevoice.cli`) with its output in the app log folder, and stops it (with its engine
 //!   worker processes) on request and when the app exits.
 
 use std::fs::{self, File, OpenOptions};
@@ -214,7 +214,8 @@ pub fn backend_start(app: AppHandle, st: State<Backend>, port: Option<u16>) -> R
     let _ = writeln!(f, "\n===== starting FireVoice backend ({mode}) on port {port} =====");
     let err = f.try_clone().map_err(|e| e.to_string())?;
     let mut cmd = Command::new(&python);
-    cmd.args(["-X", "utf8", "-m", "firevoice.cli", "serve", "--port", &port.to_string()])
+    // not `-m firevoice.cli`: release builds ship the backend compiled, and Python cannot run a compiled module as a script
+    cmd.args(["-X", "utf8", "-c", "import sys; from firevoice.cli import main; sys.exit(main())", "serve", "--port", &port.to_string()])
         .env("PYTHONUNBUFFERED", "1")
         .env("FIREVOICE_DESKTOP", "1")
         .stdin(Stdio::null())

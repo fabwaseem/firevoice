@@ -115,6 +115,42 @@ STATUS = {"bad_request": 400, "unauthorized": 401, "not_found": 404, "conflict":
 MAX_UPLOAD = 1024 * 1024 * 1024        # uploads stream to disk, so long recordings are fine
 
 
+def _expose(**types) -> None:
+    """Make types that are created inside create_app findable in this module by name.
+
+    Route signatures name such types (the request models, FastAPI's own classes). In source form an annotation is the
+    type itself. A release build compiles this module, and a compiled function keeps its annotations as text, which
+    FastAPI resolves by looking the name up in the function's module: so every such type is put here."""
+    globals().update(types)
+
+
+def _check_signatures(app) -> None:
+    """Fail at startup, naming the route, if a route or dependency has an annotation that cannot be resolved (see
+    _expose). Left unresolved, FastAPI would quietly read a body or the request as a query parameter."""
+    import inspect
+
+    def calls(dep):
+        if dep.call is not None:
+            yield dep.call
+        for d in dep.dependencies:
+            yield from calls(d)
+
+    for route in app.routes:
+        dep = getattr(route, "dependant", None)
+        for fn in calls(dep) if dep is not None else ():
+            try:
+                params = inspect.signature(fn).parameters.values()
+            except (TypeError, ValueError):
+                continue
+            for p in params:
+                if isinstance(p.annotation, str):
+                    try:
+                        eval(p.annotation, getattr(fn, "__globals__", globals()))
+                    except Exception as e:  # noqa: BLE001
+                        raise RuntimeError(f"route {getattr(route, 'path', '?')}: parameter {p.name!r} of {getattr(fn, '__name__', fn)} "
+                                           f"is annotated {p.annotation!r}, which does not resolve ({e}); pass the type to _expose()") from None
+
+
 def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Optional[list[str]] = None, playground: Optional[bool] = None):
     from fastapi import Body, Depends, FastAPI, File, Form, Query, Request, Security, UploadFile
     from fastapi.concurrency import run_in_threadpool
@@ -122,7 +158,18 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
     from fastapi.security import APIKeyHeader, HTTPBearer
-    from pydantic import BaseModel, ConfigDict, Field
+    from pydantic import BaseModel as _PydanticModel, ConfigDict, Field
+
+    class BaseModel(_PydanticModel):
+        # A method on a model is not a field. Pydantic knows that for plain functions; a release build compiles this
+        # module, where functions are another type of object, so that type is named here too.
+        model_config = ConfigDict(ignored_types=(type(create_app),))
+
+        @classmethod
+        def __pydantic_init_subclass__(cls, **kwargs):
+            _expose(**{cls.__name__: cls})
+
+    _expose(Request=Request, UploadFile=UploadFile, Response=Response)
 
     from . import __version__
 
@@ -892,6 +939,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     # ------------------------------------------------------------------ WebSocket: text in as it arrives, audio out
     from fastapi import WebSocket, WebSocketDisconnect
+    _expose(WebSocket=WebSocket)
 
     @app.websocket("/api/v1/tts/ws")
     async def tts_ws(ws: WebSocket):
@@ -978,8 +1026,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                     cfg = {k: v for k, v in msg.items() if k != "type"}
                     try:
                         TTSRequest.from_dict({**{k: v for k, v in cfg.items() if k not in ("format", "sample_rate")}, "text": "check"})
-                    except FireVoiceError as e:
-                        await ws.send_json({"type": "error", "code": e.code, "message": e.message})
+                    except FireVoiceError as err:
+                        await ws.send_json({"type": "error", "code": err.code, "message": err.message})
                         continue
                     state["cfg"] = cfg
                 elif t == "text":
@@ -1623,6 +1671,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         return [{"model_id": e["name"], "name": e["title"], "languages": [{"language_id": l} for l in e["languages"]], "can_do_text_to_speech": e["ready"]}
                 for e in svc.engines()]
 
+    _check_signatures(app)
     return app
 
 
