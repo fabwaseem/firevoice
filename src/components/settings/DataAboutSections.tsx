@@ -100,7 +100,7 @@ export function AboutSection() {
       <CardBody className="flex items-center gap-4 pt-5">
         <Logo size={44} />
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice Desktop 1.1.0</p>
+          <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice Desktop 1.2.0</p>
           <p className="text-[12.5px] text-muted">MIT licence. Model weights carry their own licences.</p>
         </div>
         <Button variant="ghost" size="sm" leading={<BookOpen className="size-4" />} onClick={() => void openExternal(`${serverUrl}/docs`)}>
