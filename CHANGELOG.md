@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0 (2026-11-10)
+
+Dictation: speak in any program and FireVoice types what you say.
+
+- Press a hotkey (Ctrl+Alt+Space by default, changeable) in any app, speak, and press it again. Or choose hold-to-talk. Everything is turned into text on your own graphics card; nothing leaves your computer.
+- Words appear as you speak. A word is typed only once FireVoice is sure of it, and it is never changed afterwards. Or choose "when you stop" and the whole text is checked once more and inserted in one go.
+- A small floating window shows your voice and the words as they form, without taking the cursor away from the program you are typing in.
+- Say "new line" or "new paragraph" to start one. Um and uh are left out. Names and terms from your Dictionary are spelled the way you wrote them.
+- Pick your language (or let FireVoice detect it) and your microphone. Dictations are kept in a list you can copy from, with totals of the words you have dictated.
+- With dictation on, closing the window keeps FireVoice running in the tray next to the clock, so the hotkey keeps working. Quit from the tray icon.
+- The play button on voice cards is easier to see in dark mode.
+- Developers: the same live speech-to-text is available to your own tools and AI agents at /api/v1/dictate, documented in Settings > API.
+
 ## 1.5.4 (2026-11-10)
 
 An API for your own tools and AI agents, and a tidier app.
