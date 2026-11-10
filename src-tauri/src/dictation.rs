@@ -370,9 +370,11 @@ fn paste_text(enigo: &mut Enigo, text: &str) -> Result<(), String> {
     let before = clip.get_text().ok();
     clip.set_text(text.to_string()).map_err(|e| e.to_string())?;
     thread::sleep(Duration::from_millis(30));
-    enigo.key(Key::Control, Direction::Press).map_err(|e| e.to_string())?;
+    // paste is Cmd+V on macOS, Ctrl+V elsewhere
+    let paste_key = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
+    enigo.key(paste_key, Direction::Press).map_err(|e| e.to_string())?;
     let r = enigo.key(Key::Unicode('v'), Direction::Click).map_err(|e| e.to_string());
-    enigo.key(Key::Control, Direction::Release).map_err(|e| e.to_string())?;
+    enigo.key(paste_key, Direction::Release).map_err(|e| e.to_string())?;
     r?;
     // give the program time to read the clipboard, then put back what was there
     thread::sleep(Duration::from_millis(250));

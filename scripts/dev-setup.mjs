@@ -52,17 +52,19 @@ try {
   fail("uv not found on PATH (https://docs.astral.sh/uv/)");
 }
 const run = (args) => execFileSync(uv, args, { stdio: "inherit", cwd: root });
+// FIREVOICE_TORCH_INDEX swaps the torch index for this environment only (CI tests use the small CPU build)
+const torchIndex = process.env.FIREVOICE_TORCH_INDEX || RECIPE.torch_index;
 
 log(`building ${venv} (Python ${RECIPE.python}, torch ${RECIPE.torch}, extras ${[...RECIPE.extras, ...DEV_EXTRAS].join(", ")})`);
 run(["venv", "--allow-existing", "--python", RECIPE.python, venv]);
-run(["pip", "install", "--python", py, `torch==${RECIPE.torch}`, `torchaudio==${RECIPE.torch}`, "--index-url", RECIPE.torch_index]);
+run(["pip", "install", "--python", py, `torch==${RECIPE.torch}`, `torchaudio==${RECIPE.torch}`, "--index-url", torchIndex]);
 const overrides = join(tmpdir(), "firevoice-dev-overrides.txt");
 writeFileSync(overrides, `${RECIPE.overrides.join("\n")}\n`);
 run([
   "pip", "install", "--python", py,
   "-e", `${backend}[${[...RECIPE.extras, ...DEV_EXTRAS].join(",")}]`,
   "--override", overrides,
-  "--extra-index-url", RECIPE.torch_index,
+  "--extra-index-url", torchIndex,
 ]);
 
 const w = where();
