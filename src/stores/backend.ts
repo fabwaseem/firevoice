@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { backend, inTauri, localPort, type BackendInfo, type SetupEvent } from "@/lib/backend";
+import { backend, inTauri, localPort, type BackendInfo, type ExtrasState, type SetupEvent } from "@/lib/backend";
 import { useSettings } from "./settings";
 
 type Phase = "idle" | "starting" | "needs-setup" | "needs-update" | "setting-up" | "failed";
@@ -9,6 +9,8 @@ interface BackendState {
   phase: Phase;
   setup: SetupEvent | null;
   error: string | null;
+  /** the background half of the setup (torch and the voice libraries), installed while the app is usable */
+  extras: ExtrasState | null;
   /** start() has handed the process over (so a "not running" answer now means it exited) */
   launched: boolean;
   /** the user asked to stop it, so its exit is not a crash */
@@ -17,21 +19,49 @@ interface BackendState {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   runSetup: () => Promise<void>;
+  /** Start (or resume) the background setup; does nothing when everything is installed. */
+  finishSetup: () => Promise<void>;
   set: (p: Partial<BackendState>) => void;
 }
 
-let unlisten: (() => void) | null = null;
+let listening: Promise<void> | null = null;
+
+/** Listen to both setup event streams, once, and pick up a background setup already running (a reloaded window). */
+function listen(set: (p: Partial<BackendState>) => void, get: () => BackendState) {
+  listening ??= (async () => {
+    await backend.onSetup((ev) => {
+      // the closing event does not know how many steps this run had: keep the count the run reported
+      const steps = ev.status === "running" ? ev.steps : (get().setup?.steps ?? ev.steps);
+      set({ setup: { ...ev, steps, step: ev.status === "done" ? steps : ev.step } });
+      if (ev.status === "done") {
+        void get().refresh().then(() => get().start());
+      } else if (ev.status === "failed") {
+        set({ phase: "failed", error: ev.error ?? "Setup did not finish. Please try again." });
+      }
+    });
+    await backend.onExtras((ev) => {
+      const was = get().extras?.status;
+      set({ extras: ev });
+      if (ev.status === "done" && was !== "done") void get().refresh();
+    });
+    const now = await backend.extrasStatus().catch(() => null);
+    if (now?.status) set({ extras: now });
+  })();
+  return listening;
+}
 
 export const useBackend = create<BackendState>()((set, get) => ({
   info: null,
   phase: "idle",
   setup: null,
   error: null,
+  extras: null,
   launched: false,
   stopRequested: false,
   set: (p) => set(p),
   refresh: async () => {
     if (!inTauri()) return null;
+    void listen(set, get);
     try {
       const info = await backend.info();
       const prev = get();
@@ -70,21 +100,32 @@ export const useBackend = create<BackendState>()((set, get) => ({
     }
   },
   runSetup: async () => {
-    if (!unlisten) {
-      unlisten = await backend.onSetup((ev) => {
-        set({ setup: ev });
-        if (ev.status === "done") {
-          void get().refresh().then(() => get().start());
-        } else if (ev.status === "failed") {
-          set({ phase: "failed", error: ev.error ?? "Setup did not finish. Please try again." });
-        }
-      });
-    }
-    set({ phase: "setting-up", error: null, setup: { step: 0, steps: 4, message: "Starting…", status: "running", error: null } });
+    await listen(set, get);
+    set({ phase: "setting-up", error: null, setup: { step: 0, steps: 3, message: "Starting…", status: "running", error: null } });
     try {
       await backend.setup();
     } catch (e) {
       set({ phase: "failed", error: String(e) });
     }
   },
+  finishSetup: async () => {
+    await listen(set, get);
+    try {
+      await backend.finishSetup();
+    } catch (e) {
+      set({ extras: { ...(get().extras ?? emptyExtras), status: "failed", error: String(e) } });
+    }
+  },
 }));
+
+const emptyExtras: ExtrasState = {
+  status: "",
+  stage: "",
+  message: "",
+  error: null,
+  items: [],
+  done_bytes: 0,
+  total_bytes: 0,
+  bytes_per_sec: 0,
+  progress: 0,
+};

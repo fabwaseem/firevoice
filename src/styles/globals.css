@@ -235,4 +235,7 @@
 .onb-in { animation: fade-up 0.45s var(--ease-out-quart) both; }
 .onb-rise { animation: fade-up 0.6s var(--ease-out-quart) both; }
 .onb-glow { box-shadow: 0 0 0 1px color-mix(in oklab, var(--fire) 35%, transparent), 0 24px 70px -18px color-mix(in oklab, var(--fire) 70%, transparent); }
-@media (prefers-reduced-motion: reduce) { .onb-bar, .onb-in, .onb-rise { animation: none; } }
+/* the guided tour's highlight: a ring that breathes around what to look at */
+.tour-ring { box-shadow: 0 0 0 2px var(--fire), 0 0 0 6px color-mix(in oklab, var(--fire) 28%, transparent); animation: tour-pulse 1.8s ease-in-out infinite; }
+@keyframes tour-pulse { 50% { box-shadow: 0 0 0 2px var(--fire), 0 0 0 11px color-mix(in oklab, var(--fire) 8%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .onb-bar, .onb-in, .onb-rise, .tour-ring { animation: none; } }

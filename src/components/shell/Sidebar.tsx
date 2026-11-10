@@ -92,6 +92,7 @@ function NavItem({ item, collapsed, count }: { item: Item; collapsed: boolean; c
     <Tooltip content={item.label} side="right" disabled={!collapsed}>
       <Link
         to={item.to}
+        data-tour={`nav-${item.to}`}
         aria-label={collapsed ? item.label : undefined}
         aria-current={isActive ? "page" : undefined}
         className={cn(

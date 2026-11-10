@@ -32,6 +32,25 @@ Both environments are built from one recipe (`scripts/backend-recipe.mjs`: Pytho
 is downloaded twice. Settings > Engines and storage can point engines or weights elsewhere (it writes
 `~/.firevoice/settings.json`, which every build reads).
 
+### First run: in the app within about a minute
+
+The installed app builds its runtime in two parts (`src-tauri/src/backend.rs`), so a new user is never stuck behind a
+multi-gigabyte download:
+
+1. **Quick part, behind the welcome screen** (starts by itself when the app opens): Python 3.12 and the backend with
+   only what its server needs (`core_extras`, about 100 MB). The server starts and the user picks an engine.
+2. **The rest, in the background** (once the server answers, and resumed on the next start if the app was closed):
+   torch and torchaudio, downloaded by `src-tauri/src/fetch_wheels.py` with exact progress, resume and a checksum,
+   then every other package. A card in the corner of the window shows each download, the speed and the time left,
+   and engine installs running alongside; it folds down to a pill. Features that need torch say so until it is done.
+
+The build pins every package of the full runtime in `constraints.txt` (`scripts/bundle-backend.mjs`, `uv pip
+compile`). The quick part installs with those pins, so the background part only adds packages and never replaces one
+the running server has open (Windows locks those). Engine installs reuse the downloaded torch wheels
+(`FIREVOICE_WHEELS`, `--find-links`) and wait for that download instead of fetching the same file twice.
+
+`FIREVOICE_RUNTIME_DIR` builds the runtime in another folder, to try a first run without touching the real one.
+
 ## Develop
 
 ```bash
@@ -127,18 +146,23 @@ a new key means everyone reinstalls by hand.
 
 ## Updates
 
-Updates are required. At start the app asks the feed
-(`https://github.com/fabwaseem/firevoice-releases/releases/latest/download/latest.json`) for the newest version:
+Updates never block the app (`src-tauri/src/updater.rs`, `src/components/shell/UpdateGate.tsx`). A few seconds after
+start, and every four hours, the app asks the feed
+(`https://github.com/fabwaseem/firevoice-releases/releases/latest/download/latest.json`) for the newest version.
+Settings > Check for updates asks right away.
 
-* **Newer version, online:** the app shows only the update screen. It downloads the installer, checks its signature,
-  stops the voice engine, installs, and opens the new version. If the download fails it stays on that screen with
-  **Try again** (and a link to download it by hand). Voices, history and settings are untouched.
-* **Offline, or GitHub unreachable:** the app opens normally and asks again next time.
-* **While running:** it checks every four hours; a new version shows a bar with **Update now**, so work in progress can
-  finish. The next start requires it.
+* **Newer version:** a card in the bottom-right corner says so, with what's new. **Download update** fetches it in the
+  background with real progress (bytes, speed, time left) while the user keeps working; **Later** hides it until the
+  next start. The card folds down to a pill.
+* **Downloaded:** the installer's signature is checked against the public key built into the app, then the card offers
+  **Restart and install**. Nothing installs until the user clicks it: then the app stops the voice engine, runs the
+  installer and opens the new version. Voices, history and settings are untouched.
+* **Offline, or GitHub unreachable:** nothing is shown; it asks again later. A failed download offers **Try again** and
+  a link to download it by hand.
 
-After an update the app updates its private backend runtime once (only the FireVoice package is reinstalled; torch and
-the rest stay), with progress on screen.
+After an update the app updates its private backend runtime once, before the engine starts (the FireVoice package is
+reinstalled and the other packages brought in step with the new pins; torch stays unless the pin changed), with
+progress on screen.
 
 ## Dictation
 

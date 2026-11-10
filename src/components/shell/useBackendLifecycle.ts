@@ -37,9 +37,20 @@ export function useBackendLifecycle() {
       const stale = i.mode === "bundled" && !!i.installed_version && (!i.ready || (!!i.bundled_version && i.installed_version !== i.bundled_version));
       if (stale) return st.runSetup();
       if (i.ready) return st.start();
-      if (i.mode === "bundled") st.set({ phase: "needs-setup" });
+      // first run: the quick part of the setup starts right away, while the welcome screen is still up
+      if (i.mode === "bundled") return st.runSetup();
     })();
   }, [active, health.isLoading, health.isSuccess]);
+
+  // Once the engine answers, install the rest (torch and the voice libraries) in the background, or resume a download
+  // an earlier run left half way. The app stays usable; BackgroundSetup shows the progress.
+  const extrasStarted = useRef(false);
+  useEffect(() => {
+    if (!active || !health.isSuccess || !info || extrasStarted.current) return;
+    if (info.mode !== "bundled" || !info.ready || info.full_ready) return;
+    extrasStarted.current = true;
+    void useBackend.getState().finishSetup();
+  }, [active, health.isSuccess, info]);
 
   // Know whether the engine that answers is one this app started.
   useEffect(() => {

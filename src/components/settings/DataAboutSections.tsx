@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Eraser, RotateCcw, Sparkles } from "lucide-react";
+import { Compass, Eraser, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
+import { useUpdates } from "@/components/shell/UpdateGate";
+import { useTour } from "@/components/tour/Tour";
 import { toast } from "sonner";
 import { Button, Card, CardBody, CardHeader, ConfirmDialog, Skeleton } from "@/components/ui";
 import { Logo } from "@/components/shell/Logo";
@@ -69,6 +71,14 @@ export function DataSection() {
           <Button variant="outline" size="sm" leading={<Sparkles className="size-3.5" />} onClick={() => useSettings.getState().set({ onboarded: false })}>
             Show the welcome again
           </Button>
+          <Button variant="outline" size="sm" leading={<Compass className="size-3.5" />} onClick={() => useTour.getState().start()}>
+            Take the tour
+          </Button>
+          {inTauri() && (
+            <Button variant="outline" size="sm" leading={<RefreshCw className="size-3.5" />} onClick={() => void useUpdates.getState().runCheck(true)}>
+              Check for updates
+            </Button>
+          )}
           <Button variant="danger" size="sm" leading={<Eraser className="size-3.5" />} onClick={() => setConfirmClear(true)}>
             Clear local settings
           </Button>

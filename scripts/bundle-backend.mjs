@@ -105,6 +105,30 @@ if (plain) {
   wheel = outText.match(/^WHEEL=(.+)$/m)?.[1]?.trim() ?? fail("the protected wheel was not written");
   if (!existsSync(join(out, wheel))) fail(`${wheel} is missing from ${out}`);
 }
+// The whole runtime, resolved now and pinned: the app installs the small core first (enough to start the server) and the
+// rest (torch and the voice libraries) in the background while the server runs. With every version fixed up front, the
+// background install only adds packages and never replaces one the running server has loaded (Windows locks those).
+{
+  const lockDir = join(root, "src-tauri", "target", "backend-lock");
+  mkdirSync(lockDir, { recursive: true });
+  const wheelUrl = `file:///${join(out, wheel).replace(/\\/g, "/").replace(/^\//, "")}`;
+  const req = join(lockDir, "requirements.in");
+  const ovr = join(lockDir, "overrides.txt");
+  writeFileSync(req, `firevoice[${RECIPE.extras.join(",")}] @ ${wheelUrl}\ntorch==${RECIPE.torch}\ntorchaudio==${RECIPE.torch}\n`);
+  writeFileSync(ovr, `${RECIPE.overrides.join("\n")}\n`);
+  const lock = join(lockDir, "constraints.txt");
+  console.log("[bundle-backend] pinning the runtime's packages");
+  execFileSync(uv, [
+    "pip", "compile", req, "--override", ovr, "--extra-index-url", RECIPE.torch_index, "--index-strategy", "unsafe-best-match",
+    "--python-version", RECIPE.python, "--no-header", "--no-annotate", "--quiet", "-o", lock,
+  ], { stdio: "inherit" });
+  const pins = readFileSync(lock, "utf8").split(/\r?\n/).filter((l) => l.trim() && !/^firevoice\b/i.test(l.trim()));
+  if (!pins.some((l) => l.startsWith(`torch==${RECIPE.torch}`))) fail("the pinned runtime has no torch");
+  writeFileSync(join(out, "constraints.txt"), `${pins.join("\n")}\n`);
+}
 copyFileSync(uv, join(out, win ? "uv.exe" : "uv"));
-writeFileSync(join(out, "backend.json"), JSON.stringify({ version, api_version: apiVersion, wheel, protected: !plain, ...RECIPE }, null, 1));
+writeFileSync(
+  join(out, "backend.json"),
+  JSON.stringify({ version, api_version: apiVersion, wheel, protected: !plain, ...RECIPE, core_extras: ["server"], constraints: "constraints.txt" }, null, 1),
+);
 console.log(`[bundle-backend] staged ${wheel}, uv and backend.json`);

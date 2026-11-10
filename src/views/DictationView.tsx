@@ -56,7 +56,7 @@ function Stage() {
     );
 
   return (
-    <Card raised>
+    <Card raised data-tour="dictation-stage">
       <CardBody className="pt-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">

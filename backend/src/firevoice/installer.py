@@ -295,6 +295,35 @@ class InstallCancelled(RuntimeError):
     pass
 
 
+def _shared_wheels() -> list[str]:
+    """`--find-links` to the torch wheels the desktop app downloaded for its own runtime (FIREVOICE_WHEELS), so an engine
+    on the same torch build does not download those gigabytes again. Empty outside the desktop app."""
+    d = os.environ.get("FIREVOICE_WHEELS")
+    return ["--find-links", d] if d and Path(d).is_dir() else []
+
+
+def _wait_for_shared_download(progress: Callable[[str], None], cancel: threading.Event, limit_s: float = 3 * 3600) -> None:
+    """While the desktop app is still downloading torch into FIREVOICE_WHEELS, wait for it instead of fetching the same
+    file in parallel. The downloader refreshes its marker every few seconds; a stale one (the app quit) is ignored."""
+    d = os.environ.get("FIREVOICE_WHEELS")
+    if not d:
+        return
+    marker = Path(d) / ".downloading"
+    t0 = time.time()
+    told = False
+    while marker.exists() and time.time() - t0 < limit_s:
+        try:
+            if time.time() - marker.stat().st_mtime > 60:
+                return
+        except OSError:
+            return
+        if not told:
+            progress("Waiting for FireVoice's GPU support download to finish (this engine uses the same files)")
+            told = True
+        if cancel.wait(2):
+            return
+
+
 def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = None, on_line: Optional[Callable[[str], None]] = None,
          cwd: Optional[str] = None) -> None:
     log(f"$ {' '.join(cmd)}")
@@ -394,9 +423,12 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 _write_marker(m, "building")
                 k += 1
                 if m.torch:
+                    _wait_for_shared_download(lambda msg: progress(k, steps, msg), cancel)
+                    if cancel.is_set():
+                        raise InstallCancelled("cancelled")
                     progress(k, steps, "Installing GPU support (about 3 GB the first time)")
                     pk = [f"torch=={m.torch}"] + ([f"torchaudio=={m.torch}"] if m.torchaudio else [])
-                    _run([u, "pip", "install", "--python", str(py), *pk, "--index-url", TORCH_INDEX], log, cancel, env)
+                    _run([u, "pip", "install", "--python", str(py), *pk, "--index-url", TORCH_INDEX, *_shared_wheels()], log, cancel, env)
                 k += 1
                 extra: list[str] = []
                 if m.git:

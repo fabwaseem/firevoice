@@ -139,7 +139,7 @@ export function SpeakView() {
             </div>
           </Card>
 
-          <Card raised className="flex min-h-[420px] flex-col p-4">
+          <Card raised data-tour="speak-editor" className="flex min-h-[420px] flex-col p-4">
             <ScriptEditor supportsTags={!!engine?.tags} disabled={busy} className="flex-1" />
           </Card>
 

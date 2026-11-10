@@ -20,6 +20,10 @@ export interface Settings {
   manageBackend: boolean;
   /** The first-run welcome (GPU check, engine, test render) was completed or skipped */
   onboarded: boolean;
+  /** Play the soft soundtrack during the first-run setup */
+  setupMusic: boolean;
+  /** The guided tour of the app was finished or closed */
+  tourDone: boolean;
   setServerUrl: (v: string) => void;
   setToken: (v: string) => void;
   setTheme: (v: Theme) => void;
@@ -58,6 +62,8 @@ export const useSettings = create<Settings>()(
       sidebarCollapsed: false,
       manageBackend: true,
       onboarded: false,
+      setupMusic: true,
+      tourDone: false,
       setServerUrl: (serverUrl) => set({ serverUrl: normaliseServerUrl(serverUrl) }),
       setToken: (token) => set({ token }),
       setTheme: (theme) => set({ theme }),

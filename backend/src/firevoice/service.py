@@ -413,6 +413,9 @@ class FireVoice:
 
     def _synth(self, ld: _Loaded, validate: bool, candidates: int, accept: float):
         from .synth import Synthesizer
+        # no speech recognition yet (the desktop app is still installing it in the background on a first run): make the
+        # take without checking it rather than fail; once it is installed the next request checks again
+        validate = validate and asr_installed()
         key = (validate, candidates, round(accept, 3))
         with self._lock:
             s = ld.synths.get(key)
@@ -2311,6 +2314,12 @@ def _null_aligner():
     return NullAligner()
 
 
+def asr_installed() -> bool:
+    """Whether speech recognition (faster-whisper) is installed, so takes can be checked."""
+    import importlib.util
+    return importlib.util.find_spec("faster_whisper") is not None
+
+
 def _atomic_write(path: Path, data: bytes) -> None:
     """Write via a temp file and rename, so a crash never leaves a half-written file behind."""
     path = Path(path)
@@ -2367,6 +2376,11 @@ def friendly_error(e: BaseException, limit: int = 300) -> str:
         return f"A file it needed is missing: {Path(getattr(e, 'filename', '') or text).name or 'unknown file'}"
     if isinstance(e, PermissionError):
         return "FireVoice was not allowed to read or write a file it needs. Check that the data folder is writable."
+    if isinstance(e, ImportError):
+        import importlib.util
+        if importlib.util.find_spec("torch") is None:
+            # the desktop app installs torch and the voice libraries in the background after its first start
+            return "FireVoice is still finishing its setup (GPU support and voice libraries are downloading). This works as soon as that is done."
     from .core.brands import BRANDS
     for eid, b in BRANDS.items():
         text = _re.sub(rf"(?<![\w-]){_re.escape(eid)}(?![\w-])", b.name, text)

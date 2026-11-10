@@ -3,14 +3,17 @@ import { useHealth } from "@/lib/api/hooks";
 import { useBackend } from "@/stores/backend";
 import { useSettings } from "@/stores/settings";
 import { useBackendLifecycle, useManagesEngine } from "@/components/shell/useBackendLifecycle";
+import { useDictationBridge } from "@/components/dictation/useDictationBridge";
 import { Logo } from "@/components/shell/Logo";
 import { Onboarding, SetupPanel } from "./Onboarding";
-import { SplitLayout, Waveform } from "./OnboardingLayout";
+import { OnboardingFrame, Waveform } from "./OnboardingLayout";
 
 /** Decides what the window shows before the app: the first-run flow, the engine starting / updating / failing, or the
  * app itself. These are whole screens, never layers over the app, so nothing behind them redraws or flickers. */
 export function StartupGate({ children }: { children: ReactNode }) {
   useBackendLifecycle();
+  // dictation works from the first run on (onboarding has a step to set it up and try it), not only inside the app
+  useDictationBridge();
   const onboarded = useSettings((s) => s.onboarded);
   const managed = useManagesEngine();
   const health = useHealth();
@@ -33,13 +36,9 @@ export function StartupGate({ children }: { children: ReactNode }) {
   }
   const updating = !!info?.installed_version;
   return (
-    <SplitLayout
-      steps={[{ id: "engine", title: updating ? "Update" : "Set up", hint: "FireVoice's voice engine" }]}
-      current="engine"
-      spotlightLabel="While FireVoice gets ready"
-    >
+    <OnboardingFrame current="engine">
       <SetupPanel updating={updating} />
-    </SplitLayout>
+    </OnboardingFrame>
   );
 }
 

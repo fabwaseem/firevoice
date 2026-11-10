@@ -8,6 +8,8 @@ export interface BackendInfo {
   mode: "custom" | "bundled" | "dev" | "none";
   python: string | null;
   ready: boolean;
+  /** torch and every voice library are installed too (always true outside the bundled runtime) */
+  full_ready: boolean;
   bundled_version: string | null;
   bundled_api_version: number | null;
   installed_version: string | null;
@@ -17,6 +19,7 @@ export interface BackendInfo {
   log_path: string;
   runtime_dir: string;
   setup_running: boolean;
+  extras_running: boolean;
 }
 
 export interface SetupEvent {
@@ -25,6 +28,29 @@ export interface SetupEvent {
   message: string;
   status: "running" | "done" | "failed";
   error: string | null;
+}
+
+/** One thing the background setup fetches or does. Ids: "wheel:torch", "wheel:torchaudio", "libs", "check". */
+export interface ExtrasItem {
+  id: string;
+  label: string;
+  done: number;
+  total: number;
+  state: "waiting" | "active" | "done";
+}
+
+/** The background half of the setup (torch and the voice libraries), installed while the app is already usable. */
+export interface ExtrasState {
+  status: "" | "idle" | "running" | "done" | "failed";
+  stage: "" | "download" | "install" | "check";
+  message: string;
+  error: string | null;
+  items: ExtrasItem[];
+  done_bytes: number;
+  total_bytes: number;
+  bytes_per_sec: number;
+  /** 0..1 over the whole background setup */
+  progress: number;
 }
 
 export const inTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -44,7 +70,34 @@ export const backend = {
     const { listen } = await import("@tauri-apps/api/event");
     return listen<SetupEvent>("backend-setup", (e) => cb(e.payload));
   },
+  finishSetup: () => call<void>("backend_finish_setup"),
+  extrasStatus: () => call<ExtrasState>("backend_extras_status"),
+  onExtras: async (cb: (e: ExtrasState) => void) => {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<ExtrasState>("backend-extras", (e) => cb(e.payload));
+  },
 };
+
+/** 1536 -> "1.5 KB", 2.56e9 -> "2.4 GB" (binary units, as the downloads report them) */
+export function fmtBytes(n: number): string {
+  if (!n || n < 0) return "0 MB";
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n >= 100 || i < 2 ? n.toFixed(0) : n.toFixed(1)} ${u[i]}`;
+}
+
+/** Seconds left for a download, as words ("about 3 min left"), or "" when unknown. */
+export function fmtEta(left: number, perSec: number): string {
+  if (!perSec || perSec < 1 || left <= 0) return "";
+  const s = left / perSec;
+  if (s < 50) return "less than a minute left";
+  if (s < 60 * 60) return `about ${Math.max(1, Math.round(s / 60))} min left`;
+  return `about ${(s / 3600).toFixed(1)} h left`;
+}
 
 /** The port of a server URL on this machine, or null when the URL points somewhere else (then the app never manages it). */
 export function localPort(serverUrl: string): number | null {

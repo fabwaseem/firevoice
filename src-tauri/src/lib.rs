@@ -73,8 +73,12 @@ pub fn run() {
             backend::backend_stop,
             backend::backend_logs,
             backend::backend_setup,
+            backend::backend_finish_setup,
+            backend::backend_extras_status,
             updater::update_check,
             updater::update_install,
+            updater::update_download,
+            updater::update_status,
             dictation::dictation_configure,
             dictation::dictation_toggle,
             dictation::dictation_cancel,
@@ -103,6 +107,7 @@ pub fn run() {
     app.run(|handle, event| {
         // A backend the app started goes away with the app; one the user started stays up.
         if let tauri::RunEvent::Exit = event {
+            backend::stop_setup(&handle.state::<backend::Backend>());
             backend::stop(&handle.state::<backend::Backend>());
         }
     });

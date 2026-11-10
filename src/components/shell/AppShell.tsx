@@ -8,9 +8,10 @@ import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { OfflineBanner } from "./OfflineBanner";
 import { BackendManager } from "./BackendManager";
+import { BackgroundSetup } from "./BackgroundSetup";
 import { usePlayer } from "@/stores/player";
 import { useStagger } from "@/lib/stagger";
-import { useDictationBridge } from "@/components/dictation/useDictationBridge";
+import { Tour } from "@/components/tour/Tour";
 
 export function AppShell() {
   const theme = useSettings((s) => s.theme);
@@ -25,7 +26,12 @@ export function AppShell() {
   }, [theme]);
 
   useJobFeed();
-  useDictationBridge();
+
+  // the corner cards (update, setup) sit above the player bar while it shows
+  useEffect(() => {
+    document.documentElement.style.setProperty("--fv-corner-bottom", hasTrack ? "112px" : "20px");
+    return () => void document.documentElement.style.removeProperty("--fv-corner-bottom");
+  }, [hasTrack]);
 
   // Each view starts at the top; the scroll container is <main>, not the window.
   const { pathname } = useLocation();
@@ -61,6 +67,10 @@ export function AppShell() {
           </main>
           <PlayerBar />
         </div>
+        {/* torch and the voice libraries still installing after the first run, and engines installing */}
+        <BackgroundSetup />
+        <Tour />
+
         <Toaster
           position="top-right"
           offset={16}
