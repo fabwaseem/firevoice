@@ -7,7 +7,7 @@ import type { Engine, Voice } from "@/lib/api/types";
 import { usePlayer } from "@/stores/player";
 import { ArtTile, Badge, Input } from "@/components/ui";
 import { cn, langName } from "@/lib/utils";
-import { DesignVoiceDialog } from "@/components/voices/DesignVoiceDialog";
+import { NewVoiceDialog } from "@/components/voices/NewVoiceDialog";
 
 function initials(name: string) {
   return name.split(/[\s\-_]+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("");
@@ -119,7 +119,7 @@ export function VoicePicker({ value, onChange, disabled }: { value: string; onCh
         </RP.Content>
       </RP.Portal>
     </RP.Root>
-    <DesignVoiceDialog open={designOpen} onOpenChange={setDesignOpen} onKept={(v) => onChange(v.voice_id)} />
+    <NewVoiceDialog open={designOpen} onOpenChange={setDesignOpen} initialMode="design" onCreated={(v) => onChange(v.voice_id)} />
     </>
   );
 }

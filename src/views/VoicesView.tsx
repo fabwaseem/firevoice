@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Library, Plus, Sparkles } from "lucide-react";
+import { Library, Plus } from "lucide-react";
 import { errMessage, useOptions, useVoiceCollections, useVoices } from "@/lib/api/hooks";
 import type { Voice } from "@/lib/api/types";
 import { Button, Chip, EmptyState } from "@/components/ui";
@@ -8,15 +8,13 @@ import { PageHeader, LoadError } from "@/components/shell/PageHeader";
 import { VoiceCard, VoiceCardSkeleton } from "@/components/voices/VoiceCard";
 import { VoiceFilters, EMPTY_FILTERS, type VoiceFilterState } from "@/components/voices/VoiceFilters";
 import { VoiceDetail } from "@/components/voices/VoiceDetail";
-import { AddVoiceDialog } from "@/components/voices/AddVoiceDialog";
-import { DesignVoiceDialog } from "@/components/voices/DesignVoiceDialog";
+import { NewVoiceDialog } from "@/components/voices/NewVoiceDialog";
 
 export function VoicesView() {
   const { voiceId } = useParams();
   const navigate = useNavigate();
   const [filters, setFilters] = useState<VoiceFilterState>(EMPTY_FILTERS);
   const [addOpen, setAddOpen] = useState(false);
-  const [designOpen, setDesignOpen] = useState(false);
   const [shelf, setShelf] = useState("");
   const collections = useVoiceCollections();
 
@@ -53,14 +51,9 @@ export function VoicesView() {
         title="Voices"
         subtitle={total != null ? `${total} voice${total === 1 ? "" : "s"} in your library. Clone from a clip or design one from a description.` : "Your voice library."}
         actions={
-          <>
-            <Button leading={<Sparkles className="size-4" />} onClick={() => setDesignOpen(true)}>
-              Design voice
-            </Button>
-            <Button variant="primary" leading={<Plus className="size-4" />} onClick={() => setAddOpen(true)}>
-              Add voice
-            </Button>
-          </>
+          <Button variant="primary" leading={<Plus className="size-4" />} onClick={() => setAddOpen(true)}>
+            Add voice
+          </Button>
         }
       />
 
@@ -96,14 +89,9 @@ export function VoicesView() {
             hasAny ? (
               <Button onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</Button>
             ) : (
-              <div className="flex gap-2">
-                <Button leading={<Sparkles className="size-4" />} onClick={() => setDesignOpen(true)}>
-                  Design voice
-                </Button>
-                <Button variant="primary" leading={<Plus className="size-4" />} onClick={() => setAddOpen(true)}>
-                  Add voice
-                </Button>
-              </div>
+              <Button variant="primary" leading={<Plus className="size-4" />} onClick={() => setAddOpen(true)}>
+                Add voice
+              </Button>
             )
           }
           className="surface rounded-xl"
@@ -117,8 +105,7 @@ export function VoicesView() {
       )}
 
       <VoiceDetail voiceId={voiceId ?? null} onClose={close} />
-      <AddVoiceDialog open={addOpen} onOpenChange={setAddOpen} />
-      <DesignVoiceDialog open={designOpen} onOpenChange={setDesignOpen} />
+      <NewVoiceDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
   );
 }
