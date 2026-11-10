@@ -83,10 +83,12 @@ def test_sound_cues_in_dialogue(svc, monkeypatch):
     from firevoice.core import catalog
     from firevoice.service import FireVoiceError
     script = "[music: calm piano]\nAna: Hello there, welcome.\n[sfx: a door creaks, 1.5s]\nBen: Sorry I am late."
-    with pytest.raises(FireVoiceError) as e:
-        svc.dialogue(script)                      # sound engines not installed
-    assert e.value.code == "unavailable"
     real = catalog.EngineInfo.status
+    # sound engines not installed (whatever this machine has)
+    monkeypatch.setattr(catalog.EngineInfo, "status", lambda self: {"ready": False} if self.task == "sfx" else real(self))
+    with pytest.raises(FireVoiceError) as e:
+        svc.dialogue(script)
+    assert e.value.code == "unavailable"
     monkeypatch.setattr(catalog.EngineInfo, "status", lambda self: {"ready": True} if self.task == "sfx" else real(self))
     made = []
 

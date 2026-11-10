@@ -3,7 +3,7 @@
 
 const SN = { kind: "sfx", engines: [] };
 const SN_IDEAS = {
-  sfx: ["a wooden door creaks open slowly, footsteps on a stone floor", "rain on a tin roof, distant thunder", "a busy cafe, cups clinking, soft chatter", "a crowd cheers in a stadium"],
+  sfx: ["ocean waves crashing on a beach", "a wooden door creaking open slowly", "a campfire crackling at night, crickets", "a thunderstorm with heavy rain", "footsteps on a stone floor"],
   music: ["calm lo-fi piano bed for a podcast intro, warm and slow", "upbeat acoustic guitar, bright, for a product video", "tense cinematic strings, low and slow", "soft ambient pads for meditation"],
 };
 

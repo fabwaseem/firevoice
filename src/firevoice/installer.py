@@ -55,6 +55,9 @@ class Manifest:
     # Python run in the venv (cwd: the checkout) once everything is in place: loads the engine so the helper models it
     # fetches on first load arrive during the install, not during someone's first render. {weights} is its folder.
     warmup: Optional[str] = None
+    # file patterns the weights download leaves out: repos that ship every weight twice (.bin and .safetensors)
+    # would otherwise download it all twice
+    skip: list = field(default_factory=list)
 
     @property
     def auto(self) -> bool:
@@ -89,9 +92,11 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
              "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"], check="kokoro",
              venv_gb=3.5, notes="weights (about 330 MB) download on first load"),
     Manifest("audioldm2", "sfx", _T211, packages=["diffusers==0.35.2", "transformers==4.57.3", "accelerate==1.12.0", "scipy", "soundfile"],
-             weights=[("cvssp/audioldm2", "audioldm2")], check="diffusers", notes="sound effects; shares the sfx venv with musicgen"),
+             weights=[("cvssp/audioldm2", "audioldm2", "c8e7e189d324425c05c4c2f81214041ef4107983")], skip=["*.bin"], check="diffusers",
+             notes="sound effects; shares the sfx venv with musicgen; about 4.5 GB of weights"),
     Manifest("musicgen", "sfx", _T211, packages=["diffusers==0.35.2", "transformers==4.57.3", "accelerate==1.12.0", "scipy", "soundfile"],
-             weights=[("facebook/musicgen-small", "musicgen-small")], check="transformers", notes="music beds; shares the sfx venv with audioldm2"),
+             weights=[("facebook/musicgen-small", "musicgen-small", "4c8334b02c6ec4e8664a91979669a501ec497792")], skip=["*.bin"],
+             check="transformers", notes="music beds; shares the sfx venv with audioldm2; about 2.4 GB of weights"),
     Manifest("separator", "separator", _T211, packages=["audio-separator[cpu]==0.48.0", "audioread", "soundfile"], check="audio_separator",
              warmup=("import logging; from audio_separator.separator import Separator; "
                      "s = Separator(model_file_dir='{weights}', output_dir='{weights}', log_level=logging.WARNING); "
@@ -220,11 +225,12 @@ def weights_ok(folder: str) -> bool:
     return w.exists() and any(w.glob("*")) and not any(".cache" not in f.parts for f in w.rglob("*.incomplete"))
 
 
-def _repo_size(repo: str, revision: Optional[str] = None) -> Optional[int]:
+def _repo_size(repo: str, revision: Optional[str] = None, skip: list = ()) -> Optional[int]:
     try:
+        from fnmatch import fnmatch
         from huggingface_hub import HfApi
         info = HfApi().model_info(repo, revision=revision, files_metadata=True)
-        return sum((s.size or 0) for s in info.siblings or [])
+        return sum((s.size or 0) for s in info.siblings or [] if not any(fnmatch(s.rfilename, p) for p in skip))
     except Exception:
         return None
 
@@ -246,7 +252,7 @@ def plan(engine: str, sizes: bool = False) -> dict:
         st = {"step": "weights", "what": f"{repo}{'@' + rev[:10] if rev else ''} -> {paths.weights(folder)}", "repo": repo, "folder": folder,
               "done": weights_ok(folder)}
         if sizes and not st["done"]:
-            b = _repo_size(repo, rev)
+            b = _repo_size(repo, rev, m.skip)
             st["gb"] = round(b / 1e9, 2) if b else None
         steps.append(st)
     if m.check:
@@ -313,7 +319,9 @@ def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = Non
 _FETCH = """
 import os, shutil, sys
 from huggingface_hub import snapshot_download
-src, dst = snapshot_download(sys.argv[1], revision=(sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None)), sys.argv[2]
+skip = [p for p in (sys.argv[4] if len(sys.argv) > 4 else "").split("|") if p] or None
+src = snapshot_download(sys.argv[1], revision=(sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None), ignore_patterns=skip)
+dst = sys.argv[2]
 for root, _dirs, files in os.walk(src):
     rel = os.path.relpath(root, src)
     os.makedirs(os.path.join(dst, rel), exist_ok=True)
@@ -408,7 +416,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
             for repo, folder, rev in todo_weights:
                 dest = paths.weights(folder)
                 dest.mkdir(parents=True, exist_ok=True)
-                total = _repo_size(repo, rev)
+                total = _repo_size(repo, rev, m.skip)
                 label = f"downloading {repo}" + (f" ({total / 1e9:.1f} GB)" if total else "")
                 progress(k, steps, label)
                 stop = threading.Event()
@@ -423,7 +431,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 w = threading.Thread(target=watch, daemon=True)
                 w.start()
                 try:
-                    _run([sys.executable, "-c", _FETCH, repo, str(dest), rev or ""], log, cancel, env)
+                    _run([sys.executable, "-c", _FETCH, repo, str(dest), rev or "", "|".join(m.skip)], log, cancel, env)
                 finally:
                     stop.set()
                 k += 1

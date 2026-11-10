@@ -12,7 +12,7 @@ def engines(tmp_path, monkeypatch):
     monkeypatch.setenv("FIREVOICE_ENGINES_DIR", str(tmp_path / "engines"))
     monkeypatch.setenv("FIREVOICE_WEIGHTS_DIR", str(tmp_path / "weights"))
     monkeypatch.setattr(installer, "uv", lambda: "uv")
-    monkeypatch.setattr(installer, "_repo_size", lambda repo, rev=None: None)
+    monkeypatch.setattr(installer, "_repo_size", lambda repo, rev=None, skip=(): None)
     calls = []
 
     def fake_run(cmd, log, cancel, env=None, on_line=None, cwd=None):
@@ -116,7 +116,7 @@ def test_repo_engine_clones_pins_and_overrides(engines, monkeypatch):
     assert "requirements.txt" in pip and "--override" in pip
     assert (paths.engines_dir() / ".ming-overrides.txt").read_text().split("\n") == m.overrides
     fetch = next(c for c in engines if "snapshot_download" in " ".join(map(str, c)))
-    assert fetch[-1] == m.weights[0][2]
+    assert fetch[5] == m.weights[0][2]
     p = installer.plan("ming", sizes=False)
     assert p["repo_code"] and any(s["step"] == "code" for s in p["steps"])
 
@@ -136,3 +136,22 @@ def test_warmup_runs_once(engines, monkeypatch):
     engines.clear()
     installer.install("indextts25", lambda *a: None, __import__("threading").Event())
     assert not [c for c in engines if len(c) > 2 and "IndexTTS2(" in str(c[2])]
+
+
+def test_skip_patterns_reach_the_download_and_the_size(monkeypatch):
+    m = installer.MANIFESTS["musicgen"]
+    assert m.skip == ["*.bin"] and m.weights[0][2]
+
+    class Info:
+        siblings = [type("S", (), {"rfilename": n, "size": z})() for n, z in
+                    (("model.safetensors", 100), ("pytorch_model.bin", 100), ("state_dict.bin", 40), ("config.json", 1))]
+
+    import huggingface_hub
+    monkeypatch.setattr(huggingface_hub.HfApi, "model_info", lambda self, *a, **k: Info())
+    assert installer._repo_size("x/y", None, m.skip) == 101
+    assert installer._repo_size("x/y") == 241
+    assert "ignore_patterns=skip" in installer._FETCH
+
+
+def test_fetch_script_compiles():
+    compile(installer._FETCH, "<fetch>", "exec")

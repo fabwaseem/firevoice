@@ -27,7 +27,23 @@ class AudioLDM2Adapter(Adapter):
         dev = self.device or "cuda"
         self.p = AudioLDM2Pipeline.from_pretrained(src, torch_dtype=torch.float16 if dev.startswith("cuda") else torch.float32).to(dev)
         self.p.set_progress_bar_config(disable=True)
+        self.p.generate_language_model = self._language_model_steps
         self.dev = dev
+
+    def _language_model_steps(self, inputs_embeds=None, max_new_tokens: int = 8, attention_mask=None, **_):
+        """The pipeline's GPT-2 step, without the generation helpers newer transformers no longer give GPT2Model
+        (diffusers calls _get_initial_cache_position and _update_model_kwargs_for_generation, both gone).
+        Same result as the cached loop: the whole sequence again for each of the few new hidden states."""
+        import torch
+        lm = self.p.language_model
+        n = max_new_tokens if max_new_tokens is not None else lm.config.max_new_tokens
+        mask = attention_mask
+        for _ in range(n):
+            out = lm(inputs_embeds=inputs_embeds, attention_mask=mask, output_hidden_states=True, return_dict=True)
+            inputs_embeds = torch.cat([inputs_embeds, out.hidden_states[-1][:, -1:, :]], dim=1)
+            if mask is not None:
+                mask = torch.cat([mask, mask.new_ones((mask.shape[0], 1))], dim=1)
+        return inputs_embeds[:, -n:, :]
 
     def _prepare_voice(self, ref_path, ref_text, desc):
         return {}
