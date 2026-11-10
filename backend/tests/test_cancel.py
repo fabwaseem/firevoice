@@ -20,6 +20,7 @@ def _pool(delay=0.25, workers=1):
 
 def test_cancelled_render_drops_its_queued_work(make):
     s = make(workers=1, adapter_kwargs={"delay": 0.25})
+    s.pool.start()        # worker start-up (1-3 s on Windows) is not what this measures
     cancel = threading.Event()
     done_before = s.pool.stats["jobs"]
     t0 = time.perf_counter()

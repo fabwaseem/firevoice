@@ -6,7 +6,14 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_log::Builder::new().build())
+        // the app log keeps what explains a problem (starts, updates, errors) without debug chatter pushing it out
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(if cfg!(debug_assertions) { log::LevelFilter::Debug } else { log::LevelFilter::Info })
+                .max_file_size(2_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(3))
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

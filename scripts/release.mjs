@@ -23,7 +23,7 @@
 //   updater.key, updater.key.pub, updater.password. Losing them means installed copies can no longer update.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { compare, currentVersion, isPlain, nextVersion, root, setVersion, VERSION_FILES } from "./version.mjs";
@@ -133,7 +133,9 @@ step("4/6 build");
 const nsisName = `FireVoice_${version}_x64-setup.exe`;
 const msiName = `FireVoice_${version}_x64_en-US.msi`;
 mkdirSync(dir, { recursive: true });
-const have = [nsisName, `${nsisName}.sig`, msiName].every((f) => existsSync(join(dir, f)));
+// a real release only reuses installers a real run built; a dry run's come from uncommitted files, so never ship them
+const DRY_MARK = join(dir, ".dry-run");
+const have = [nsisName, `${nsisName}.sig`, msiName].every((f) => existsSync(join(dir, f))) && (dry || !existsSync(DRY_MARK));
 if (have && !flag("--rebuild")) info(`installers already in release/${tag}/ (--rebuild to build again)`);
 else {
   const env = {
@@ -146,6 +148,8 @@ else {
     restore();
     fail(dry ? "the build failed." : `the build failed. Fix it (commit the fix), then run the same command again to resume ${tag}.`);
   }
+  if (dry) writeFileSync(DRY_MARK, "built by --dry-run; a real release builds again\n");
+  else if (existsSync(DRY_MARK)) rmSync(DRY_MARK);
   const bundle = join(root, "src-tauri", "target", "release", "bundle");
   for (const [sub, f] of [["nsis", nsisName], ["nsis", `${nsisName}.sig`], ["msi", msiName], ["msi", `${msiName}.sig`]]) {
     const src = join(bundle, sub, f);
