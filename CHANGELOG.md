@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0 (2026-11-11)
+
+A first run that just works: one setup, then your first render is a click away.
+
+- **One setup that can't be skipped.** A new computer gets a single "Setting up FireVoice for your computer" screen with real progress and time left: the environment, GPU support, the voice libraries, 100 ready-made voices, the best engine for your computer, and loading it. When it finishes, Speak is ready: press Render.
+- **The right engine for your computer.** FireVoice reads your graphics card, memory and free disk and installs the engine that runs comfortably faster than real time and sounds best on it. A weak card or none gets the light one.
+- **All 100 voices from the start.** The voice library downloads once during setup, and it never overwrites a voice you changed.
+- **Clear errors.** A full disk names the drive and how much is needed; a network problem says so, with Try again. No more raw error codes.
+- **Finish setup.** If an older version let you skip the setup, a "Finish setup" prompt in the app completes it.
+- **More engines install in one click.** Flash and the other engines that share the GPU runtime now have an Install button with live progress.
+- **Downloads show real progress.** Model downloads no longer sit at 0% and then jump.
+
 ## 1.7.2 (2026-11-11)
 
 - **Clearer update notes.** "What's new" in the update card now shows proper formatting: lists, bold text and links, instead of raw symbols.
