@@ -141,11 +141,23 @@ def install(progress: Callable[[float, float, str], None], cancel: threading.Eve
     folder().mkdir(parents=True, exist_ok=True)
     (folder() / ".ok").unlink(missing_ok=True)
     t0 = time.time()
+    from .rate import Speedometer
+    meter = Speedometer("Downloading the writing assistant")
+
+    def report(done: float) -> None:
+        progress(done, total, meter.text(done, total))
+
+    def report_model(d: float, first: list = [True]) -> None:
+        if first[0]:                      # a resumed download starts with what was already there: not speed
+            first[0] = False
+            meter.rebase(rt["bytes"] + d)
+        report(rt["bytes"] + d)
+
     try:
         # 1. the runtime (small), unpacked into bin/
         zpath = folder() / rt["file"]
         _download(f"{_GH}/{rt['file']}", zpath, rt["bytes"], rt["sha256"],
-                  lambda d, n, _m: progress(d, total, f"Downloading the writing assistant: {round(100 * d / total)}%"), cancel)
+                  lambda d, n, _m: report(d), cancel)
         bin_dir = folder() / "bin"
         shutil.rmtree(bin_dir, ignore_errors=True)
         bin_dir.mkdir(parents=True)
@@ -161,7 +173,7 @@ def install(progress: Callable[[float, float, str], None], cancel: threading.Eve
         # 2. the model
         if not have_model:
             _download(MODEL["url"], _model_path(), MODEL["bytes"], MODEL["sha256"],
-                      lambda d, n, _m: progress(rt["bytes"] + d, total, f"Downloading the writing assistant: {round(100 * (rt['bytes'] + d) / total)}%"), cancel)
+                      lambda d, n, _m: report_model(d), cancel)
     except VoicePackCancelled:
         raise installer.InstallCancelled("cancelled")
     except VoicePackError as e:

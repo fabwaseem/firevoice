@@ -204,12 +204,18 @@ export function useJobFeed(onConnection?: (open: boolean) => void) {
         return;
       }
       qc.setQueryData(qk.job(job.id), job);
-      qc.setQueriesData<{ jobs: Job[]; counts: Record<string, number> }>({ queryKey: ["jobs"] }, (old) => {
-        if (!old) return old;
-        const idx = old.jobs.findIndex((j) => j.id === job.id);
-        const jobs = idx >= 0 ? old.jobs.map((j) => (j.id === job.id ? job : j)) : [job, ...old.jobs];
-        return { ...old, jobs };
-      });
+      // every cached list gets the update; a job it does not hold yet joins only the lists whose filters it matches
+      // (an "install" list must not gain other kinds of jobs, or it changes on every event and back on every refresh)
+      for (const q of qc.getQueryCache().findAll({ queryKey: ["jobs"] })) {
+        const f = (q.queryKey[1] ?? {}) as { kind?: string; status?: string };
+        qc.setQueryData<{ jobs: Job[]; counts: Record<string, number> }>(q.queryKey, (old) => {
+          if (!old) return old;
+          const idx = old.jobs.findIndex((j) => j.id === job.id);
+          if (idx >= 0) return { ...old, jobs: old.jobs.map((j) => (j.id === job.id ? job : j)) };
+          if ((f.kind && f.kind !== job.kind) || (f.status && f.status !== job.status)) return old;
+          return { ...old, jobs: [job, ...old.jobs] };
+        });
+      }
       if (e.type === "done" || e.type === "failed" || e.type === "cancelled" || ["done", "failed", "cancelled"].includes(job.status)) {
         qc.invalidateQueries({ queryKey: ["jobs"] });
         qc.invalidateQueries({ queryKey: qk.system });

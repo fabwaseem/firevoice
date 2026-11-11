@@ -567,17 +567,19 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                 dest = paths.weights(folder)
                 dest.mkdir(parents=True, exist_ok=True)
                 total = _repo_size(repo, rev, m.skip)
-                label = "Downloading the model" + (f" ({total / 1e9:.1f} GB)" if total else "")
-                progress(k, steps, label)
+                label = "Downloading the model"
+                progress(k, steps, label + (f" ({total / 1e9:.1f} GB)" if total else ""))
+                from .rate import Speedometer
+                meter = Speedometer(label)
                 stop = threading.Event()
                 cache = _hub_cache_dir(repo)
                 start_bytes = _dir_bytes(cache) if cache else 0
 
-                def watch(k=k, dest=dest, total=total, label=label, cache=cache, start_bytes=start_bytes):
-                    while not stop.wait(2.0):
+                def watch(k=k, dest=dest, total=total, cache=cache, start_bytes=start_bytes, meter=meter):
+                    while not stop.wait(1.5):
                         if total:
-                            have = max(_dir_bytes(dest), (_dir_bytes(cache) - start_bytes) if cache else 0)
-                            progress(k + min(0.99, have / total), steps, f"{label}: {min(100, round(100 * have / total))}%")
+                            have = min(max(_dir_bytes(dest), (_dir_bytes(cache) - start_bytes) if cache else 0), int(total * 0.99))
+                            progress(k + min(0.99, have / total), steps, meter.text(have, total))
                 w = threading.Thread(target=watch, daemon=True)
                 w.start()
                 try:
@@ -642,19 +644,21 @@ def _install_main(m: Manifest, progress: Callable[[float, float, str], None], ca
         total_all = max(sum(sizes), 1)
         done_before = 0
         for (repo, patterns), size in zip(todo, sizes):
-            label = f"Downloading {_name(m.engine)}" + (f" ({size / 1e9:.1f} GB)" if size else "")
-            progress(done_before, total_all, label)
+            label = f"Downloading {_name(m.engine)}"
+            progress(done_before, total_all, label + (f" ({size / 1e9:.1f} GB)" if size else ""))
+            from .rate import Speedometer
+            meter = Speedometer(label)
             stop = threading.Event()
             cache = _hub_cache_dir(repo)
             start = _dir_bytes(cache) if cache else 0
 
-            def watch(base=done_before, size=size, label=label, cache=cache, start=start):
+            def watch(base=done_before, size=size, cache=cache, start=start, meter=meter):
                 while not stop.wait(1.5):
                     if size and cache:
                         # never claim the end before the download process has really finished: files in the cache
                         # can show their full size before their bytes have arrived
                         have = min(max(0, _dir_bytes(cache) - start), int(size * 0.99))
-                        progress(base + have, total_all, f"{label}: {round(100 * have / size)}%")
+                        progress(base + have, total_all, meter.text(have, size))
             t = threading.Thread(target=watch, daemon=True)
             t.start()
             try:

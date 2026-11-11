@@ -240,15 +240,22 @@ function Ring({ value, failed }: { value: number; failed?: boolean }) {
   );
 }
 
-/** Engine installs still queued or running (refreshed every few seconds while there are any). */
+/** Engine installs and the writing assistant's install, still queued or running (refreshed every few seconds while
+ * there are any). */
 function useInstallJobs(): Job[] {
-  const q = useJobs({ kind: "install", limit: 10 });
-  const active = (q.data?.jobs ?? []).filter((j) => j.status === "queued" || j.status === "running");
-  const { refetch } = q;
+  const engines = useJobs({ kind: "install", limit: 10 });
+  const writer = useJobs({ kind: "writer", limit: 3 });
+  const live = (j: Job) => j.status === "queued" || j.status === "running";
+  const active = [...(engines.data?.jobs ?? []), ...(writer.data?.jobs ?? [])].filter(live);
+  const r1 = engines.refetch;
+  const r2 = writer.refetch;
   useEffect(() => {
     if (!active.length) return;
-    const t = setInterval(() => void refetch(), 2000);
+    const t = setInterval(() => {
+      void r1();
+      void r2();
+    }, 2000);
     return () => clearInterval(t);
-  }, [active.length, refetch]);
+  }, [active.length, r1, r2]);
   return active;
 }

@@ -3,7 +3,7 @@ import { Briefcase, Code2, Cpu, Download, FileText, Mail, MessageCircle, MousePo
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
-import { errMessage } from "@/lib/api/hooks";
+import { errMessage, useJobs } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { hotkeyLabels } from "@/lib/dictation";
 import { cn } from "@/lib/utils";
@@ -109,11 +109,22 @@ export function DictationAssistantPanel() {
 function InstallCard() {
   const qc = useQueryClient();
   const st = useAssistant();
+  // the install is a server job: follow the one that is running, whichever page or click started it
+  const writerJobs = useJobs({ kind: "writer", limit: 3 });
+  const latest = writerJobs.data?.jobs?.[0] ?? null;
   const [jobId, setJobId] = useState<string | null>(null);
-  const job = useLiveJob(jobId);
+  const followed = jobId ?? (latest && jobActive(latest) ? latest.id : null);
+  const job = useLiveJob(followed) ?? (latest && latest.id === followed ? latest : undefined);
   const running = jobActive(job);
-  const error = jobError(job);
-  const install = useMutation({ mutationFn: api.installAssistant, onSuccess: (j) => setJobId(j.id), onError: (e) => toast.error(errMessage(e)) });
+  const error = jobId ? jobError(job) : null;
+  const install = useMutation({
+    mutationFn: api.installAssistant,
+    onSuccess: (j) => {
+      setJobId(j.id);
+      void qc.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
   const [removing, setRemoving] = useState(false);
   const remove = useMutation({
     mutationFn: api.removeAssistant,

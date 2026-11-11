@@ -90,9 +90,14 @@ def _free(path: Path) -> int:
     return shutil.disk_usage(p).free
 
 
-def _download(url: str, dest: Path, size: Optional[int], sha256: str, progress: Progress, cancel: threading.Event) -> None:
+def _download(url: str, dest: Path, size: Optional[int], sha256: str, progress: Progress, cancel: threading.Event,
+              label: str = "Downloading the voice library") -> None:
     """Fetch url into dest (resuming a partial file), checking size and SHA-256. Raises VoicePackError with a plain reason."""
+    from .rate import Speedometer
+    meter = Speedometer(label)
     part = dest.with_name(dest.name + ".part")
+    if part.exists():
+        meter.rebase(part.stat().st_size)          # resuming: what is already there is not speed
     dest.parent.mkdir(parents=True, exist_ok=True)
     local = url.startswith("file:")
     last_err = ""
@@ -126,7 +131,7 @@ def _download(url: str, dest: Path, size: Optional[int], sha256: str, progress: 
                             now = time.monotonic()
                             if now - last > 0.25:
                                 last = now
-                                progress(have, max(total, have), f"Downloading the voice library: {have * 100 // max(total, 1)}%")
+                                progress(have, max(total, have), meter.text(have, max(total, have)))
             if size and have != size:
                 raise OSError(f"the download stopped at {have} of {size} bytes")
             h = hashlib.sha256()
