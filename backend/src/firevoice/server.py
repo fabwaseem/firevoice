@@ -926,7 +926,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 styles=first.get("styles") if isinstance(first.get("styles"), dict) else None,
                 mode="command" if first.get("mode") == "command" else "dictation", selection=str(first.get("selection") or "")[:20000],
                 languages=first.get("languages") if isinstance(first.get("languages"), list) else None,
-                language_hints=first.get("language_hints") if isinstance(first.get("language_hints"), list) else None))
+                language_hints=first.get("language_hints") if isinstance(first.get("language_hints"), list) else None,
+                translate_to=(first.get("translate_to") or None) if first.get("mode") != "command" else None))
         except FireVoiceError as err:
             await ws.send_json({"type": "error", "code": err.code, "message": err.message})
             await ws.close()
@@ -978,7 +979,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                     try:
                         entry = await run_in_threadpool(lambda: svc.dictation_store.record(ev.get("text", ""), live.total, live.language,
                                                                                            app=first.get("app") or None,
-                                                                                           mode=first.get("mode") or "dictation",
+                                                                                           mode=("translation" if first.get("translate_to") and first.get("translate_to") != live.language else first.get("mode") or "dictation"),
+                                                                                           translated_to=first.get("translate_to") or None,
                                                                                            language_probability=live.language_probability,
                                                                                            language_chosen=live.fixed))
                     except Exception:  # noqa: BLE001  (history is a convenience: never fail the dictation over it)

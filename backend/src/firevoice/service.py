@@ -474,7 +474,7 @@ class FireVoice:
     def dictation(self, language: Optional[str] = None, keyterms: Optional[list] = None, commands: bool = True, fillers: bool = True,
                   refine: bool = False, app: Optional[str] = None, app_title: Optional[str] = None, polish: bool = False,
                   styles: Optional[dict] = None, mode: str = "dictation", selection: str = "", languages: Optional[list] = None,
-                  language_hints: Optional[list] = None):
+                  language_hints: Optional[list] = None, translate_to: Optional[str] = None):
         """A live dictation (dictation.py) on the shared Whisper model.
 
         The speech model is told to expect your dictation words, what your replacements write, the caller's terms and
@@ -511,9 +511,14 @@ class FireVoice:
 
         context = {"selection": selection}       # command mode: the selection can also come with the "stop" message
 
+        target = str(translate_to or "").lower().split("-")[0] or None
+
         def finalize(text: str) -> str:
             if command:
                 return dictation_ai.command(text, context.get("selection") or "")
+            src = live.language
+            if target and src and src != target:
+                return translated(text, src)
             plain = tidy(backtrack(text)) if commands else text.strip()
             if polish and dictation_ai.installed():
                 # the assistant applies spoken corrections itself, better than the rules: it gets the words as said
@@ -523,10 +528,32 @@ class FireVoice:
             return _style_rules(plain, style)
 
         live = LiveTranscriber(asr.transcribe_window, language=lang, keyterms=terms[:60], commands=commands and not command,
-                               fillers=fillers, refine=refine or command, rules=rules, finalize=finalize if (refine or command) else None,
+                               fillers=fillers, refine=refine or command or bool(target), rules=rules,
+                               finalize=finalize if (refine or command or target) else None,
                                languages=langs, detect=getattr(asr, "detect_language", None), scored=getattr(asr, "transcribe_scored", None),
                                prior=None if langs else _language_prior(store.language_profile(), language_hints))
         live.context = context
+        if target:
+            live.whole_limit = 300.0             # the whole dictation is needed at the end (up to five minutes)
+
+        def translated(text: str, src: str) -> str:
+            """The dictation written in the target language: by the writing assistant (any pair, punctuated, in the
+            app's style), else by the speech model's own translation into English; else the words as said."""
+            raw = tidy(text) if commands else text.strip()
+            if dictation_ai.installed():
+                out = dictation_ai.translate(raw, src, target, style=style, words=words)
+                if out:
+                    return _style_rules(out, style)
+            if target == "en" and live._whole is not None and hasattr(asr, "speech_to_english"):
+                # the speech model's own translation (the small multilingual model can; the turbo one used on NVIDIA
+                # cards was trained without it and answers in the language spoken): kept only if it really is English
+                out = asr.speech_to_english(live._whole, src)
+                if out and dictation_ai.in_script(out, "en") >= 0.8 and dictation_ai.script_of(src) != "latin":
+                    return _style_rules(tidy(out), style)
+            import logging
+            logging.getLogger("firevoice").warning("translated dictation: no way to write %s as %s here; the words go in as said", src, target)
+            return _style_rules(tidy(backtrack(text)) if commands else text.strip(), style)
+
         import logging
         logging.getLogger("firevoice").info("dictation: language=%s, yours=%s, leaning on=%s, model=%s", lang or "auto", langs,
                                             {k: round(v, 2) for k, v in live.prior.items()} or None, getattr(asr, "model_name", "?"))

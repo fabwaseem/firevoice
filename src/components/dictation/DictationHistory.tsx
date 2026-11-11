@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Clock, Copy, GraduationCap, Mic, Search, Trash2, Type, Wand2, Zap } from "lucide-react";
+import { ArrowRight, Clock, Copy, GraduationCap, Languages, Mic, Search, Trash2, Type, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
@@ -109,6 +109,11 @@ export function DictationHistoryPanel() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap text-ink select-text">{h.text}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-faint">
+                      {h.translated_to && (
+                        <Badge tone="info" className="!h-[18px]">
+                          <Languages className="size-3" /> {langName(h.language)} → {langName(h.translated_to)}
+                        </Badge>
+                      )}
                       {h.mode === "command" && (
                         <Badge tone="fire" className="!h-[18px]">
                           <Wand2 className="size-3" /> Command

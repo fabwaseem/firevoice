@@ -157,6 +157,16 @@ class FasterWhisperAligner:
         score = sum(float(s.avg_logprob) * max(1, len(s.tokens or [])) for s in segs) / n if n else -9.0
         return words, getattr(info, "language", language), score
 
+    def speech_to_english(self, audio: np.ndarray, language: Optional[str] = None) -> str:
+        """Speech in any language, written in English by the speech model itself (its "translate" task): the way to
+        translated dictation when the writing assistant is not installed. Whole sentences, punctuated."""
+        if self.model_name.endswith(".en"):
+            return ""
+        with self._sem:
+            segs, _ = self.m.transcribe(audio, task="translate", language=language, beam_size=5, temperature=0.0,
+                                        condition_on_previous_text=False, vad_filter=True)
+            return " ".join(s.text.strip() for s in segs).strip()
+
     def detect_language(self, audio: np.ndarray) -> list[tuple[str, float]]:
         """How likely each language is for a stretch of 16 kHz speech: [(code, probability)], most likely first.
         Silence is cut out first, so a pause does not dilute the guess."""

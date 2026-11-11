@@ -135,7 +135,7 @@ class DictationStore:
     # ------------------------------------------------------------------------------------------------ history
     def record(self, text: str, seconds: float, language: Optional[str] = None, app: Optional[str] = None,
                raw: Optional[str] = None, mode: str = "dictation", language_probability: Optional[float] = None,
-               language_chosen: bool = False) -> Optional[dict]:
+               language_chosen: bool = False, translated_to: Optional[str] = None) -> Optional[dict]:
         text = (text or "").strip()
         if not text:
             return None
@@ -145,6 +145,8 @@ class DictationStore:
             e["language_p"] = round(float(language_probability), 3)
         if language_chosen:
             e["language_chosen"] = True
+        if translated_to and translated_to != language:
+            e["translated_to"] = translated_to
         if raw and raw.strip() != text:
             e["raw"] = raw.strip()
         with self._lock:

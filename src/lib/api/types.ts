@@ -717,6 +717,8 @@ export interface DictationHistoryItem {
   language_p?: number;
   /** the language was the speaker's choice, not detected */
   language_chosen?: boolean;
+  /** translated dictation: the language it was written in */
+  translated_to?: string;
   /** the program it went to */
   app: string | null;
   mode: string;

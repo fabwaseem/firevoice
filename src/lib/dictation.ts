@@ -60,7 +60,7 @@ export const dictation = {
         command_hotkey: config.commandHotkey,
         // passed on to the server as they are
         // the computer's own language list: a hint for automatic language when no languages are listed
-        extra: { polish: config.polish, styles: config.styles, languages: config.languages, language_hints: systemLanguages() },
+        extra: { polish: config.polish, styles: config.styles, languages: config.languages, language_hints: systemLanguages(), translate_to: config.translateTo || null },
         server,
         token,
       },

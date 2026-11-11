@@ -40,6 +40,8 @@ export interface DictationConfig {
   assistantDeclined: boolean;
   /** automatic language: the languages you speak (empty: any) */
   languages: string[];
+  /** translated dictation: write what is said in this language ("" = off) */
+  translateTo: string;
 }
 
 export type AppKind = "messages" | "work chat" | "email" | "code" | "documents" | "other";
@@ -84,6 +86,7 @@ export const DEFAULT_DICTATION: DictationConfig = {
   commandHotkey: "Ctrl+Alt+Shift+Space",
   assistantDeclined: false,
   languages: [],
+  translateTo: "",
 };
 
 const KEEP = 100;

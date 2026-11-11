@@ -9,6 +9,7 @@ import { DictationSnippetsPanel } from "@/components/dictation/DictationSnippets
 import { DictationAssistantPanel } from "@/components/dictation/DictationAssistant";
 import { DictationHistoryPanel } from "@/components/dictation/DictationHistory";
 import { DictationLanguages } from "@/components/dictation/DictationLanguages";
+import { DictationTranslate } from "@/components/dictation/DictationTranslate";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { dictation, hotkeyLabels } from "@/lib/dictation";
@@ -205,6 +206,7 @@ function SettingsCard() {
           </p>
         )}
         <DictationLanguages />
+        <DictationTranslate />
         <Row title="Microphone">
           <Select
             ariaLabel="Microphone"

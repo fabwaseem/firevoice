@@ -74,3 +74,25 @@ def test_suits_follows_memory_and_disk(monkeypatch, tmp_path):
     monkeypatch.setattr(hardware, "detect", lambda gpu=None: {"ram_gb": 16.0, "disk_free_gb": 2.0})
     ok, why = ai.suits()
     assert not ok and "disk" in why
+
+
+@pytest.mark.parametrize("text, lang, ok", [
+    ("The meeting is at three o'clock.", "en", True),
+    ("Bonjour, la réunion est à quinze heures.", "fr", True),
+    ("کل کی میٹنگ تین بجے ہے۔", "ur", True),
+    ("कल की बैठक तीन बजे है।", "hi", True),
+    ("کل کی میٹنگ تین بجے ہے۔", "en", False),          # Urdu written where English was asked for
+    ("Kal ki meeting teen baje hai.", "ur", False),       # Urdu in Latin letters: not what was asked for
+    ("Встреча завтра в три часа.", "ru", True),
+])
+def test_writing_system_check(text, lang, ok):
+    assert (ai.in_script(text, lang) >= 0.6) is ok
+
+
+def test_a_translation_in_the_wrong_language_or_an_answer_is_set_aside(monkeypatch):
+    replies = iter(["کل کی میٹنگ تین بجے ہے", "Sure! Here is a long story about something else entirely " * 6, "The meeting is at three."])
+    monkeypatch.setattr(ai, "_chat", lambda messages, max_tokens: next(replies))
+    src = "kal ki meeting teen baje hai"
+    assert ai.translate(src, "ur", "en") is None                 # still Urdu
+    assert ai.translate(src, "ur", "en") is None                 # far too long: not a translation
+    assert ai.translate(src, "ur", "en") == "The meeting is at three."

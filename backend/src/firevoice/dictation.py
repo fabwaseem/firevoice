@@ -96,6 +96,7 @@ class LiveTranscriber:
         self._detect = detect
         self.prior = {str(k): float(v) for k, v in (prior or {}).items()}   # share of past dictations, per language
         self._scored = scored
+        self.whole_limit = MAX_WINDOW            # how long a dictation is kept whole for the final pass (longer when translating)
         self.language_probability: Optional[float] = None
         self.hotwords = ", ".join(str(k).strip() for k in (keyterms or []) if str(k).strip())[:800] or None
         self.commands, self.fillers, self.refine = commands, fillers, refine
@@ -124,7 +125,7 @@ class LiveTranscriber:
             self._audio = np.concatenate([self._audio, a])
             self.total += len(a) / SR
             if self._whole is not None:                  # kept only while the dictation is short enough to refine
-                self._whole = np.concatenate([self._whole, a]) if self.total <= MAX_WINDOW else None
+                self._whole = np.concatenate([self._whole, a]) if self.total <= self.whole_limit else None
 
     # -- text out ------------------------------------------------------------
     def _release(self, words: list[str], final: bool = False) -> str:
