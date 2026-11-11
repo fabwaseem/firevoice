@@ -1,7 +1,7 @@
 """FireVoice: self-hosted expressive TTS toolkit."""
 from .types import Word, Take, Result, Segment, Pause  # noqa: F401
 
-__version__ = "1.7.0"
+__version__ = "1.7.1"
 # The HTTP contract version. Bump it when a route or a response shape changes in a way an older client would misread;
 # clients (the desktop app) compare it with the range they support. MIN_CLIENT_API is the oldest client contract this
 # server still serves correctly.

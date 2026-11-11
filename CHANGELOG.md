@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.1 (2026-11-11)
+
+- **Updates are noticed while FireVoice runs.** It checks every 30 minutes, when you bring the window back (for example from the tray) and when your connection returns. If the window is hidden, a notification tells you a new version is ready. You still choose when to download and install.
+- **Speak renders the whole script.** The Stream switch is gone: every render is the full script, checked and mastered, with a timer and an estimate while it works. The streaming API routes are still there for programs.
+- **Styles come with Firebrand.** Delivery styles (excited, sad, whisper, newscaster…) now appear only when Firebrand is the engine, in Speak, the script editor, Home, Projects and Dialogue. With other engines the voice's own delivery is used, and a Styles section in the engine panel explains how to get them.
+- **Smoother floating player.** The player bar has a frosted background, so the page no longer shows through it.
+
 ## 1.7.0 (2026-11-10)
 
 - **Faster first start.** FireVoice is ready in about a minute. Graphics card support (the big download) now finishes in the background while you look around, with live progress, speed and time left in the corner. If you close the app part way, the download picks up where it stopped.
