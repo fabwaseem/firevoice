@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Download, FileText, HardDriveDownload, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, Download, FileText, Gauge, HardDriveDownload, Trash2, X } from "lucide-react";
 import type { Engine } from "@/lib/api/types";
 import { toast } from "sonner";
 import { api, downloadFile, safeFileName } from "@/lib/api/client";
@@ -80,7 +80,22 @@ export function InstallPanel({ engine }: { engine: Engine }) {
         </div>
       )}
 
-      {!engine.ready && !running && (
+      {engine.compat?.status === "no" && !running && (
+        <div className="mt-3 flex items-start gap-2 rounded-md bg-warn-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-warn">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span>
+            <b className="font-semibold">Cannot run on this computer.</b> {engine.compat.summary}
+          </span>
+        </div>
+      )}
+      {(engine.compat?.status === "slow" || (engine.compat?.status === "ok" && engine.compat.device === "cpu")) && !running && (
+        <p className="mt-3 flex items-start gap-2 text-[12.5px] leading-relaxed text-muted">
+          <Gauge className="mt-0.5 size-4 shrink-0 text-faint" />
+          <span>{engine.compat.summary}</span>
+        </p>
+      )}
+
+      {!engine.ready && !running && engine.compat?.status !== "no" && (
         <div className="mt-3 rounded-md bg-surface-2 px-3 py-2">
           <p className="text-[12px] text-muted">{notReadyReason(engine.problems)}</p>
           {engine.installable ? (

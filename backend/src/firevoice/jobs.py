@@ -180,6 +180,7 @@ class JobManager:
                 raise FireVoiceError("not_found", str(e).strip("'\""))
             if not m.auto:
                 raise FireVoiceError("bad_request", f"{name_of(m.engine)} cannot be installed automatically: {m.manual}")
+            self.svc.check_runnable(m.engine)        # never download gigabytes for an engine this computer cannot run
             if m.venv is not None and not installer.uv():
                 raise FireVoiceError("unavailable", "uv not found: install uv or the backend's server extra, which includes it")
             busy = [x for x in self.jobs.values() if x.kind == "install" and x.status not in TERMINAL

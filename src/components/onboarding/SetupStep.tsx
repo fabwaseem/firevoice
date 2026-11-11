@@ -12,6 +12,15 @@ function eta(s: number): string {
   return `about ${(s / 3600).toFixed(1)} h left`;
 }
 
+/** What to say when no usable graphics card was found: name the one that was, and why it is not used. */
+function noGpuLabel(others: { name: string; vendor: string | null }[] | undefined): string {
+  const order = (v: string | null) => ({ nvidia: 0, amd: 1, intel: 2 })[v ?? ""] ?? 3;
+  const g = [...(others ?? [])].sort((a, b) => order(a.vendor) - order(b.vendor))[0];
+  if (!g) return "No NVIDIA graphics card: FireVoice uses your processor";
+  const name = g.name.replace(/\((R|TM)\)/g, "").replace(/\s+/g, " ").trim();
+  return g.vendor === "nvidia" ? `${name}: its driver is not working, so FireVoice uses your processor for now` : `${name}: not supported yet, so FireVoice uses your processor`;
+}
+
 const gpuName = (n: string | null) => (n ? n.replace(/^NVIDIA\s+/i, "").replace(/^GeForce\s+/i, "") : null);
 
 /** The whole setup in one place: what was found on this computer, what it needs, and how far each part is. Nothing
@@ -46,7 +55,7 @@ export function SetupStep({ onReady }: { onReady: () => void }) {
             <Cpu className="mt-0.5 size-5 shrink-0 text-fire" />
             <div className="min-w-0 text-[13px]">
               <div className="font-medium text-ink">
-                {gpu ?? "No NVIDIA graphics card found"}
+                {gpu ?? noGpuLabel(hw.other_gpus)}
                 {hw.vram_gb ? <span className="font-normal text-muted"> · {hw.vram_gb.toFixed(0)} GB graphics memory</span> : null}
                 {hw.ram_gb ? <span className="font-normal text-muted"> · {hw.ram_gb.toFixed(0)} GB RAM</span> : null}
                 {hw.disk_free_gb != null ? <span className="font-normal text-muted"> · {hw.disk_free_gb.toFixed(0)} GB free</span> : null}

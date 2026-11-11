@@ -67,6 +67,35 @@ the zip once, before the release that needs it: `gh release create voices-N <zip
 another file or address (a local `file:///` path works), and `FIREVOICE_HOME`, `FIREVOICE_ENGINES_DIR` and `HF_HOME` move
 the data, the engines and the model cache: together they let you try a first run without touching the real one.
 
+## Supported computers
+
+| | Windows 10/11 (64-bit) | Linux (64-bit, glibc 2.35+, such as Ubuntu 22.04 or newer) |
+|---|---|---|
+| NVIDIA card with its driver | CUDA build of torch; every engine its memory allows | the same |
+| AMD or Intel card, or none | the small CPU build of torch (about 200 MB, without the CUDA libraries); engines that can run on a processor | the same |
+
+The setup detects which row applies (`src-tauri/src/backend.rs` for the torch build, `backend/src/firevoice/hardware.py` for the
+engines) and says so on the setup screen. Every engine has recorded needs in `hardware.REQUIREMENTS` (graphics card or not,
+graphics memory, system memory, a rough speed on a processor). The Engines page marks each one **Ready**, **Slow here** (it works,
+slower than real time: fine for short lines) or **Can't run here** with the reason in plain words; an engine that cannot run is
+never downloaded, and loading it is refused with the same words. Measured on a 16-thread desktop processor with the card hidden:
+Spark keeps up easily (0.25 s per second of speech), Flash and Torch run 2 to 3.5 times slower than real time (fine for short
+lines), while Flicker (17 times slower) and Flare (never finished a line) are not offered there; the large engines need an
+NVIDIA card with enough memory. AMD graphics cards are not used by the
+engines yet (AMD's PyTorch for Windows covers only some cards and is not published on the usual package index); they are named
+in the message so it is clear why the processor is used. `FIREVOICE_ACCELERATOR=cpu` forces the processor (a broken driver,
+or a test).
+
+macOS is not built.
+
+### Linux builds
+
+`node scripts/build-linux.mjs <folder>` builds the Linux packages in Docker on any computer that runs it (the image is
+`docker/linux/Dockerfile`, Ubuntu 22.04 so the app runs on it and on newer systems): an **AppImage** (what the updater uses; it
+updates itself), a `.deb` and an `.rpm`. `scripts/release.mjs` runs it as part of a release, adds the AppImage to
+`latest.json` (`linux-x86_64`) and publishes all three; `--skip-linux` leaves them out. Dictation's global hotkey and typing
+into other programs work on X11; on Wayland the desktop decides what is allowed.
+
 ## Develop
 
 ```bash

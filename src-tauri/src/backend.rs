@@ -23,7 +23,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::Instant;
 
@@ -68,6 +68,9 @@ pub struct Recipe {
     /// Every package of the full runtime, pinned (a file next to backend.json).
     #[serde(default)]
     pub constraints: Option<String>,
+    /// No NVIDIA card here: torch comes from the CPU index (set when the recipe is read, never in backend.json).
+    #[serde(skip)]
+    pub cpu: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -102,6 +105,8 @@ pub struct BackendInfo {
     runtime_dir: String,
     setup_running: bool,
     extras_running: bool,
+    /// No NVIDIA card: the runtime is the small CPU build, and the setup is much smaller.
+    cpu_only: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -168,7 +173,39 @@ fn resources_dir(app: &AppHandle) -> Option<PathBuf> {
 
 fn recipe(app: &AppHandle) -> Option<Recipe> {
     let d = resources_dir(app)?;
-    serde_json::from_str(&fs::read_to_string(d.join("backend.json")).ok()?).ok()
+    let mut r: Recipe = serde_json::from_str(&fs::read_to_string(d.join("backend.json")).ok()?).ok()?;
+    if !has_nvidia() {
+        r.torch_index = cpu_index(&r.torch_index);
+        r.cpu = true;
+    }
+    Some(r)
+}
+
+/// Whether this computer has an NVIDIA graphics card with its driver (what the CUDA build of torch needs). Any other
+/// computer (an AMD or Intel card, or none) gets the CPU build, which is a few hundred MB instead of several GB.
+/// FIREVOICE_ACCELERATOR=cpu|cuda overrides the check (for testing).
+fn has_nvidia() -> bool {
+    static FOUND: OnceLock<bool> = OnceLock::new();
+    *FOUND.get_or_init(|| {
+        match std::env::var("FIREVOICE_ACCELERATOR").ok().as_deref() {
+            Some("cpu") => return false,
+            Some("cuda") => return true,
+            _ => {}
+        }
+        let mut c = Command::new("nvidia-smi");
+        c.arg("-L").stdout(Stdio::piped()).stderr(Stdio::null());
+        #[cfg(windows)]
+        c.creation_flags(CREATE_NO_WINDOW);
+        c.output().map(|o| o.status.success() && !o.stdout.is_empty()).unwrap_or(false)
+    })
+}
+
+/// The CPU index next to a CUDA one: https://download.pytorch.org/whl/cu128 -> https://download.pytorch.org/whl/cpu
+fn cpu_index(cuda: &str) -> String {
+    match cuda.trim_end_matches('/').rsplit_once('/') {
+        Some((base, _)) => format!("{base}/cpu"),
+        None => cuda.to_string(),
+    }
 }
 
 fn runtime_dir(app: &AppHandle) -> PathBuf {
@@ -265,6 +302,7 @@ fn info(app: &AppHandle, st: &Backend) -> BackendInfo {
         runtime_dir: runtime_dir(app).display().to_string(),
         setup_running: *lock(&st.setup_running),
         extras_running: *lock(&st.extras_running),
+        cpu_only: r.as_ref().is_some_and(|r| r.cpu),
     }
 }
 
@@ -494,7 +532,30 @@ fn constraints(r: &Recipe, res: &Path) -> Option<PathBuf> {
         return None;
     }
     let p = res.join(r.constraints.as_deref()?);
-    p.exists().then_some(p)
+    if !p.exists() {
+        return None;
+    }
+    if !r.cpu {
+        return Some(p);
+    }
+    let text = cpu_constraints(&fs::read_to_string(&p).ok()?);
+    let out = std::env::temp_dir().join("firevoice-constraints-cpu.txt");
+    fs::write(&out, text).ok()?;
+    Some(out)
+}
+
+/// The pinned package list for a computer without an NVIDIA card: the CPU build of torch instead of the CUDA one, and
+/// without the CUDA libraries the CUDA build pulls in on Linux (nvidia-*, cuda-*, triton: several GB nothing would use).
+fn cpu_constraints(text: &str) -> String {
+    text.lines()
+        .filter(|l| {
+            let n = l.trim_start().to_ascii_lowercase();
+            !(n.starts_with("nvidia-") || n.starts_with("cuda-") || n.starts_with("triton=="))
+        })
+        .map(|l| l.replace("+cu128", "+cpu"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
 }
 
 /// Install every pinned package (torch included), using the downloaded wheels where they are. The overrides the lock
@@ -709,7 +770,7 @@ fn item(id: &str, label: &str, total: u64) -> ExtrasItem {
 
 fn wheel_label(name: &str) -> String {
     match name {
-        "torch" => "GPU support (PyTorch)".into(),
+        "torch" => "PyTorch (the speech runtime)".into(),
         "torchaudio" => "Audio support".into(),
         n => n.to_string(),
     }
@@ -968,6 +1029,18 @@ pub fn backend_extras_status(st: State<Backend>) -> Extras {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_cpu_index_sits_next_to_the_cuda_one() {
+        assert_eq!(super::cpu_index("https://download.pytorch.org/whl/cu128"), "https://download.pytorch.org/whl/cpu");
+        assert_eq!(super::cpu_index("https://download.pytorch.org/whl/cu128/"), "https://download.pytorch.org/whl/cpu");
+    }
+
+    #[test]
+    fn the_cpu_pins_drop_the_cuda_libraries() {
+        let t = super::cpu_constraints("numpy==1.26.4\nnvidia-cublas-cu12==12.8.4.1\ncuda-toolkit==12.8.1\ntorch==2.11.0+cu128\ntriton==3.6.0\ntriton-windows==3.7.1\n");
+        assert_eq!(t, "numpy==1.26.4\ntorch==2.11.0+cpu\ntriton-windows==3.7.1\n");
+    }
+
     use super::*;
 
     #[test]

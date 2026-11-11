@@ -243,6 +243,24 @@ class FireVoice:
         return a, sr, {"engine": eng, "kind": kind, "seed": seed, "duration": round(len(a) / sr, 2), "seconds": round(time.perf_counter() - t0, 2),
                        "prompt": prompt, "license": catalog.info(eng).to_dict().get("license") or get_engine(eng).license}
 
+    def hardware(self) -> dict:
+        """What this computer is (hardware.detect), read at most every 10 s: engine lists ask for it once per engine."""
+        from . import hardware
+        hit = getattr(self, "_hw_cache", None)
+        if hit and time.monotonic() - hit[0] < 10.0:
+            return hit[1]
+        hw = hardware.detect()
+        self._hw_cache = (time.monotonic(), hw)
+        return hw
+
+    def check_runnable(self, name: str) -> None:
+        """Refuse an engine this computer cannot run, saying what is missing (instead of failing in the middle of a load)."""
+        from . import hardware
+        spec = get_engine(name)
+        c = hardware.compat(spec.name, self.hardware(), spec.vram_gb)
+        if c["status"] == "no" and spec.name != "null":
+            raise FireVoiceError("unavailable", f"{_nm(spec.name)} cannot run on this computer. {c['summary']}")
+
     @staticmethod
     def _installable(name: str) -> bool:
         from .installer import MANIFESTS
@@ -258,7 +276,9 @@ class FireVoice:
         loaded = self._loaded.get(spec.name)
         from .core import brands
         br = brands.describe(spec.name, spec.vram_gb)
+        from . import hardware
         d = {**inf.to_dict(), "model": inf.title, **br, "title": br["brand"] or inf.title,
+             "compat": hardware.compat(spec.name, self.hardware(), spec.vram_gb),
              "speed_rtf": (br["tier"] or {}).get("rtf") or inf.speed_rtf,
              "name": spec.name, "license": spec.license, "commercial": spec.commercial, "vram_gb": spec.vram_gb,
              "default_workers": spec.default_workers, "description": spec.description, **inf.status(), "default": spec.name == self._resolve_engine(None),
@@ -319,6 +339,7 @@ class FireVoice:
         """Load an engine now (otherwise the first request loads it). Idle engines are unloaded first when the GPU
         does not have room, because an oversubscribed card pages to system RAM and runs 10-30x slower."""
         n = self._resolve_engine(name)
+        self.check_runnable(n)
         self._pool(n, workers)
         return self.engine(n)
 
@@ -371,6 +392,7 @@ class FireVoice:
             with self._lock:
                 if name in self._loaded:
                     return take(self._loaded[name])
+            self.check_runnable(name)
             inf = catalog.info(name)
             st = inf.status()
             if not st["ready"]:

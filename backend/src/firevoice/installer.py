@@ -30,7 +30,18 @@ from typing import Callable, Optional
 from . import paths
 
 TORCH_INDEX = "https://download.pytorch.org/whl/cu128"
+TORCH_INDEX_CPU = "https://download.pytorch.org/whl/cpu"
 PYTHON = "3.12"
+
+
+def torch_index() -> str:
+    """Where an engine's own environment gets torch: the CUDA build for an NVIDIA card, the small CPU build for any other
+    computer (an AMD or Intel card, or none), which is a few hundred MB instead of several GB."""
+    try:
+        from . import hardware
+        return TORCH_INDEX if hardware.detect()["accelerator"] != "none" else TORCH_INDEX_CPU
+    except Exception:
+        return TORCH_INDEX
 
 
 @dataclass
@@ -524,7 +535,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                         raise InstallCancelled("cancelled")
                     progress(k, steps, "Installing GPU support (about 3 GB the first time)")
                     pk = [f"torch=={m.torch}"] + ([f"torchaudio=={m.torch}"] if m.torchaudio else [])
-                    _run([u, "pip", "install", "--python", str(py), *pk, "--index-url", TORCH_INDEX, *_shared_wheels()], log, cancel, env)
+                    _run([u, "pip", "install", "--python", str(py), *pk, "--index-url", torch_index(), *_shared_wheels()], log, cancel, env)
                 k += 1
                 extra: list[str] = []
                 if m.git:
@@ -549,7 +560,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                     of = paths.engines_dir() / f".{m.venv}-overrides.txt"
                     of.write_text("\n".join(m.overrides), encoding="utf-8")
                     ovr = ["--override", str(of)]
-                _run([u, "pip", "install", "--python", str(py), *pk, *extra, *pin, *ovr, "--extra-index-url", TORCH_INDEX,
+                _run([u, "pip", "install", "--python", str(py), *pk, *extra, *pin, *ovr, "--extra-index-url", torch_index(),
                       "--index-strategy", "unsafe-best-match"], log, cancel, env)
                 k += 1
             for repo, folder, rev in todo_weights:

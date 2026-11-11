@@ -20,6 +20,8 @@ export interface BackendInfo {
   runtime_dir: string;
   setup_running: boolean;
   extras_running: boolean;
+  /** No NVIDIA card: the runtime is the small CPU build */
+  cpu_only?: boolean;
 }
 
 export interface SetupEvent {

@@ -65,6 +65,16 @@ export interface Engine {
   installable?: boolean;
   /** tts (speech), sfx (sound effects and music) or vc (voice changer) */
   task?: "tts" | "sfx" | "vc" | "tool";
+  /** Whether this computer can run the engine: ok, slow (works, slower than real time) or no (cannot run here, and why). */
+  compat?: EngineCompat;
+}
+
+export interface EngineCompat {
+  status: "ok" | "slow" | "no";
+  summary: string;
+  reasons: string[];
+  est_rtf: number | null;
+  device: "gpu" | "cpu" | null;
 }
 
 export interface InstallStep {
@@ -123,6 +133,12 @@ export interface EnginePick {
 
 /** What this computer can run (from the server): the card, its memory, the system memory and the free disk space. */
 export interface Hardware {
+  os?: "windows" | "linux" | "macos";
+  /** what the engines can use: an NVIDIA card (cuda), an AMD build of torch (rocm) or the processor (none) */
+  accelerator?: "cuda" | "rocm" | "none";
+  gpu_vendor?: string | null;
+  /** graphics adapters that were found but cannot be used */
+  other_gpus?: { name: string; vendor: string | null; vram_gb: number | null }[];
   gpu: string | null;
   vram_gb: number | null;
   vram_free_gb: number | null;

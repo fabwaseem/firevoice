@@ -162,7 +162,7 @@ export function useFirstRunSetup(enabled: boolean): FirstRunSetup {
     },
     {
       id: "gpu",
-      label: "GPU support (PyTorch)",
+      label: info?.cpu_only ? "Speech runtime (PyTorch)" : "GPU support (PyTorch)",
       detail: runtimeDone ? "Installed" : dl || (torch?.state === "active" ? "Downloading…" : "Starts as soon as the environment is ready"),
       state: runtimeDone ? "done" : exFail && !exLibs ? "failed" : coreReady ? "active" : "waiting",
       frac: gpuFrac,
@@ -195,7 +195,7 @@ export function useFirstRunSetup(enabled: boolean): FirstRunSetup {
     {
       id: "load",
       label: "Getting it ready",
-      detail: loadState === "done" ? "Ready to speak" : loadState === "loading" ? `Loading ${engine?.title ?? "the engine"} into your graphics card and getting the speech checker ready. The first time takes a few minutes.` : "Loads your engine so the first render starts at once",
+      detail: loadState === "done" ? "Ready to speak" : loadState === "loading" ? `Loading ${engine?.title ?? "the engine"} into memory and getting the speech checker ready. The first time takes a few minutes.` : "Loads your engine so the first render starts at once",
       state: loadError ? "failed" : loadState === "done" ? "done" : loadState === "loading" ? "active" : "waiting",
       frac: loadState === "done" ? 1 : loadState === "loading" ? 0.5 : 0,
       error: loadError ?? undefined,

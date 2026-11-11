@@ -7,7 +7,9 @@ export const RECIPE = {
   torch: "2.11.0",
   torch_index: "https://download.pytorch.org/whl/cu128",
   // chatterbox-tts pins torch 2.6, which has no RTX 50-series kernels; the backend is tested on these instead
-  overrides: ["torch==2.11.0", "torchaudio==2.11.0"],
+  // resemblyzer asks for webrtcvad, which is published only as source (it needs a C compiler on the user's computer, which
+  // most do not have): never install it; webrtcvad-wheels (same module, ready-made for every system) is in the desktop extra
+  overrides: ["torch==2.11.0", "torchaudio==2.11.0", "webrtcvad ; python_version < '0'"],
 };
 
 /** Extras the dev environment adds on top (tests). */

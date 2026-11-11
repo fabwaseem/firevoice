@@ -121,6 +121,8 @@ if (plain) {
   execFileSync(uv, [
     "pip", "compile", req, "--override", ovr, "--extra-index-url", RECIPE.torch_index, "--index-strategy", "unsafe-best-match",
     "--python-version", RECIPE.python, "--no-header", "--no-annotate", "--quiet", "-o", lock,
+    // every package must come ready-made for this system: users have no C compiler (docopt is pure Python, safe to build)
+    "--only-binary", ":all:", "--no-binary", "docopt",
   ], { stdio: "inherit" });
   const pins = readFileSync(lock, "utf8").split(/\r?\n/).filter((l) => l.trim() && !/^firevoice\b/i.test(l.trim()));
   if (!pins.some((l) => l.startsWith(`torch==${RECIPE.torch}`))) fail("the pinned runtime has no torch");

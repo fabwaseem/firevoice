@@ -7,6 +7,7 @@
 //   2. tests: the app's type check and the backend's test suite (--skip-tests to leave them out)
 //   3. sets the version in all six files, adds the notes to CHANGELOG.md, commits "Release vX.Y.Z" and tags it
 //   4. builds the signed installers (NSIS for updates, MSI for manual installs) into release/vX.Y.Z/ with latest.json,
+//      and the Linux packages (AppImage for updates, .deb, .rpm) in Docker (scripts/build-linux.mjs),
 //      the release notes and SHA256SUMS.txt. The backend ships compiled, with no Python source (bundle-backend.mjs):
 //      the build is refused if the staged wheel is not that one, and the backend tests are run again against it
 //   5. pushes main and the tag to the private code repo, then publishes the files to the public releases repo
@@ -15,6 +16,7 @@
 // Options:
 //   --dry-run          build and stage everything in release/vX.Y.Z/ but commit, tag, push and publish nothing
 //                      (the version files are put back afterwards)
+//   --skip-linux       leave the Linux packages out (a release made on a computer without Docker)
 //   --skip-tests       leave out step 2 and the tests of the compiled backend in step 4
 //   --rebuild          build again even if release/vX.Y.Z/ already holds installers
 //   --feed-base URL    download URL base written into latest.json (default: the public release's own download URL;
@@ -181,6 +183,23 @@ else {
     else if (!f.endsWith(".msi.sig")) fail(`the build made no ${sub}/${f}`);
   }
 }
+
+// ---- Linux: the same version, built in Docker (the updater reads the AppImage; the .deb and .rpm are for manual installs)
+const LINUX_FILE = /.(AppImage|AppImage.sig|deb|rpm)$/;
+const linuxFiles = () => readdirSync(dir).filter((f) => LINUX_FILE.test(f));
+if (flag("--skip-linux")) info("Linux packages skipped");
+else if (linuxFiles().some((f) => f.endsWith(".AppImage")) && !flag("--rebuild") && (dry || !existsSync(DRY_MARK))) info("Linux packages already in this folder");
+else {
+  const tmp = join(dir, "linux-build");
+  mkdirSync(tmp, { recursive: true });
+  const r = spawnSync("node", [join(root, "scripts", "build-linux.mjs"), tmp], { cwd: root, stdio: "inherit" });
+  if (r.status !== 0) {
+    restore();
+    fail("the Linux build failed (use --skip-linux to release without it).");
+  }
+  for (const f of readdirSync(tmp)) if (LINUX_FILE.test(f)) copyFileSync(join(tmp, f), join(dir, f));
+  rmSync(tmp, { recursive: true, force: true });
+}
 restore();
 
 const base = (opt("--feed-base") ?? `https://github.com/${RELEASES_REPO}/releases/download/${tag}`).replace(/\/$/, "");
@@ -192,9 +211,15 @@ const latest = {
   pub_date: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
   platforms: { "windows-x86_64": target, "windows-x86_64-nsis": target },
 };
+const appImage = linuxFiles().find((f) => f.endsWith(".AppImage"));
+if (appImage && existsSync(join(dir, `${appImage}.sig`))) {
+  const lin = { signature: readFileSync(join(dir, `${appImage}.sig`), "utf8").trim(), url: `${base}/${appImage}` };
+  latest.platforms["linux-x86_64"] = lin;
+  latest.platforms["linux-x86_64-appimage"] = lin;
+}
 writeFileSync(join(dir, "latest.json"), `${JSON.stringify(latest, null, 2)}\n`);
 writeFileSync(join(dir, "notes.md"), `${notes}\n`);
-const assets = [nsisName, `${nsisName}.sig`, msiName, "latest.json"].filter((f) => existsSync(join(dir, f)));
+const assets = [nsisName, `${nsisName}.sig`, msiName, ...linuxFiles(), "latest.json"].filter((f) => existsSync(join(dir, f)));
 const sums = assets.filter((f) => !f.endsWith(".sig") && f !== "latest.json").map((f) => `${createHash("sha256").update(readFileSync(join(dir, f))).digest("hex")}  ${f}`);
 writeFileSync(join(dir, "SHA256SUMS.txt"), `${sums.join("\n")}\n`);
 assets.push("SHA256SUMS.txt");

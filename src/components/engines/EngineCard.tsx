@@ -38,7 +38,7 @@ export function EngineCard({ engine }: { engine: Engine }) {
   const loading = load.isPending && load.variables?.name === engine.name;
 
   return (
-    <Card className={cn("flex flex-col rounded-2xl p-5 transition-shadow hover:shadow-md", !engine.ready && "opacity-80")}>
+    <Card className={cn("flex flex-col rounded-2xl p-5 transition-shadow hover:shadow-md", (!engine.ready || engine.compat?.status === "no") && "opacity-80")}>
       <div className="flex items-start justify-between gap-3">
         <h3 className="truncate text-[16px] font-semibold tracking-[-0.01em] text-ink">{engine.title}</h3>
         <StatusBadge engine={engine} />
@@ -85,7 +85,7 @@ export function EngineCard({ engine }: { engine: Engine }) {
             size="sm"
             variant="soft"
             leading={<Power className="size-4" />}
-            disabled={!engine.ready}
+            disabled={!engine.ready || engine.compat?.status === "no"}
             loading={loading}
             onClick={() => load.mutate({ name: engine.name })}
           >
@@ -96,7 +96,7 @@ export function EngineCard({ engine }: { engine: Engine }) {
           size="sm"
           variant="ghost"
           leading={<use.icon className="size-4" />}
-          disabled={!engine.ready}
+          disabled={!engine.ready || engine.compat?.status === "no"}
           onClick={() => {
             if (use.speak) setStudio({ engine: engine.name, params: {} });
             if (engine.name === "musicgen") setSession("sound.kind", "music", "sfx");
@@ -150,6 +150,7 @@ function StatusBadge({ engine }: { engine: Engine }) {
       </Badge>
     );
   }
+  if (engine.compat?.status === "no") return <Badge tone="warn" className="shrink-0">Can't run here</Badge>;
   if (engine.ready) return <Badge tone="info" dot className="shrink-0">Ready</Badge>;
   return (
     <Badge tone="neutral" className="shrink-0">
