@@ -49,7 +49,7 @@ export const dictation = {
         history: config.history,
         command_hotkey: config.commandHotkey,
         // passed on to the server as they are
-        extra: { polish: config.polish, styles: config.styles },
+        extra: { polish: config.polish, styles: config.styles, languages: config.languages },
         server,
         token,
       },

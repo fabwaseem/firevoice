@@ -8,13 +8,13 @@ import { DictationVocabularyPanel } from "@/components/dictation/DictationVocabu
 import { DictationSnippetsPanel } from "@/components/dictation/DictationSnippets";
 import { DictationAssistantPanel } from "@/components/dictation/DictationAssistant";
 import { DictationHistoryPanel } from "@/components/dictation/DictationHistory";
+import { DictationLanguages } from "@/components/dictation/DictationLanguages";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { dictation, hotkeyLabels } from "@/lib/dictation";
-import { cn, langName } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useDictation, useDictationLive, type DictationConfig } from "@/stores/dictation";
 
-const LANGUAGES = ["en", "ur", "hi", "ar", "es", "fr", "de", "it", "pt", "nl", "tr", "ru", "pl", "zh", "ja", "ko"];
 
 function Row({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
@@ -204,16 +204,7 @@ function SettingsCard() {
             shortcuts). To see them typed as you speak, use Press.
           </p>
         )}
-        <Row title="Language" description="Automatic detects it from your first words.">
-          <Select
-            ariaLabel="Language"
-            size="sm"
-            className="w-44"
-            value={config.language}
-            onChange={(v) => set({ language: v })}
-            options={[{ value: "auto", label: "Automatic" }, ...LANGUAGES.map((l) => ({ value: l, label: langName(l) }))]}
-          />
-        </Row>
+        <DictationLanguages />
         <Row title="Microphone">
           <Select
             ariaLabel="Microphone"

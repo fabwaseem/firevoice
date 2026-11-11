@@ -144,3 +144,60 @@ def test_route(svc):
     with c.websocket_connect("/api/v1/dictate") as ws:
         ws.send_json({"type": "hello"})
         assert ws.receive_json()["code"] == "bad_request"
+
+
+# ------------------------------------------------------------------------------------------------ automatic language
+
+class Langs:
+    """A stand-in language detector: what it "hears" depends on how much sound there is."""
+
+    def __init__(self, early, late, at=3.0):
+        self.early, self.late, self.at, self.calls = early, late, at, 0
+
+    def __call__(self, audio):
+        self.calls += 1
+        return self.late if len(audio) / SR >= self.at else self.early
+
+
+def _languages_used(model):
+    return [c["language"] for c in model.calls]
+
+
+class ScriptLang(Script):
+    def __call__(self, audio, language=None, prompt=None, hotwords=None, beam=1):
+        out, _ = super().__call__(audio, language, prompt, hotwords, beam)
+        self.calls[-1]["language"] = language
+        return out, language or "en"
+
+
+def test_auto_picks_only_among_the_speakers_languages_and_waits_until_sure():
+    model = ScriptLang("hola que tal amigo mio como estas hoy")
+    # the detector leans to Portuguese (not one of theirs), then is sure of Spanish
+    det = Langs(early=[("pt", 0.5), ("es", 0.3), ("en", 0.2)], late=[("es", 0.9), ("en", 0.1)])
+    live = LiveTranscriber(model, languages=["en", "es"], detect=det)
+    run(live, 3.6)
+    used = [l for l in _languages_used(model) if l]
+    assert used and set(used) <= {"en", "es"}, used            # never a language they do not speak
+    assert live.language == "es"
+
+
+def test_a_wrong_early_guess_is_put_right_at_the_end():
+    model = ScriptLang("bonjour tout le monde merci beaucoup")
+    det = Langs(early=[("en", 0.9), ("fr", 0.1)], late=[("fr", 0.95), ("en", 0.05)], at=99)   # sure of English early
+    live = LiveTranscriber(model, languages=["en", "fr"], detect=det, refine=True)
+    run(live, 2.4)
+    assert live.language == "en"                                  # settled early, and wrongly
+    det.at = 0                                                    # the whole dictation says French
+    live._audio[0] = live._start
+    live.finish()
+    assert live.language == "fr" and model.calls[-1]["language"] == "fr"
+
+
+def test_a_chosen_language_is_never_changed_and_one_language_needs_no_detection():
+    det = Langs(early=[("fr", 1.0)], late=[("fr", 1.0)])
+    live = LiveTranscriber(ScriptLang("hello there my friend"), language="en", detect=det, refine=True)
+    run(live, 1.6)
+    live.finish()
+    assert live.language == "en"
+    one = LiveTranscriber(ScriptLang("hello there"), languages=["ur"], detect=det)
+    assert one.language == "ur" and one.fixed

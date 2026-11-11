@@ -60,3 +60,29 @@ def test_a_polished_dictation_applies_corrections_and_is_kept(svc):
     assert c.delete("/api/v1/dictation/history").json()["deleted"] == 1
     v = c.get("/api/v1/dictation/vocabulary").json()
     assert v["words"] == ["FireVoice"] and v["replacements"][0]["write"] == "Waseem" and v["snippets"][0]["text"] == "Best,\nW"
+
+
+def test_without_a_gpu_other_languages_get_a_multilingual_model(svc, monkeypatch):
+    import firevoice.asr as asr
+    made = []
+
+    class FakeAligner:
+        def __init__(self, model, device="auto", concurrency=2, language="en"):
+            self.model_name = model
+            made.append(model)
+
+        def transcribe_window(self, *a, **k):
+            return [], None
+
+        def detect_language(self, audio):
+            return []
+
+    monkeypatch.setattr(asr, "FasterWhisperAligner", FakeAligner)
+    svc._aligner.model_name = "base.en"                      # the English-only model used without an NVIDIA card
+    assert svc.dictation_aligner("en", None) is svc._aligner
+    assert svc.dictation_aligner(None, ["en"]) is svc._aligner
+    ml = svc.dictation_aligner(None, ["en", "ur"])
+    assert ml is not svc._aligner and made == ["small"]
+    assert svc.dictation_aligner("de", None) is ml and made == ["small"]          # loaded once
+    svc._aligner.model_name = "large-v3-turbo"                 # with a GPU the shared model knows every language
+    assert svc.dictation_aligner("de", None) is svc._aligner

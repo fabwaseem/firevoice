@@ -924,7 +924,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 fillers=bool(first.get("fillers", True)), refine=bool(first.get("refine", False)), app=first.get("app") or None,
                 app_title=first.get("app_title") or None, polish=bool(first.get("polish", False)),
                 styles=first.get("styles") if isinstance(first.get("styles"), dict) else None,
-                mode="command" if first.get("mode") == "command" else "dictation", selection=str(first.get("selection") or "")[:20000]))
+                mode="command" if first.get("mode") == "command" else "dictation", selection=str(first.get("selection") or "")[:20000],
+                languages=first.get("languages") if isinstance(first.get("languages"), list) else None))
         except FireVoiceError as err:
             await ws.send_json({"type": "error", "code": err.code, "message": err.message})
             await ws.close()

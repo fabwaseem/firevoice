@@ -136,6 +136,18 @@ class FasterWhisperAligner:
             words = [(w.word.strip(), float(w.start), float(w.end)) for s in segs for w in (s.words or [])]
         return words, getattr(info, "language", language)
 
+    def detect_language(self, audio: np.ndarray) -> list[tuple[str, float]]:
+        """How likely each language is for a stretch of 16 kHz speech: [(code, probability)], most likely first.
+        Silence is cut out first, so a pause does not dilute the guess."""
+        if self.model_name.endswith(".en"):
+            return [("en", 1.0)]
+        with self._sem:
+            try:
+                _, _, probs = self.m.detect_language(audio=audio, vad_filter=True)
+            except Exception:  # noqa: BLE001  (no speech left after the silence was cut, an older faster-whisper)
+                return []
+        return sorted(((str(c), float(p)) for c, p in probs), key=lambda t: -t[1])
+
     def transcribe_text(self, audio: np.ndarray, sr: int, beam_size: int = 3) -> tuple[str, list[Word]]:
         """Full STT: text plus word times (for `firevoice transcribe`)."""
         r = self.transcribe_full(audio, sr, beam_size=beam_size)

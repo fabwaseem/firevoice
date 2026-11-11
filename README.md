@@ -239,6 +239,15 @@ words are held back while live until the next word decides. Polished mode also a
 ("scratch that", "no wait", "sorry, I meant": the correction replaces from the word it repeats, else the last word).
 Every dictation lands in a searchable history (`FIREVOICE_HOME/dictation/history.jsonl`) with the app it went to.
 
+**Languages.** One fixed language, or Automatic among the languages you speak (any of Whisper's 100 when the list is
+empty). In Automatic mode every pass is made in the likeliest of your languages (`asr.detect_language`, silence cut out
+first), the language is settled once the detector is 75% sure among yours or after 4 s, and in Polished mode the whole
+dictation is checked once more at the end, so a wrong early guess is put right before anything is typed. One language
+in the list needs no detection at all. Spoken Urdu and Hindi are close to identical, so keep only the one you write in.
+Without an NVIDIA card the shared speech model is the English-only `base.en`; a dictation that may be in another
+language uses a multilingual `small` model instead (loaded on first use). The writing assistant keeps the text in its
+language and never translates it, and it uses the graphics card only when 4.5 GB of it is free (else the processor).
+
 **The writing assistant** (`backend/src/firevoice/dictation_ai.py`, optional, installed from the Dictation page):
 llama.cpp's server (pinned release, Vulkan build: NVIDIA, AMD and Intel graphics, or the processor) with
 Qwen3-4B-Instruct-2507 (Apache-2.0, 4-bit, 2.5 GB), both SHA-256 checked, in `<engines>/writer/`. It runs as its own

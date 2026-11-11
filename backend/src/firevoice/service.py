@@ -457,10 +457,23 @@ class FireVoice:
                 self._aligner = FasterWhisperAligner(self.asr_model, device=self.asr_device, concurrency=2)
             return self._aligner
 
+    def dictation_aligner(self, language: Optional[str], languages: Optional[list]):
+        """The speech model for a dictation: the shared one, unless that one only knows English (base.en, used without
+        an NVIDIA card) and this dictation may be in another language; then a small multilingual one (loaded once)."""
+        a = self.aligner()
+        english_only = (language == "en") or (not language and languages and all(str(x) == "en" for x in languages))
+        if not str(getattr(a, "model_name", "")).endswith(".en") or english_only:
+            return a
+        with self._aligner_lock:
+            if getattr(self, "_ml_aligner", None) is None:
+                from .asr import FasterWhisperAligner
+                self._ml_aligner = FasterWhisperAligner("small", device="cpu", concurrency=2, language=None)
+            return self._ml_aligner
+
     # -------------------------------------------------------------------- dictation
     def dictation(self, language: Optional[str] = None, keyterms: Optional[list] = None, commands: bool = True, fillers: bool = True,
                   refine: bool = False, app: Optional[str] = None, app_title: Optional[str] = None, polish: bool = False,
-                  styles: Optional[dict] = None, mode: str = "dictation", selection: str = ""):
+                  styles: Optional[dict] = None, mode: str = "dictation", selection: str = "", languages: Optional[list] = None):
         """A live dictation (dictation.py) on the shared Whisper model.
 
         The speech model is told to expect your dictation words, what your replacements write, the caller's terms and
@@ -485,6 +498,8 @@ class FireVoice:
         except Exception:
             pass
         lang = None if not language or language == "auto" else language
+        langs = [str(x) for x in (languages or []) if isinstance(x, str) and 1 < len(x) <= 5] or None
+        asr = self.dictation_aligner(lang, langs)
         command = mode == "command"
         if command and not dictation_ai.installed():
             raise FireVoiceError("unavailable", "Command mode needs the writing assistant. Install it on the Dictation page.")
@@ -506,8 +521,9 @@ class FireVoice:
                 return _style_rules(plain if out == raw else out, style)
             return _style_rules(plain, style)
 
-        live = LiveTranscriber(self.aligner().transcribe_window, language=lang, keyterms=terms[:60], commands=commands and not command,
-                               fillers=fillers, refine=refine or command, rules=rules, finalize=finalize if (refine or command) else None)
+        live = LiveTranscriber(asr.transcribe_window, language=lang, keyterms=terms[:60], commands=commands and not command,
+                               fillers=fillers, refine=refine or command, rules=rules, finalize=finalize if (refine or command) else None,
+                               languages=langs, detect=getattr(asr, "detect_language", None))
         live.context = context
         return live
 

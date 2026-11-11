@@ -38,6 +38,8 @@ export interface DictationConfig {
   commandHotkey: string;
   /** the writing assistant was removed on purpose: never download it again by itself */
   assistantDeclined: boolean;
+  /** automatic language: the languages you speak (empty: any) */
+  languages: string[];
 }
 
 export type AppKind = "messages" | "work chat" | "email" | "code" | "documents" | "other";
@@ -81,6 +83,7 @@ export const DEFAULT_DICTATION: DictationConfig = {
   styles: DEFAULT_STYLES,
   commandHotkey: "Ctrl+Alt+Shift+Space",
   assistantDeclined: false,
+  languages: [],
 };
 
 const KEEP = 100;

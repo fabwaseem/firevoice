@@ -30,6 +30,9 @@ MIN_NEW = 0.30          # seconds of new sound before another pass is worth it
 MAX_WINDOW = 26.0       # the model hears at most 30 s: beyond this the oldest words are released as they are
 KEEP_SETTLED = 6.0      # once this much settled sound sits at the front of the window, it is cut away...
 CONTEXT = 1.0           # ...except its last second, which the model keeps hearing as context
+LOCK_P = 0.75           # automatic language: settled once this sure (among the speaker's languages)...
+LOCK_AFTER = 4.0        # ...or after this much sound, whichever comes first
+RECHECK_P = 0.6         # at the end, the whole dictation overrules the early guess when it is at least this sure
 SILENCE_RMS = 0.0025    # below this a stretch is silence: nothing to transcribe (and nothing for the model to invent)
 
 from .dictation_text import FILLERS as _FILLERS, PhraseRules, format_words, norm as _norm  # noqa: F401  (format_words: public here too)
@@ -40,14 +43,27 @@ _PUNCT = ".,;:!?…"     # closing punctuation the model adds when the sound sto
 class LiveTranscriber:
     def __init__(self, transcribe: Transcribe, language: Optional[str] = None, keyterms: Optional[list] = None,
                  commands: bool = True, fillers: bool = True, refine: bool = False, rules: Optional[PhraseRules] = None,
-                 finalize: Optional[Callable[[str], str]] = None):
+                 finalize: Optional[Callable[[str], str]] = None, languages: Optional[list] = None,
+                 detect: Optional[Callable[[np.ndarray], list]] = None):
         """language=None detects it from the first second and a half of speech, then keeps it. refine=True makes
         finish() transcribe a short dictation once more as a whole (more accurate; for clients that insert the text
         only at the end, since it may differ from what was released along the way). rules: the spoken phrases to act on
         (commands, punctuation, your replacements and snippets; dictation_text.PhraseRules). finalize: what the whole
-        text goes through at the end (corrections said out loud, the writing model), for those same clients."""
+        text goes through at the end (corrections said out loud, the writing model), for those same clients.
+
+        Automatic language (language=None): `languages` are the ones the speaker uses (None: any). `detect` gives the
+        probability of each language for some sound (asr.detect_language); while the language is not settled, every
+        pass is made in the likeliest of the speaker's languages, and it is settled once it is clear (LOCK_P) or after
+        LOCK_AFTER seconds of sound. With refine, the whole dictation is checked once more at the end, and a wrong early
+        guess is put right before anything is inserted."""
         self._transcribe = transcribe
+        self.allowed = [str(x) for x in (languages or []) if str(x).strip()] or None
+        if not language and self.allowed and len(self.allowed) == 1:
+            language = self.allowed[0]                   # one language: nothing to detect
         self.language = language or None
+        self.fixed = self.language is not None           # chosen by the speaker: never changed
+        self._detect = detect
+        self.language_probability: Optional[float] = None
         self.hotwords = ", ".join(str(k).strip() for k in (keyterms or []) if str(k).strip())[:800] or None
         self.commands, self.fillers, self.refine = commands, fillers, refine
         self.rules = rules if rules is not None else PhraseRules.build(commands=commands, punctuation=commands)
@@ -63,6 +79,7 @@ class LiveTranscriber:
         self._tail: list[tuple[str, float]] = []         # released words still inside the window: (normalised, end time)
         self._held: Optional[tuple[int, str]] = None     # (index in _words, punctuation) kept back from the newest word
         self._sent = ""                                  # text given out so far
+        self._lang_guess: Optional[str] = None           # automatic language: the best guess while it is not settled
         self.total = 0.0                                 # seconds of sound received
 
     # -- audio in ------------------------------------------------------------
@@ -101,13 +118,42 @@ class LiveTranscriber:
         # context for the model: what was said before the window (the window's own words it hears for itself)
         before = self._words[: len(self._words) - len(self._tail)]
         prompt = format_words(before, self.commands, self.fillers, rules=self.rules)[-200:].strip() or None
-        words, lang = self._transcribe(audio, language=self.language, prompt=prompt, hotwords=self.hotwords, beam=beam)
-        if self.language is None and lang and len(audio) >= int(1.5 * SR):
-            self.language = lang
+        use = self._settle_language(audio)
+        words, lang = self._transcribe(audio, language=use, prompt=prompt, hotwords=self.hotwords, beam=beam)
+        if self.language is None and self._detect is None and lang and len(audio) >= int(1.5 * SR):
+            if self.allowed is None or lang in self.allowed:     # without a detector: the model's own guess, if it is one of yours
+                self.language = lang
         heard = [(w, s + start, e + start) for w, s, e in words if w.strip()]
         j = self._split(heard)
         last = heard[j - 1][0] if j and self._tail and _norm(heard[j - 1][0]) == self._tail[-1][0] else None
         return heard[j:], last
+
+    def _which_language(self, audio: np.ndarray) -> Optional[tuple[str, float]]:
+        """The likeliest of the speaker's languages for this sound, and how sure (renormalised among theirs)."""
+        if self._detect is None:
+            return None
+        probs = self._detect(audio)
+        if self.allowed:
+            probs = [(c, p) for c, p in probs if c in self.allowed]
+        total = sum(p for _, p in probs)
+        if not probs or total <= 0:
+            return None
+        best = max(probs, key=lambda t: t[1])
+        return best[0], best[1] / total
+
+    def _settle_language(self, audio: np.ndarray) -> Optional[str]:
+        """The language for this pass: the chosen or settled one; else the current best guess (settled once clear)."""
+        if self.language is not None:
+            return self.language
+        if len(audio) < int(0.8 * SR):
+            return self._lang_guess
+        g = self._which_language(audio)
+        if g is None:
+            return None
+        self._lang_guess, p = g
+        if (p >= LOCK_P and self.total >= 1.5) or self.total >= LOCK_AFTER:
+            self.language, self.language_probability = g
+        return self._lang_guess
 
     def _settle_held(self, last: Optional[str]) -> None:
         """Words now follow the word whose punctuation was kept back: give it the punctuation this pass wrote for it
@@ -191,6 +237,11 @@ class LiveTranscriber:
         transcribed again as a whole and is the better version of all that was given out (refine)."""
         if self._whole is not None and len(self._whole) >= SR // 3:
             if float(np.sqrt(np.mean(np.square(self._whole)))) >= SILENCE_RMS:
+                if not self.fixed and self._detect is not None:
+                    # the whole dictation says more about its language than its first seconds did
+                    g = self._which_language(self._whole)
+                    if g is not None and (self.language is None or (g[0] != self.language and g[1] >= RECHECK_P)):
+                        self.language, self.language_probability = g
                 words, lang = self._transcribe(self._whole, language=self.language, prompt=None, hotwords=self.hotwords, beam=5)
                 self.language = self.language or lang
                 text = format_words([w for w, _, _ in words if w.strip()], self.commands, self.fillers, final=True, rules=self.rules)
