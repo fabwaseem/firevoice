@@ -144,32 +144,40 @@ def install(progress: Callable[[float, float, str], None], cancel: threading.Eve
     from .rate import Speedometer
     meter = Speedometer("Downloading the writing assistant")
 
+    # what an earlier, interrupted install already saved of the model counts from the start, so a resumed install
+    # never looks as if it began again
+    part = _model_path().with_name(_model_path().name + ".part")
+    saved = part.stat().st_size if (part.exists() and not have_model) else (MODEL["bytes"] if have_model else 0)
+    meter.rebase(saved)
+
     def report(done: float) -> None:
         progress(done, total, meter.text(done, total))
 
-    def report_model(d: float, first: list = [True]) -> None:
+    rt_first = [True]
+
+    def report_runtime(d: float) -> None:
+        if rt_first[0]:                   # the runtime's own saved part, if any: not speed either
+            rt_first[0] = False
+            meter.rebase(d + saved)
+        report(d + saved)
+
+    first = [True]
+
+    def report_model(d: float) -> None:
         if first[0]:                      # a resumed download starts with what was already there: not speed
             first[0] = False
             meter.rebase(rt["bytes"] + d)
         report(rt["bytes"] + d)
 
+    # 1. the runtime (small), unpacked into bin/ (once: a resumed install goes straight to the model)
+    bin_ok = folder() / "bin" / f".ok-{LLAMA_TAG}"
+    zpath = folder() / rt["file"]
     try:
-        # 1. the runtime (small), unpacked into bin/
-        zpath = folder() / rt["file"]
-        _download(f"{_GH}/{rt['file']}", zpath, rt["bytes"], rt["sha256"],
-                  lambda d, n, _m: report(d), cancel)
-        bin_dir = folder() / "bin"
-        shutil.rmtree(bin_dir, ignore_errors=True)
-        bin_dir.mkdir(parents=True)
-        shutil.unpack_archive(str(zpath), str(bin_dir))
-        zpath.unlink(missing_ok=True)
-        exe = _server_exe()
-        if exe is None:
-            raise installer.InstallError("The writing assistant's download is incomplete (no llama-server in it). Try again.")
-        if sys.platform != "win32":
-            for f in exe.parent.iterdir():
-                if f.is_file():
-                    f.chmod(f.stat().st_mode | 0o111)
+        if bin_ok.exists() and _server_exe() is not None:
+            report(rt["bytes"] + saved)
+        else:
+            _get_runtime(rt, zpath, report_runtime, cancel, installer)
+            bin_ok.write_text(LLAMA_TAG, encoding="utf-8")
         # 2. the model
         if not have_model:
             _download(MODEL["url"], _model_path(), MODEL["bytes"], MODEL["sha256"],
@@ -181,6 +189,23 @@ def install(progress: Callable[[float, float, str], None], cancel: threading.Eve
     (folder() / ".ok").write_text(LLAMA_TAG, encoding="utf-8")
     progress(total, total, "installed")
     return {"seconds": round(time.time() - t0, 1)}
+
+
+def _get_runtime(rt: dict, zpath: Path, report, cancel: threading.Event, installer) -> None:
+    from .voicepack import _download
+    _download(f"{_GH}/{rt['file']}", zpath, rt["bytes"], rt["sha256"], lambda d, n, _m: report(d), cancel)
+    bin_dir = folder() / "bin"
+    shutil.rmtree(bin_dir, ignore_errors=True)
+    bin_dir.mkdir(parents=True)
+    shutil.unpack_archive(str(zpath), str(bin_dir))
+    zpath.unlink(missing_ok=True)
+    exe = _server_exe()
+    if exe is None:
+        raise installer.InstallError("The writing assistant's download is incomplete (no llama-server in it). Try again.")
+    if sys.platform != "win32":
+        for f in exe.parent.iterdir():
+            if f.is_file():
+                f.chmod(f.stat().st_mode | 0o111)
 
 
 def uninstall() -> None:
