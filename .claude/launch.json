@@ -4,8 +4,24 @@
     {
       "name": "firevoice-ui",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": [
+        "dev"
+      ],
       "port": 1420
+    },
+    {
+      "name": "firevoice-landing",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "../firevoice-landing",
+        "exec",
+        "next",
+        "dev",
+        "--port",
+        "3005"
+      ],
+      "port": 3005
     }
   ]
 }

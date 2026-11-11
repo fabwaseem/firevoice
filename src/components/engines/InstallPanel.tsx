@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Check, Download, FileText, Gauge, HardDriveDownload, Trash2, X } from "lucide-react";
+import { Check, CircleSlash, Download, FileText, HardDriveDownload, X } from "lucide-react";
 import type { Engine } from "@/lib/api/types";
 import { toast } from "sonner";
 import { api, downloadFile, safeFileName } from "@/lib/api/client";
@@ -18,18 +18,11 @@ const STEP_LABEL: Record<string, string> = {
 };
 const stepLabel = (step: string) => STEP_LABEL[step] ?? "Finishing touches";
 
-/** A plain reason an engine is not ready (the backend's own reasons name folders and packages). */
-function notReadyReason(problems: string[] | undefined): string {
-  const p = (problems ?? []).join(" ");
-  if (/weights/i.test(p) && !/venv|package/i.test(p)) return "Its model still needs downloading.";
-  return "Not installed on this computer yet.";
-}
 
 /** Install, follow and remove an engine from its card. The backend does the work as an `install` job; this only
  * starts it and shows the job's progress (the jobs event feed keeps that job's cache fresh). */
-export function InstallPanel({ engine }: { engine: Engine }) {
+export function InstallPanel({ engine, removeOpen, setRemoveOpen }: { engine: Engine; removeOpen: boolean; setRemoveOpen: (v: boolean) => void }) {
   const [planOpen, setPlanOpen] = useState(false);
-  const [removeOpen, setRemoveOpen] = useState(false);
   const [removeWeights, setRemoveWeights] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const active = useActiveInstall(engine.name);
@@ -81,37 +74,23 @@ export function InstallPanel({ engine }: { engine: Engine }) {
       )}
 
       {engine.compat?.status === "no" && !running && (
-        <div className="mt-3 flex items-start gap-2 rounded-md bg-warn-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-warn">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <span>
-            <b className="font-semibold">Cannot run on this computer.</b> {engine.compat.summary}
-          </span>
+        <div className="mt-4 flex items-start gap-2.5 rounded-xl bg-warn-soft px-3.5 py-3 text-[12.5px] leading-relaxed text-warn">
+          <CircleSlash className="mt-0.5 size-4 shrink-0" />
+          <span>{engine.compat.summary}</span>
         </div>
       )}
-      {(engine.compat?.status === "slow" || (engine.compat?.status === "ok" && engine.compat.device === "cpu")) && !running && (
-        <p className="mt-3 flex items-start gap-2 text-[12.5px] leading-relaxed text-muted">
-          <Gauge className="mt-0.5 size-4 shrink-0 text-faint" />
-          <span>{engine.compat.summary}</span>
-        </p>
-      )}
 
+      {/* not installed yet: installing is this card's one action */}
       {!engine.ready && !running && engine.compat?.status !== "no" && (
-        <div className="mt-3 rounded-md bg-surface-2 px-3 py-2">
-          <p className="text-[12px] text-muted">{notReadyReason(engine.problems)}</p>
+        <div className="mt-auto flex items-center gap-3 pt-5">
           {engine.installable ? (
-            <Button size="sm" variant="soft" className="mt-2" leading={<HardDriveDownload className="size-4" />} onClick={() => setPlanOpen(true)}>
-              Install…
+            <Button size="sm" variant="primary" leading={<HardDriveDownload className="size-4" />} onClick={() => setPlanOpen(true)}>
+              Install
             </Button>
           ) : (
-            <p className="mt-1 text-[12px] text-faint">This engine comes with FireVoice itself. Reinstall FireVoice if it is missing.</p>
+            <p className="text-[12px] text-faint">Comes with FireVoice. Reinstall FireVoice if it is missing.</p>
           )}
         </div>
-      )}
-
-      {engine.ready && engine.installable && !engine.loaded && (
-        <button className="mt-3 inline-flex items-center gap-1 self-start text-[12px] text-faint hover:text-ink-2" onClick={() => setRemoveOpen(true)}>
-          <Trash2 className="size-3.5" /> Remove engine
-        </button>
       )}
 
       <Dialog
