@@ -226,9 +226,29 @@ Dictation types what you say into any program (Settings are on the Dictation pag
 * **The app side** (`src/views/DictationView.tsx`, `src/stores/dictation.ts`, `src/components/dictation/`): settings,
   history and totals, saved on this computer; the settings are sent to the shell whenever they change.
 
-Two modes: "as you speak" types each word as it becomes certain; "when you stop" transcribes the whole dictation once
-more (beam search, with your names as hints) and inserts it in one go. While Ctrl or Alt is held down nothing is typed
-(it would trigger shortcuts), so in hold-to-talk mode the words wait for the key to come up.
+Two modes: **Live** types each word as it becomes certain; **Polished** ("when you stop") transcribes the whole
+dictation once more (beam search, with your words as hints), applies the final touches and inserts it in one go. While
+Ctrl or Alt is held down nothing is typed (it would trigger shortcuts), so in hold-to-talk mode the words wait for the
+key to come up; a double tap of the keys keeps listening hands-free until the next tap.
+
+What the words become (`backend/src/firevoice/dictation_text.py`, both modes): spoken commands and punctuation ("new
+line", "comma", "question mark", "open quote"...), and your own **words** (expected by the speech model, any casing
+fixed), **replacements** ("fire voice" -> "FireVoice") and **snippets** ("my email" types the address), kept in
+`FIREVOICE_HOME/dictation.json` (`backend/src/firevoice/dictation_store.py`, `/api/v1/dictation/*`). A phrase's first
+words are held back while live until the next word decides. Polished mode also applies corrections said out loud
+("scratch that", "no wait", "sorry, I meant": the correction replaces from the word it repeats, else the last word).
+Every dictation lands in a searchable history (`FIREVOICE_HOME/dictation/history.jsonl`) with the app it went to.
+
+**The writing assistant** (`backend/src/firevoice/dictation_ai.py`, optional, installed from the Dictation page):
+llama.cpp's server (pinned release, Vulkan build: NVIDIA, AMD and Intel graphics, or the processor) with
+Qwen3-4B-Instruct-2507 (Apache-2.0, 4-bit, 2.5 GB), both SHA-256 checked, in `<engines>/writer/`. It runs as its own
+process tied to the backend's lifetime (a job object on Windows, a parent-death signal on Linux). In Polished mode it
+rewrites the dictation as meant (punctuation, false starts, corrections, numbered lists) in the style chosen for the
+kind of app the text goes to (`app_kind`: messages, work chat, email, documents, code, other; the shell reports the
+focused program), adding about 0.1 s on a graphics card. A reply that does not look like the dictation (an answer, a
+poem it was asked for) is discarded and the rule-based text used. **Command mode** (its own hotkey): the shell copies the
+selection when you finish speaking, and the spoken instruction is carried out on it ("make this shorter", "translate to
+Spanish"); the result is pasted over it. With nothing selected it writes what was asked for.
 
 ## Security
 

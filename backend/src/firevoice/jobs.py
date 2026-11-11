@@ -29,8 +29,8 @@ from typing import Iterator, Optional
 from .core.brands import name_of
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install", "dub", "voices")
-OWN_THREAD = ("install", "voices")   # long, GPU-free work that must not hold up renders queued behind it
+KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install", "dub", "voices", "writer")
+OWN_THREAD = ("install", "voices", "writer")   # long, GPU-free work that must not hold up renders queued behind it
 
 
 @dataclass
@@ -197,6 +197,11 @@ class JobManager:
             if busy:
                 raise FireVoiceError("conflict", f"the voice library is already being added (job {busy[0].id})")
             title = title or "add the voice library"
+        elif kind == "writer":
+            busy = [x for x in self.jobs.values() if x.kind == "writer" and x.status not in TERMINAL]
+            if busy:
+                raise FireVoiceError("conflict", f"the writing assistant is already being installed (job {busy[0].id})")
+            title = title or "install the writing assistant"
         job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload, owner=os.getpid())
         with self.lock:
             self.jobs[job.id] = job
@@ -578,6 +583,18 @@ class JobManager:
         except voicepack.VoicePackCancelled:
             raise Cancelled("cancelled")
         except voicepack.VoicePackError as e:
+            raise FireVoiceError("internal", str(e))
+
+    def _run_writer(self, j: Job, cancel: threading.Event) -> None:
+        """Download dictation's writing model (dictation_ai.install)."""
+        from . import dictation_ai, installer
+        from .service import FireVoiceError
+        from .types import Cancelled
+        try:
+            j.result = dictation_ai.install(lambda done, total, msg: self._progress(j, done, max(total, 1), msg), cancel)
+        except installer.InstallCancelled:
+            raise Cancelled("cancelled")
+        except installer.InstallError as e:
             raise FireVoiceError("internal", str(e))
 
     def _run_style_refs(self, j: Job, cancel: threading.Event) -> None:

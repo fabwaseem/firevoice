@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api/client";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { dictation, onDictation, type DictationResultEvent, type DictationStateEvent, type DictationTextEvent } from "@/lib/dictation";
@@ -15,6 +17,7 @@ export function useDictationBridge() {
   const server = useSettings((s) => s.serverUrl);
   const token = useSettings((s) => s.token);
   const online = useHealth().isSuccess;
+  const qc = useQueryClient();
 
   // settings -> shell (also registers the hotkey)
   useEffect(() => {
@@ -39,6 +42,20 @@ export function useDictationBridge() {
     return () => c.abort();
   }, [config.enabled, online, server, token]);
 
+  // the writing assistant, loaded before the first polished dictation (only when it is installed and wanted)
+  const wantsAssistant = config.enabled && online && ((config.polish && config.mode === "onstop") || !!config.commandHotkey);
+  useEffect(() => {
+    if (!wantsAssistant) return;
+    let gone = false;
+    api
+      .dictationAssistant()
+      .then((s) => (!gone && s.installed && !s.loaded ? api.loadAssistant() : null))
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [wantsAssistant]);
+
   // shell -> stores
   useEffect(() => {
     if (!inTauri()) return;
@@ -50,10 +67,11 @@ export function useDictationBridge() {
       onDictation<DictationTextEvent>("dictation-text", (e) => live.set({ text: e.text, tentative: e.tentative })),
       onDictation<DictationResultEvent>("dictation-result", (e) => {
         useDictation.getState().add({ text: e.text.trim(), seconds: e.seconds, language: e.language, mode: e.mode });
+        void qc.invalidateQueries({ queryKey: ["dictation-history"] });
       }),
     ];
     return () => {
       for (const s of subs) s.then((off) => off()).catch(() => {});
     };
-  }, []);
+  }, [qc]);
 }

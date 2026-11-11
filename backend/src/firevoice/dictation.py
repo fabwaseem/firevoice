@@ -32,63 +32,26 @@ KEEP_SETTLED = 6.0      # once this much settled sound sits at the front of the 
 CONTEXT = 1.0           # ...except its last second, which the model keeps hearing as context
 SILENCE_RMS = 0.0025    # below this a stretch is silence: nothing to transcribe (and nothing for the model to invent)
 
-_FILLERS = {"um", "umm", "uh", "uhh", "uhm", "erm", "er", "hmm", "mm", "mhm", "ah", "eh"}
-_NORM = re.compile(r"[^\w']+", re.UNICODE)
-_PUNCT = ".,;:!?\u2026"     # closing punctuation the model adds when the sound stops, whether or not the sentence has
+from .dictation_text import FILLERS as _FILLERS, PhraseRules, format_words, norm as _norm  # noqa: F401  (format_words: public here too)
 
-
-def _norm(word: str) -> str:
-    return _NORM.sub("", word.lower())
-
-
-def format_words(words: list[str], commands: bool = True, fillers: bool = True, final: bool = True) -> str:
-    """The text for a run of released words. With final=False a trailing word that may be the start of a spoken
-    command ("new" of "new line") is held back, so the text for more words always starts with the text for fewer."""
-    out: list[str] = []          # pieces: words and line breaks
-    cap_next = False             # a dropped filler opened the sentence: the next word takes its capital
-    i, n = 0, len(words)
-    while i < n:
-        w = words[i]
-        k = _norm(w)
-        if commands and k in ("new", "newline", "next"):
-            nxt = _norm(words[i + 1]) if i + 1 < n else None
-            if k == "newline" or (nxt in ("line", "paragraph") and k in ("new", "next")):
-                para = nxt == "paragraph" and k != "newline"
-                out.append("\n\n" if para else "\n")
-                i += 1 if k == "newline" else 2
-                cap_next = False
-                continue
-            if nxt is None and not final and k != "newline":
-                break            # wait for the next word before deciding
-        if fillers and k in _FILLERS:
-            opens = not out or out[-1].endswith(("\n", ".", "!", "?"))
-            cap_next = cap_next or (opens and w[:1].isupper())
-            i += 1
-            continue
-        if cap_next and w[:1].islower():
-            w = w[:1].upper() + w[1:]
-        cap_next = False
-        out.append(w)
-        i += 1
-    text = ""
-    for p in out:
-        if p.startswith("\n"):
-            text = text.rstrip(" ") + p
-        else:
-            text += ("" if not text or text.endswith("\n") else " ") + p
-    return text
+_PUNCT = ".,;:!?…"     # closing punctuation the model adds when the sound stops, whether or not the sentence has
 
 
 class LiveTranscriber:
     def __init__(self, transcribe: Transcribe, language: Optional[str] = None, keyterms: Optional[list] = None,
-                 commands: bool = True, fillers: bool = True, refine: bool = False):
+                 commands: bool = True, fillers: bool = True, refine: bool = False, rules: Optional[PhraseRules] = None,
+                 finalize: Optional[Callable[[str], str]] = None):
         """language=None detects it from the first second and a half of speech, then keeps it. refine=True makes
         finish() transcribe a short dictation once more as a whole (more accurate; for clients that insert the text
-        only at the end, since it may differ from what was released along the way)."""
+        only at the end, since it may differ from what was released along the way). rules: the spoken phrases to act on
+        (commands, punctuation, your replacements and snippets; dictation_text.PhraseRules). finalize: what the whole
+        text goes through at the end (corrections said out loud, the writing model), for those same clients."""
         self._transcribe = transcribe
         self.language = language or None
         self.hotwords = ", ".join(str(k).strip() for k in (keyterms or []) if str(k).strip())[:800] or None
         self.commands, self.fillers, self.refine = commands, fillers, refine
+        self.rules = rules if rules is not None else PhraseRules.build(commands=commands, punctuation=commands)
+        self.finalize = finalize
         self._lock = threading.Lock()
         self._audio = np.zeros(0, dtype=np.float32)      # the window: sound from _start on
         self._whole: Optional[np.ndarray] = np.zeros(0, dtype=np.float32) if refine else None   # everything, while short
@@ -117,7 +80,7 @@ class LiveTranscriber:
     def _release(self, words: list[str], final: bool = False) -> str:
         """Add released words; -> the new text they add (never anything that changes what was already given out)."""
         self._words += words
-        text = format_words(self._words, self.commands, self.fillers, final=final)
+        text = format_words(self._words, self.commands, self.fillers, final=final, rules=self.rules)
         if not text.startswith(self._sent):              # cannot happen by construction; never retract regardless
             keep = 0
             while keep < min(len(text), len(self._sent)) and text[keep] == self._sent[keep]:
@@ -137,7 +100,7 @@ class LiveTranscriber:
             return [], None
         # context for the model: what was said before the window (the window's own words it hears for itself)
         before = self._words[: len(self._words) - len(self._tail)]
-        prompt = format_words(before, self.commands, self.fillers)[-200:].strip() or None
+        prompt = format_words(before, self.commands, self.fillers, rules=self.rules)[-200:].strip() or None
         words, lang = self._transcribe(audio, language=self.language, prompt=prompt, hotwords=self.hotwords, beam=beam)
         if self.language is None and lang and len(audio) >= int(1.5 * SR):
             self.language = lang
@@ -230,12 +193,27 @@ class LiveTranscriber:
             if float(np.sqrt(np.mean(np.square(self._whole)))) >= SILENCE_RMS:
                 words, lang = self._transcribe(self._whole, language=self.language, prompt=None, hotwords=self.hotwords, beam=5)
                 self.language = self.language or lang
-                text = format_words([w for w, _, _ in words if w.strip()], self.commands, self.fillers, final=True)
-                delta = text[len(self._sent):] if text.startswith(self._sent) else ""
-                self._sent = text
-                return {"commit": delta, "text": text, "tentative": "", "replace": True}
+                text = format_words([w for w, _, _ in words if w.strip()], self.commands, self.fillers, final=True, rules=self.rules)
+                return self._finished(text, self._sent, refined=True)
         cand, last = self._pass(beam=3)
         self._settle_held(last if cand else None)
-        delta = self._release([w for w, _, _ in cand], final=True)
+        before = self._sent
+        self._release([w for w, _, _ in cand], final=True)
         self._guess = []
-        return {"commit": delta, "text": self._sent, "tentative": "", "replace": False}
+        return self._finished(self._sent, before, refined=False)
+
+    def _finished(self, text: str, before: str, refined: bool) -> dict:
+        """The last event: the whole text through `finalize` (when set). replace=True: "text" is the better version of
+        everything given out, for a client that inserts only at the end."""
+        out = text
+        if self.finalize is not None and text.strip():
+            try:
+                out = self.finalize(text) or text
+            except Exception:  # noqa: BLE001  (a failing polish never costs the dictation)
+                import logging
+                logging.getLogger("firevoice").exception("dictation: the final touch failed; the plain text is used")
+                out = text
+        delta = out[len(before):] if out.startswith(before) else ""
+        replace = refined or out != text
+        self._sent = out
+        return {"commit": delta, "text": out, "tentative": "", "replace": replace}

@@ -45,6 +45,11 @@ export const dictation = {
         keyterms: config.keyterms,
         mic: config.mic,
         keep_in_tray: config.keepInTray,
+        boost_quiet: config.boostQuiet,
+        history: config.history,
+        command_hotkey: config.commandHotkey,
+        // passed on to the server as they are
+        extra: { polish: config.polish, styles: config.styles },
         server,
         token,
       },

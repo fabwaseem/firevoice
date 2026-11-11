@@ -54,6 +54,14 @@ pub struct Config {
     pub mic: String,
     /// keep FireVoice running in the tray when its window is closed, so the hotkey keeps working
     pub keep_in_tray: bool,
+    /// whisper mode: quiet speech is brought up to a normal level before the speech model hears it
+    pub boost_quiet: bool,
+    /// keep each dictation in the history (Dictation page)
+    pub history: bool,
+    /// command mode: select text, press this, say what to do with it ("" = off)
+    pub command_hotkey: String,
+    /// more start options for the server, passed on as they are (the writing assistant: "polish", "styles")
+    pub extra: serde_json::Value,
     pub server: String,
     pub token: String,
 }
@@ -72,6 +80,10 @@ impl Default for Config {
             keyterms: vec![],
             mic: String::new(),
             keep_in_tray: true,
+            boost_quiet: false,
+            history: true,
+            command_hotkey: String::new(),
+            extra: serde_json::Value::Null,
             server: "http://127.0.0.1:8787".into(),
             token: String::new(),
         }
@@ -85,16 +97,27 @@ struct Session {
     /// ends it and throws the text away
     cancel: Arc<AtomicBool>,
     started: Instant,
+    /// hands-free: started by a double tap in hold-to-talk, so letting go of the keys does not end it (a tap does)
+    locked: bool,
+    /// command mode: what is said is an instruction for the writing assistant, on the selected text
+    command: bool,
 }
 
 #[derive(Default)]
 pub struct Dictation {
     config: Mutex<Config>,
     session: Mutex<Option<Session>>,
-    /// the hotkey that is registered now, if any
-    hotkey: Mutex<Option<String>>,
+    /// the hotkeys that are registered now
+    hotkeys: Mutex<Vec<String>>,
     last_toggle: Mutex<Option<Instant>>,
+    /// hold-to-talk: when a quick tap (too short to be a dictation) last ended, for spotting a double tap
+    last_tap: Mutex<Option<Instant>>,
+    /// hold-to-talk: the release that follows the tap that ended a hands-free dictation is not a new one
+    swallow_release: Mutex<bool>,
 }
+
+/// A second tap this soon after a quick one is a double tap: hands-free dictation.
+const DOUBLE_TAP: Duration = Duration::from_millis(450);
 
 #[derive(Serialize, Clone, Debug)]
 struct StateEvent {
@@ -134,7 +157,9 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 fn emit_state(app: &AppHandle, state: &'static str, message: Option<String>) {
-    let mode = lock(&app.state::<Dictation>().config).mode.clone();
+    let st = app.state::<Dictation>();
+    let command = lock(&st.session).as_ref().is_some_and(|s| s.command);
+    let mode = if command { "command".to_string() } else { lock(&st.config).mode.clone() };
     let _ = app.emit("dictation", StateEvent { state, message, mode });
 }
 
@@ -181,12 +206,31 @@ struct Downmix {
     pos: f64,
     sum: f32,
     n: u32,
+    /// whisper mode: how much quiet speech is brought up (1 = as it is); follows the voice slowly, never the noise
+    boost: bool,
+    gain: f32,
 }
 
+/// Whisper mode: speech is brought up towards this loudness (RMS), by at most MAX_GAIN, and only sound above
+/// NOISE_FLOOR counts as speech (so room noise in the pauses is not turned up).
+const TARGET_RMS: f32 = 0.08;
+const MAX_GAIN: f32 = 6.0;
+const NOISE_FLOOR: f32 = 0.004;
+
 impl Downmix {
-    fn new(channels: usize, rate: u32) -> (Self, u32) {
+    fn new(channels: usize, rate: u32, boost: bool) -> (Self, u32) {
         let out = rate.min(RATE);
-        (Downmix { channels: channels.max(1), step: out as f64 / rate as f64, pos: 0.0, sum: 0.0, n: 0 }, out)
+        (Downmix { channels: channels.max(1), step: out as f64 / rate as f64, pos: 0.0, sum: 0.0, n: 0, boost, gain: 1.0 }, out)
+    }
+
+    /// The gain for the next piece, from the loudness of this one (whisper mode only).
+    fn follow(&mut self, rms: f32) {
+        if !self.boost || rms < NOISE_FLOOR {
+            return;
+        }
+        let want = (TARGET_RMS / rms).clamp(1.0, MAX_GAIN);
+        // down fast (a loud word must not clip), up slowly (a breath must not be turned into a roar)
+        self.gain = if want < self.gain { want } else { self.gain * 0.85 + want * 0.15 };
     }
 
     fn push(&mut self, frames: impl Iterator<Item = f32>, out: &mut Vec<i16>) -> f32 {
@@ -206,12 +250,15 @@ impl Downmix {
             self.pos += self.step;
             if self.pos >= 1.0 {
                 self.pos -= 1.0;
-                let v = (self.sum / self.n as f32).clamp(-1.0, 1.0);
+                let v = (self.sum / self.n as f32 * self.gain).clamp(-1.0, 1.0);
                 out.push((v * 32767.0) as i16);
                 (self.sum, self.n) = (0.0, 0);
             }
         }
-        if count == 0 { 0.0 } else { (energy / count as f32).sqrt() }
+        let rms = if count == 0 { 0.0 } else { (energy / count as f32).sqrt() };
+        let heard = rms * self.gain;
+        self.follow(rms);
+        heard
     }
 }
 
@@ -230,7 +277,7 @@ fn input_device(name: &str) -> Result<cpal::Device, String> {
 
 /// Read the microphone until `stop`: 16-bit mono pieces go to `audio`, the loudness of the latest piece to `level`.
 /// -> the rate of what is sent. The stream lives on its own thread (it cannot move between threads).
-fn start_mic(name: String, stop: Arc<AtomicBool>, audio: UnboundedSender<Vec<u8>>, level: Arc<AtomicU32>) -> Result<u32, String> {
+fn start_mic(name: String, boost: bool, stop: Arc<AtomicBool>, audio: UnboundedSender<Vec<u8>>, level: Arc<AtomicU32>) -> Result<u32, String> {
     let (ready_tx, ready_rx) = mpsc::channel::<Result<u32, String>>();
     thread::Builder::new()
         .name("firevoice-mic".into())
@@ -238,7 +285,7 @@ fn start_mic(name: String, stop: Arc<AtomicBool>, audio: UnboundedSender<Vec<u8>
             let open = || -> Result<(cpal::Stream, u32), String> {
                 let device = input_device(&name)?;
                 let cfg = device.default_input_config().map_err(|e| format!("The microphone could not be opened ({e})."))?;
-                let (mut mix, rate) = Downmix::new(cfg.channels() as usize, cfg.sample_rate());
+                let (mut mix, rate) = Downmix::new(cfg.channels() as usize, cfg.sample_rate(), boost);
                 let fail = |e| log::error!("dictation: microphone error: {e}");
                 let mut send = move |frames: &mut dyn Iterator<Item = f32>| {
                     let mut out = Vec::with_capacity(512);
@@ -289,6 +336,53 @@ pub fn dictation_mics() -> Vec<String> {
     host.input_devices().map(|ds| ds.filter_map(|d| d.description().ok().map(|x| x.name().to_string())).collect()).unwrap_or_default()
 }
 
+// ---------------------------------------------------------------------------------------------- the app being dictated into
+
+/// The program that has the keyboard focus: (its executable's name without ".exe", its window title). Read when a
+/// dictation starts, so the text can suit the app (and the history says where it went). None where it cannot be read.
+fn foreground_app() -> Option<(String, String)> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.is_null() {
+                return None;
+            }
+            let mut title = [0u16; 512];
+            let n = GetWindowTextW(hwnd, title.as_mut_ptr(), title.len() as i32).max(0) as usize;
+            let title = String::from_utf16_lossy(&title[..n]);
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if h.is_null() {
+                return Some((String::new(), title));
+            }
+            let mut buf = [0u16; 1024];
+            let mut len = buf.len() as u32;
+            let ok = QueryFullProcessImageNameW(h, 0, buf.as_mut_ptr(), &mut len) != 0;
+            CloseHandle(h);
+            let path = if ok { String::from_utf16_lossy(&buf[..len as usize]) } else { String::new() };
+            let exe = std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            Some((exe, title))
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        // X11: the active window's class and title, through xprop (on most desktops); Wayland does not say
+        let id = std::process::Command::new("xprop").args(["-root", "_NET_ACTIVE_WINDOW"]).output().ok()?;
+        let id = String::from_utf8_lossy(&id.stdout).split_whitespace().last()?.to_string();
+        let out = std::process::Command::new("xprop").args(["-id", &id, "WM_CLASS", "_NET_WM_NAME"]).output().ok()?;
+        let text = String::from_utf8_lossy(&out.stdout).to_string();
+        let quoted = |line: &str| -> Vec<String> { line.split('"').skip(1).step_by(2).map(|x| x.to_string()).collect() };
+        let class = text.lines().find(|l| l.starts_with("WM_CLASS")).and_then(|l| quoted(l).last().cloned()).unwrap_or_default();
+        let title = text.lines().find(|l| l.starts_with("_NET_WM_NAME")).map(|l| quoted(l).join("")).unwrap_or_default();
+        Some((class, title))
+    }
+}
+
 // ---------------------------------------------------------------------------------------------- typing
 
 /// Are Ctrl, Alt, Shift or the Windows key down right now? Text typed while they are would be read as shortcuts.
@@ -309,28 +403,56 @@ struct Typist {
     tx: mpsc::Sender<String>,
 }
 
+/// Text that could not be typed is not lost: it goes on the clipboard, and the overlay says so.
+fn rescue(app: &AppHandle, text: &str, why: &str) {
+    log::error!("dictation: could not insert text: {why}");
+    let saved = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok();
+    let msg = if saved {
+        "FireVoice could not type into this program. Your text is on the clipboard: paste it with Ctrl+V."
+    } else {
+        "FireVoice could not type into this program. Your text is in the dictation history."
+    };
+    show_overlay(app);
+    emit_state(app, "error", Some(msg.into()));
+    hide_overlay_later(app, Duration::from_millis(4500));
+}
+
 impl Typist {
-    fn start(paste: bool) -> Typist {
+    fn start(app: &AppHandle, paste: bool) -> Typist {
         let (tx, rx) = mpsc::channel::<String>();
+        let app = app.clone();
         thread::Builder::new()
             .name("firevoice-type".into())
             .spawn(move || {
                 let mut enigo = match Enigo::new(&Settings::default()) {
-                    Ok(e) => e,
+                    Ok(e) => Some(e),
                     Err(e) => {
                         log::error!("dictation: cannot type into other programs: {e}");
-                        return;
+                        None
                     }
                 };
+                let mut failed = String::new();
                 for text in rx {
+                    if !failed.is_empty() {
+                        // once a piece failed, the rest joins it on the clipboard rather than being typed around the hole
+                        failed.push_str(&text);
+                        rescue(&app, failed.trim_end(), "an earlier piece failed");
+                        continue;
+                    }
+                    let Some(e) = enigo.as_mut() else {
+                        failed.push_str(&text);
+                        rescue(&app, failed.trim_end(), "no keyboard access");
+                        continue;
+                    };
                     // wait for the hotkey's own keys to come up (hold-to-talk, or a slow finger on a toggle)
                     let t0 = Instant::now();
                     while modifiers_down() && t0.elapsed() < Duration::from_secs(20) {
                         thread::sleep(Duration::from_millis(15));
                     }
-                    let r = if paste { paste_text(&mut enigo, &text) } else { type_text(&mut enigo, &text) };
-                    if let Err(e) = r {
-                        log::error!("dictation: could not insert text: {e}");
+                    let r = if paste { paste_text(e, &text) } else { type_text(e, &text) };
+                    if let Err(why) = r {
+                        failed.push_str(&text);
+                        rescue(&app, failed.trim_end(), &why);
                     }
                 }
             })
@@ -382,6 +504,49 @@ fn paste_text(enigo: &mut Enigo, text: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The text selected in the focused program, through the clipboard (which is put back): Ctrl+C, then whatever lands
+/// there. "" when nothing is selected. Waits for the hotkey's keys to come up first, or Ctrl+C would be another chord.
+fn grab_selection() -> String {
+    let t0 = Instant::now();
+    while modifiers_down() && t0.elapsed() < Duration::from_secs(5) {
+        thread::sleep(Duration::from_millis(15));
+    }
+    let Ok(mut clip) = arboard::Clipboard::new() else { return String::new() };
+    let before = clip.get_text().ok();
+    let marker = format!("\u{2063}firevoice-{}", t0.elapsed().as_nanos());
+    if clip.set_text(marker.clone()).is_err() {
+        return String::new();
+    }
+    let copied = Enigo::new(&Settings::default()).ok().and_then(|mut e| {
+        e.key(Key::Control, Direction::Press).ok()?;
+        let r = e.key(Key::Unicode('c'), Direction::Click);
+        e.key(Key::Control, Direction::Release).ok()?;
+        r.ok()
+    });
+    let mut got = String::new();
+    if copied.is_some() {
+        let t1 = Instant::now();
+        while t1.elapsed() < Duration::from_millis(450) {
+            thread::sleep(Duration::from_millis(25));
+            if let Ok(t) = clip.get_text() {
+                if t != marker {
+                    got = t;
+                    break;
+                }
+            }
+        }
+    }
+    match before {
+        Some(b) => {
+            let _ = clip.set_text(b);
+        }
+        None => {
+            let _ = clip.clear();
+        }
+    }
+    got
+}
+
 // ---------------------------------------------------------------------------------------------- one dictation
 
 fn ws_url(server: &str, token: &str) -> String {
@@ -413,7 +578,7 @@ struct ServerMsg {
 }
 
 /// Connect, stream the microphone, insert the text. -> what was dictated, or a message for the user.
-async fn run(app: &AppHandle, cfg: &Config, stop: Arc<AtomicBool>, cancel: Arc<AtomicBool>) -> Result<Option<ResultEvent>, String> {
+async fn run(app: &AppHandle, cfg: &Config, target: (String, String), command: bool, stop: Arc<AtomicBool>, cancel: Arc<AtomicBool>) -> Result<Option<ResultEvent>, String> {
     let engine_down = "FireVoice's voice engine is not running. Open FireVoice and wait until it is ready.";
     let level = Arc::new(AtomicU32::new(0));
     let mic_stop = Arc::new(AtomicBool::new(false));
@@ -421,7 +586,8 @@ async fn run(app: &AppHandle, cfg: &Config, stop: Arc<AtomicBool>, cancel: Arc<A
     // the microphone opens first, so nothing said while the connection is made is lost
     let (name, stop2) = (cfg.mic.clone(), mic_stop.clone());
     let level2 = level.clone();
-    let rate = tokio::task::spawn_blocking(move || start_mic(name, stop2, audio_tx, level2)).await.map_err(|e| e.to_string())??;
+    let boost = cfg.boost_quiet;
+    let rate = tokio::task::spawn_blocking(move || start_mic(name, boost, stop2, audio_tx, level2)).await.map_err(|e| e.to_string())??;
     struct StopMic(Arc<AtomicBool>);
     impl Drop for StopMic {
         fn drop(&mut self) {
@@ -438,14 +604,21 @@ async fn run(app: &AppHandle, cfg: &Config, stop: Arc<AtomicBool>, cancel: Arc<A
             engine_down.to_string()
         })?;
     let (mut tx, mut rx) = ws.split();
-    let realtime = cfg.mode != "onstop";
-    let start = serde_json::json!({
+    let realtime = cfg.mode != "onstop" && !command;
+    let mut start = serde_json::json!({
         "type": "start", "language": cfg.language, "keyterms": cfg.keyterms, "commands": cfg.commands, "fillers": cfg.fillers,
-        "refine": !realtime, "sample_rate": rate,
+        "refine": !realtime, "sample_rate": rate, "app": target.0, "app_title": target.1, "history": cfg.history,
+        "mode": if command { "command" } else { "dictation" },
     });
+    if let (Some(extra), Some(obj)) = (cfg.extra.as_object(), start.as_object_mut()) {
+        for (k, v) in extra {
+            obj.entry(k.clone()).or_insert(v.clone());
+        }
+    }
     tx.send(Message::Text(start.to_string().into())).await.map_err(|e| e.to_string())?;
 
-    let typist = Typist::start(cfg.insert == "paste");
+    // a command's result replaces the selection in one go, so it is always pasted
+    let typist = Typist::start(app, cfg.insert == "paste" || command);
     emit_state(app, "listening", None);
     let mut ticker = tokio::time::interval(Duration::from_millis(33));
     let t0 = Instant::now();
@@ -509,7 +682,14 @@ async fn run(app: &AppHandle, cfg: &Config, stop: Arc<AtomicBool>, cancel: Arc<A
                             while let Ok(c) = audio_rx.try_recv() {
                                 tx.send(Message::Binary(c.into())).await.map_err(|_| engine_down.to_string())?;
                             }
-                            tx.send(Message::Text(r#"{"type":"stop"}"#.into())).await.map_err(|_| engine_down.to_string())?;
+                            // command mode: the selection is read now, once the keys are up (it is still selected)
+                            let stop_msg = if command {
+                                let selection = tokio::task::spawn_blocking(grab_selection).await.unwrap_or_default();
+                                serde_json::json!({"type": "stop", "selection": selection}).to_string()
+                            } else {
+                                r#"{"type":"stop"}"#.to_string()
+                            };
+                            tx.send(Message::Text(stop_msg.into())).await.map_err(|_| engine_down.to_string())?;
                             stopping = Some(Instant::now());
                             emit_state(app, "finishing", None);
                         }
@@ -524,7 +704,7 @@ async fn run(app: &AppHandle, cfg: &Config, stop: Arc<AtomicBool>, cancel: Arc<A
     }
 }
 
-fn start(app: &AppHandle) {
+fn start(app: &AppHandle, locked: bool, command: bool) {
     let st = app.state::<Dictation>();
     let cfg = lock(&st.config).clone();
     let (stop, cancel) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
@@ -533,13 +713,15 @@ fn start(app: &AppHandle) {
         if s.is_some() {
             return;
         }
-        *s = Some(Session { stop: stop.clone(), cancel: cancel.clone(), started: Instant::now() });
+        *s = Some(Session { stop: stop.clone(), cancel: cancel.clone(), started: Instant::now(), locked, command });
     }
+    // which program the words go to: read before the overlay appears (it never takes the focus, but be sure)
+    let target = foreground_app().unwrap_or_default();
     show_overlay(app);
     emit_state(app, "starting", None);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let result = run(&app, &cfg, stop, cancel).await;
+        let result = run(&app, &cfg, target, command, stop, cancel).await;
         *lock(&app.state::<Dictation>().session) = None;
         match result {
             Ok(Some(r)) => {
@@ -576,16 +758,35 @@ fn active(app: &AppHandle) -> bool {
 
 /// Start a dictation, or end the one that is running (the tray menu and the app's own button).
 pub fn toggle(app: &AppHandle) {
-    if active(app) { stop(app, false) } else { start(app) }
+    if active(app) { stop(app, false) } else { start(app, false, false) }
 }
 
-fn on_hotkey(app: &AppHandle, state: ShortcutState) {
+fn on_hotkey(app: &AppHandle, state: ShortcutState, command: bool) {
     let st = app.state::<Dictation>();
     let hold = lock(&st.config).activation == "hold";
     match (hold, state) {
-        (true, ShortcutState::Pressed) => start(app),
+        (true, ShortcutState::Pressed) => {
+            // a tap while hands-free ends it (and its release is not a new dictation)
+            if lock(&st.session).as_ref().is_some_and(|s| s.locked) {
+                *lock(&st.swallow_release) = true;
+                stop(app, false);
+                return;
+            }
+            // a second tap right after a quick one: hands-free until the next tap
+            let double = lock(&st.last_tap).take().is_some_and(|t| t.elapsed() < DOUBLE_TAP);
+            start(app, double, command);
+        }
         (true, ShortcutState::Released) => {
-            let short = lock(&st.session).as_ref().map(|s| s.started.elapsed() < MIN_HOLD).unwrap_or(false);
+            if std::mem::take(&mut *lock(&st.swallow_release)) {
+                return;
+            }
+            let (locked, short) = lock(&st.session).as_ref().map(|s| (s.locked, s.started.elapsed() < MIN_HOLD)).unwrap_or((false, false));
+            if locked {
+                return;
+            }
+            if short {
+                *lock(&st.last_tap) = Some(Instant::now());
+            }
             stop(app, short);
         }
         (false, ShortcutState::Pressed) => {
@@ -596,7 +797,7 @@ fn on_hotkey(app: &AppHandle, state: ShortcutState) {
             }
             *last = Some(Instant::now());
             drop(last);
-            toggle(app);
+            if active(app) { stop(app, false) } else { start(app, false, command) }
         }
         (false, ShortcutState::Released) => {}
     }
@@ -612,16 +813,26 @@ fn status(app: &AppHandle, hotkey_error: Option<String>) -> Status {
 #[tauri::command]
 pub fn dictation_configure(app: AppHandle, st: State<Dictation>, config: Config) -> Status {
     let shortcuts = app.global_shortcut();
-    if let Some(old) = lock(&st.hotkey).take() {
+    for old in std::mem::take(&mut *lock(&st.hotkeys)) {
         let _ = shortcuts.unregister(old.as_str());
     }
     let mut error = None;
     if config.enabled && !config.hotkey.trim().is_empty() {
-        match shortcuts.on_shortcut(config.hotkey.as_str(), |app, _shortcut, event| on_hotkey(app, event.state)) {
-            Ok(()) => *lock(&st.hotkey) = Some(config.hotkey.clone()),
+        match shortcuts.on_shortcut(config.hotkey.as_str(), |app, _shortcut, event| on_hotkey(app, event.state, false)) {
+            Ok(()) => lock(&st.hotkeys).push(config.hotkey.clone()),
             Err(e) => {
                 log::warn!("dictation: cannot register {}: {e}", config.hotkey);
                 error = Some("This key combination is taken by another program, or cannot be used. Choose another one.".to_string());
+            }
+        }
+    }
+    let cmd = config.command_hotkey.trim();
+    if config.enabled && !cmd.is_empty() && cmd != config.hotkey.trim() {
+        match shortcuts.on_shortcut(cmd, |app, _shortcut, event| on_hotkey(app, event.state, true)) {
+            Ok(()) => lock(&st.hotkeys).push(cmd.to_string()),
+            Err(e) => {
+                log::warn!("dictation: cannot register the command hotkey {cmd}: {e}");
+                error = error.or(Some("The command mode key combination is taken by another program, or cannot be used. Choose another one.".to_string()));
             }
         }
     }

@@ -921,7 +921,10 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 raise FireVoiceError("bad_request", "sample_rate must be between 8000 and 96000")
             live = await run_in_threadpool(lambda: svc.dictation(
                 language=first.get("language"), keyterms=first.get("keyterms") or None, commands=bool(first.get("commands", True)),
-                fillers=bool(first.get("fillers", True)), refine=bool(first.get("refine", False))))
+                fillers=bool(first.get("fillers", True)), refine=bool(first.get("refine", False)), app=first.get("app") or None,
+                app_title=first.get("app_title") or None, polish=bool(first.get("polish", False)),
+                styles=first.get("styles") if isinstance(first.get("styles"), dict) else None,
+                mode="command" if first.get("mode") == "command" else "dictation", selection=str(first.get("selection") or "")[:20000]))
         except FireVoiceError as err:
             await ws.send_json({"type": "error", "code": err.code, "message": err.message})
             await ws.close()
@@ -948,8 +951,11 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                         pcm = np.frombuffer(m["bytes"][: len(m["bytes"]) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
                         live.feed(_resample16k(pcm, rate))
                     elif m.get("text"):
-                        t = json.loads(m["text"]).get("type")
+                        msg = json.loads(m["text"])
+                        t = msg.get("type")
                         if t in ("stop", "cancel"):
+                            if t == "stop" and isinstance(msg.get("selection"), str) and hasattr(live, "context"):
+                                live.context["selection"] = msg["selection"][:20000]     # command mode
                             state[t] = True
                             return
             except (WebSocketDisconnect, RuntimeError):
@@ -965,7 +971,17 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                     await asyncio.sleep(0.04)
             if state["stop"]:
                 ev = await run_in_threadpool(live.finish)
-                await ws.send_json({"type": "final", **ev, "seconds": round(live.total, 2), "language": live.language})
+                entry = None
+                if first.get("history", True):
+                    try:
+                        entry = await run_in_threadpool(lambda: svc.dictation_store.record(ev.get("text", ""), live.total, live.language,
+                                                                                           app=first.get("app") or None,
+                                                                                           mode=first.get("mode") or "dictation"))
+                    except Exception:  # noqa: BLE001  (history is a convenience: never fail the dictation over it)
+                        import logging
+                        logging.getLogger("firevoice").exception("dictation history could not be written")
+                await ws.send_json({"type": "final", **ev, "seconds": round(live.total, 2), "language": live.language,
+                                    "history_id": entry["id"] if entry else None})
         except (WebSocketDisconnect, RuntimeError):
             pass
         except Exception as err:  # noqa: BLE001
@@ -983,6 +999,107 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                     await ws.close()
                 except Exception:  # noqa: BLE001
                     pass
+
+    # ------------------------------------------------------------------ dictation: your words, snippets, history
+    @app.get("/api/v1/dictation/assistant", dependencies=deps, tags=["stt"])
+    def dictation_assistant():
+        """Dictation's writing assistant (polish, per-app styles, command mode). -> {"name", "installed", "loaded",
+        "size_gb", "tier"}"""
+        from . import dictation_ai
+        return dictation_ai.status()
+
+    @app.post("/api/v1/dictation/assistant/install", dependencies=deps, tags=["stt"], status_code=202)
+    def dictation_assistant_install():
+        """Download the writing assistant (a job; follow it at /api/v1/jobs/{id})."""
+        return svc.jobs.submit("writer", {})
+
+    @app.post("/api/v1/dictation/assistant/load", dependencies=deps, tags=["stt"])
+    async def dictation_assistant_load():
+        """Load the writing assistant now, so the first polished dictation does not wait for it."""
+        from . import dictation_ai
+        try:
+            return await run_in_threadpool(dictation_ai.load)
+        except RuntimeError as e:
+            raise FireVoiceError("unavailable", str(e))
+
+    @app.delete("/api/v1/dictation/assistant", dependencies=deps, tags=["stt"])
+    def dictation_assistant_remove():
+        """Remove the writing assistant from this computer (its model and runtime). -> the status"""
+        from . import dictation_ai
+        dictation_ai.uninstall()
+        return dictation_ai.status()
+
+    @app.post("/api/v1/dictation/assistant/unload", dependencies=deps, tags=["stt"])
+    def dictation_assistant_unload():
+        from . import dictation_ai
+        dictation_ai.unload()
+        return dictation_ai.status()
+
+    @app.get("/api/v1/dictation/vocabulary", dependencies=deps, tags=["stt"])
+    def dictation_vocabulary():
+        """Your dictation words, replacements and snippets. -> {"words": [...], "replacements": [{id, heard, write}],
+        "snippets": [{id, trigger, text}]}"""
+        return svc.dictation_store.load()
+
+    @app.put("/api/v1/dictation/words", dependencies=deps, tags=["stt"])
+    def dictation_words(body: dict = Body(...)):
+        """Replace the word list: {"words": ["FireVoice", "Kubernetes", ...]}. -> {"words": [...]}"""
+        try:
+            return {"words": svc.dictation_store.set_words(list(body.get("words") or []))}
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+
+    @app.post("/api/v1/dictation/words", dependencies=deps, tags=["stt"])
+    def dictation_add_word(body: dict = Body(...)):
+        """Add one word: {"word": "FireVoice"}. -> {"words": [...]}"""
+        try:
+            return {"words": svc.dictation_store.add_word(str(body.get("word") or ""))}
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+
+    @app.post("/api/v1/dictation/replacements", dependencies=deps, tags=["stt"])
+    def dictation_replacement(body: dict = Body(...)):
+        """Add or change a replacement: {"id"?, "heard": "fire voice", "write": "FireVoice"}. -> the saved one"""
+        try:
+            return svc.dictation_store.save_replacement(body)
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+
+    @app.delete("/api/v1/dictation/replacements/{rid}", dependencies=deps, tags=["stt"])
+    def dictation_replacement_delete(rid: str):
+        if not svc.dictation_store.delete("replacements", rid):
+            raise FireVoiceError("not_found", "no such replacement")
+        return {"deleted": rid}
+
+    @app.post("/api/v1/dictation/snippets", dependencies=deps, tags=["stt"])
+    def dictation_snippet(body: dict = Body(...)):
+        """Add or change a snippet: {"id"?, "trigger": "my address", "text": "..."}. -> the saved one"""
+        try:
+            return svc.dictation_store.save_snippet(body)
+        except ValueError as e:
+            raise FireVoiceError("bad_request", str(e))
+
+    @app.delete("/api/v1/dictation/snippets/{rid}", dependencies=deps, tags=["stt"])
+    def dictation_snippet_delete(rid: str):
+        if not svc.dictation_store.delete("snippets", rid):
+            raise FireVoiceError("not_found", "no such snippet")
+        return {"deleted": rid}
+
+    @app.get("/api/v1/dictation/history", dependencies=deps, tags=["stt"])
+    def dictation_history(q: str = "", limit: int = 50, offset: int = 0):
+        """Your dictations, newest first. q: words that must all appear. -> {"items", "total", "words", "seconds"}"""
+        return svc.dictation_store.history(q, limit, offset)
+
+    @app.delete("/api/v1/dictation/history/{hid}", dependencies=deps, tags=["stt"])
+    def dictation_history_delete(hid: str):
+        if not svc.dictation_store.delete_history(hid):
+            raise FireVoiceError("not_found", "no such dictation")
+        return {"deleted": hid}
+
+    @app.delete("/api/v1/dictation/history", dependencies=deps, tags=["stt"])
+    def dictation_history_clear():
+        """Delete every dictation in the history. -> {"deleted": count}"""
+        return {"deleted": svc.dictation_store.delete_history(None)}
 
     # ------------------------------------------------------------------ OpenAI-compatible
     class OAISpeech(BaseModel):

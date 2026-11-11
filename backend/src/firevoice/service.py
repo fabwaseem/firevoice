@@ -168,6 +168,8 @@ class FireVoice:
         from .jobs import JobManager
         from .takestore import RenderStore
         self.dictionary = Dictionary(home() / "dictionary.json")
+        from .dictation_store import DictationStore
+        self.dictation_store = DictationStore(home())
         self.renders = RenderStore(home() / "takes")
         from .history import History
         self.history = History(home() / "history")
@@ -457,23 +459,64 @@ class FireVoice:
 
     # -------------------------------------------------------------------- dictation
     def dictation(self, language: Optional[str] = None, keyterms: Optional[list] = None, commands: bool = True, fillers: bool = True,
-                  refine: bool = False):
-        """A live dictation (dictation.py) on the shared Whisper model. Words the pronunciation dictionary knows are
-        passed along as terms to spell right, after the caller's own."""
+                  refine: bool = False, app: Optional[str] = None, app_title: Optional[str] = None, polish: bool = False,
+                  styles: Optional[dict] = None, mode: str = "dictation", selection: str = ""):
+        """A live dictation (dictation.py) on the shared Whisper model.
+
+        The speech model is told to expect your dictation words, what your replacements write, the caller's terms and
+        the pronunciation dictionary's words. Spoken phrases (commands, punctuation, replacements, snippets) are acted
+        on as the words come (dictation_text.py). refine=True (the client inserts the text only at the end) also runs
+        the whole text through the final touches: corrections said out loud ("scratch that", "no wait"), tidying, and
+        with polish=True the writing assistant (dictation_ai.py) in the style chosen for the app it goes to
+        (styles: {"messages": "casual", "email": "formal", ...}).
+
+        mode="command": what is said is an instruction for the writing assistant, carried out on `selection` (or, with
+        nothing selected, a request for text to write); the result is the new text."""
         from .dictation import LiveTranscriber
+        from .dictation_text import backtrack, tidy
+        from . import dictation_ai
+        store = self.dictation_store
         terms = [str(k).strip() for k in (keyterms or []) if str(k).strip()]
+        for w in store.hotwords():
+            if w not in terms:
+                terms.append(w)
         try:
             terms += [r["match"] for r in self.dictionary.rules() if r.get("match") and r["match"] not in terms]
         except Exception:
             pass
         lang = None if not language or language == "auto" else language
-        return LiveTranscriber(self.aligner().transcribe_window, language=lang, keyterms=terms[:60], commands=commands, fillers=fillers,
-                               refine=refine)
+        command = mode == "command"
+        if command and not dictation_ai.installed():
+            raise FireVoiceError("unavailable", "Command mode needs the writing assistant. Install it on the Dictation page.")
+        rules = store.rules(commands=commands and not command)
+        kind = dictation_ai.app_kind(app, app_title)
+        style = str((styles or {}).get(kind) or dictation_ai.DEFAULT_STYLES.get(kind, "formal"))
+        words = store.load()["words"]
+
+        context = {"selection": selection}       # command mode: the selection can also come with the "stop" message
+
+        def finalize(text: str) -> str:
+            if command:
+                return dictation_ai.command(text, context.get("selection") or "")
+            plain = tidy(backtrack(text)) if commands else text.strip()
+            if polish and dictation_ai.installed():
+                # the assistant applies spoken corrections itself, better than the rules: it gets the words as said
+                raw = tidy(text) if commands else text.strip()
+                out = dictation_ai.polish(raw, style=style, words=words)
+                return _style_rules(plain if out == raw else out, style)
+            return _style_rules(plain, style)
+
+        live = LiveTranscriber(self.aligner().transcribe_window, language=lang, keyterms=terms[:60], commands=commands and not command,
+                               fillers=fillers, refine=refine or command, rules=rules, finalize=finalize if (refine or command) else None)
+        live.context = context
+        return live
 
     def dictation_warm(self) -> dict:
         """Load the Whisper model and run it once, so the first dictation starts without a wait."""
         a = self.aligner()
         a.transcribe_window(np.zeros(8000, dtype=np.float32), language="en")
+        # the careful pass "when you stop" mode makes at the end (beam 5) takes its own first-time setup: do it now too
+        a.transcribe_window(np.random.default_rng(0).normal(0, 0.05, 16000).astype(np.float32), language="en", beam=5)
         return {"model": getattr(a, "model_name", "?"), "device": getattr(a, "device", "?")}
 
     # -------------------------------------------------------------------- tts
@@ -2274,6 +2317,17 @@ class FireVoice:
 
 DESIGN_TEXT = ("Hello there, and welcome; today I want to walk you through something I genuinely love, one small step at a time, "
                "so get comfortable, grab something warm to drink, and let's begin together.")
+
+
+def _style_rules(text: str, style: str) -> str:
+    """The parts of an app's style that need no writing model: a casual message drops the full stop of a single
+    sentence, a very casual one also starts in lower case."""
+    t = text.strip()
+    if style in ("casual", "very casual") and t.endswith(".") and not t.endswith("...") and t.count(".") == 1 and chr(10) not in t:
+        t = t[:-1]
+    if style == "very casual" and t[:1].isupper() and not (len(t) > 1 and t[1].isupper()) and not t.startswith("I "):
+        t = t[:1].lower() + t[1:]
+    return t
 
 
 def _voice_view(v: dict, default: Optional[str]) -> dict:

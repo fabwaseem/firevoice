@@ -682,3 +682,56 @@ export interface Stats {
   };
   storage: { folders: Record<string, number>; data_total: number; home: string };
 }
+
+/** Dictation's memory (the server keeps it): names and terms, replacements, snippets. */
+export interface DictationReplacement {
+  id: string;
+  /** what the speech model writes */
+  heard: string;
+  /** what you want instead */
+  write: string;
+}
+export interface DictationSnippet {
+  id: string;
+  /** what you say */
+  trigger: string;
+  /** what gets typed */
+  text: string;
+}
+export interface DictationVocabulary {
+  words: string[];
+  replacements: DictationReplacement[];
+  snippets: DictationSnippet[];
+}
+export interface DictationHistoryItem {
+  id: string;
+  /** epoch seconds */
+  at: number;
+  text: string;
+  /** what was heard, when the final touches changed it */
+  raw?: string;
+  words: number;
+  seconds: number;
+  language: string | null;
+  /** the program it went to */
+  app: string | null;
+  mode: string;
+}
+export interface DictationHistory {
+  items: DictationHistoryItem[];
+  total: number;
+  words: number;
+  seconds: number;
+}
+
+/** Dictation's writing assistant (a small writing model on this computer). */
+export interface DictationAssistant {
+  name: string;
+  installed: boolean;
+  loaded: boolean;
+  size_gb: number;
+  /** where it runs while loaded: the graphics card or the processor */
+  device: "gpu" | "cpu" | null;
+  /** it runs on this system (Windows and Linux) */
+  supported: boolean;
+}

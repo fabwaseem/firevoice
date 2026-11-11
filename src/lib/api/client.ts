@@ -1,5 +1,5 @@
 import { useSettings } from "@/stores/settings";
-import type { HistoryItem, HistoryKind, Stats } from "./types";
+import type { DictationAssistant, DictationHistory, DictationReplacement, DictationSnippet, DictationVocabulary, HistoryItem, HistoryKind, Stats } from "./types";
 import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, VoiceLibraryStatus, WatermarkResult, WordTime } from "./types";
 import { rememberEngineNames } from "@/lib/engineNames";
 import { saveBlob } from "@/lib/audio";
@@ -146,6 +146,21 @@ export const api = {
   loadEngine: (name: string, workers?: number) =>
     request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/load`, { method: "POST", body: json(workers ? { workers } : {}), timeoutMs: 20 * 60_000 }),
   // the speech model that checks every render (and types dictation): about 1.6 GB, fetched the first time it is used
+  // dictation: your words, replacements, snippets and the history (kept by the server)
+  dictationAssistant: () => request<DictationAssistant>("/api/v1/dictation/assistant"),
+  installAssistant: () => request<Job>("/api/v1/dictation/assistant/install", { method: "POST" }),
+  removeAssistant: () => request<DictationAssistant>("/api/v1/dictation/assistant", { method: "DELETE" }),
+  loadAssistant: () => request<DictationAssistant>("/api/v1/dictation/assistant/load", { method: "POST", timeoutMs: 5 * 60_000 }),
+  dictationVocabulary: () => request<DictationVocabulary>("/api/v1/dictation/vocabulary"),
+  setDictationWords: (words: string[]) => request<{ words: string[] }>("/api/v1/dictation/words", { method: "PUT", body: json({ words }) }),
+  addDictationWord: (word: string) => request<{ words: string[] }>("/api/v1/dictation/words", { method: "POST", body: json({ word }) }),
+  saveReplacement: (r: { id?: string; heard: string; write: string }) => request<DictationReplacement>("/api/v1/dictation/replacements", { method: "POST", body: json(r) }),
+  deleteReplacement: (id: string) => request<unknown>(`/api/v1/dictation/replacements/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  saveSnippet: (s: { id?: string; trigger: string; text: string }) => request<DictationSnippet>("/api/v1/dictation/snippets", { method: "POST", body: json(s) }),
+  deleteSnippet: (id: string) => request<unknown>(`/api/v1/dictation/snippets/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  dictationHistory: (q = "", limit = 50, offset = 0) => request<DictationHistory>("/api/v1/dictation/history", {}, { q, limit, offset }),
+  deleteDictation: (id: string) => request<unknown>(`/api/v1/dictation/history/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  clearDictationHistory: () => request<{ deleted: number }>("/api/v1/dictation/history", { method: "DELETE" }),
   warmSpeech: () => request<{ model: string; device: string }>("/api/v1/dictate/warm", { method: "POST", timeoutMs: 20 * 60_000 }),
   unloadEngine: (name: string) => request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/unload`, { method: "POST" }),
   installPlan: (name: string, sizes = true) => request<InstallPlan>(`/api/v1/engines/${encodeURIComponent(name)}/install`, {}, { sizes }),

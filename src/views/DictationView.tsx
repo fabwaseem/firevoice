@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Copy, Mic, Square, Trash2, Zap, Clock, Keyboard, Type } from "lucide-react";
+import { AlertTriangle, BookA, History as HistoryIcon, Keyboard, MessageSquareQuote, Mic, Settings2, Sparkles, Square, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { HotkeyRecorder } from "@/components/dictation/HotkeyRecorder";
-import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, Kbd, Segmented, Select, Switch, Tooltip } from "@/components/ui";
+import { Badge, Button, Card, CardBody, CardHeader, Kbd, Segmented, Select, Switch } from "@/components/ui";
+import { DictationVocabularyPanel } from "@/components/dictation/DictationVocabulary";
+import { DictationSnippetsPanel } from "@/components/dictation/DictationSnippets";
+import { DictationAssistantPanel } from "@/components/dictation/DictationAssistant";
+import { DictationHistoryPanel } from "@/components/dictation/DictationHistory";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { dictation, hotkeyLabels } from "@/lib/dictation";
-import { cn, langName, relTime } from "@/lib/utils";
-import { countWords, useDictation, useDictationLive, type DictationConfig } from "@/stores/dictation";
+import { cn, langName } from "@/lib/utils";
+import { useDictation, useDictationLive, type DictationConfig } from "@/stores/dictation";
 
 const LANGUAGES = ["en", "ur", "hi", "ar", "es", "fr", "de", "it", "pt", "nl", "tr", "ru", "pl", "zh", "ja", "ko"];
 
@@ -139,34 +143,6 @@ function Stage() {
   );
 }
 
-function Stats() {
-  const words = useDictation((s) => s.words);
-  const seconds = useDictation((s) => s.seconds);
-  const wpm = seconds > 5 ? Math.round(words / (seconds / 60)) : null;
-  // typing the same words at an average 40 words a minute
-  const saved = Math.max(0, words / 40 - seconds / 60);
-  const items = [
-    { icon: Type, label: "Words dictated", value: words.toLocaleString() },
-    { icon: Zap, label: "Speaking speed", value: wpm ? `${wpm} words a minute` : "–" },
-    { icon: Clock, label: "Time saved over typing", value: saved >= 1 ? `${Math.round(saved)} min` : "–" },
-  ];
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      {items.map(({ icon: Icon, label, value }) => (
-        <Card key={label} className="flex items-center gap-3 px-4 py-3.5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-fire-soft text-fire">
-            <Icon className="size-[17px]" />
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-[15px] font-semibold text-ink tabular">{value}</div>
-            <div className="truncate text-[12px] text-muted">{label}</div>
-          </div>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
 function SettingsCard() {
   const config = useDictation((s) => s.config);
   const set = useDictation((s) => s.set);
@@ -181,7 +157,14 @@ function SettingsCard() {
     <Card>
       <CardHeader title="How it works" description="Choose how dictation starts and how the words arrive." />
       <CardBody className={cn("space-y-5", off && "opacity-60")}>
-        <Row title="Start and stop" description={config.activation === "hold" ? "Speak while the keys are held down." : "One press starts, the next one stops."}>
+        <Row
+          title="Start and stop"
+          description={
+            config.activation === "hold"
+              ? "Speak while the keys are held down. Double-tap them to keep listening hands-free, and tap again to finish."
+              : "One press starts, the next one stops."
+          }
+        >
           <Segmented<DictationConfig["activation"]>
             ariaLabel="Start and stop"
             size="sm"
@@ -200,8 +183,8 @@ function SettingsCard() {
           title="Words appear"
           description={
             config.mode === "realtime"
-              ? "As you speak. Each word is typed once it is certain, and never changed afterwards."
-              : "When you stop. The whole text is checked once more and inserted in one go."
+              ? "Live, as you speak. Each word is typed once it is certain, and never changed afterwards."
+              : "Polished, when you stop. The whole text is checked once more, corrections like “no wait” are applied (and the writing assistant polishes it, when it is on), then it goes in at once."
           }
         >
           <Segmented<DictationConfig["mode"]>
@@ -210,8 +193,8 @@ function SettingsCard() {
             value={config.mode}
             onChange={(v) => set({ mode: v })}
             options={[
-              { value: "realtime", label: "As you speak", icon: <Zap className="size-3.5" /> },
-              { value: "onstop", label: "When you stop" },
+              { value: "onstop", label: "Polished", icon: <Wand2 className="size-3.5" /> },
+              { value: "realtime", label: "Live", icon: <Zap className="size-3.5" /> },
             ]}
           />
         </Row>
@@ -260,11 +243,23 @@ function SettingsCard() {
           <Switch
             checked={config.commands}
             onChange={(v) => set({ commands: v })}
-            label="Spoken line breaks"
-            description="Say “new line” or “new paragraph” to start one."
+            label="Spoken commands and punctuation"
+            description="“New line”, “new paragraph”, “comma”, “full stop”, “question mark”, “open quote”… and “scratch that” or “no wait” to correct yourself."
           />
           <Switch checked={config.fillers} onChange={(v) => set({ fillers: v })} label="Leave out um and uh" />
+          <Switch
+            checked={config.boostQuiet}
+            onChange={(v) => set({ boostQuiet: v })}
+            label="Whisper mode"
+            description="Brings quiet speech up to a normal level, for speaking softly in an office or at night."
+          />
           <Switch checked={config.sounds} onChange={(v) => set({ sounds: v })} label="Sound when listening starts and stops" />
+          <Switch
+            checked={config.history}
+            onChange={(v) => set({ history: v })}
+            label="Keep a history of my dictations"
+            description="Kept on this computer only, searchable on the History tab."
+          />
           <Switch
             checked={config.keepInTray}
             onChange={(v) => set({ keepInTray: v })}
@@ -277,96 +272,54 @@ function SettingsCard() {
   );
 }
 
-function History() {
-  const history = useDictation((s) => s.history);
-  const remove = useDictation((s) => s.remove);
-  const clear = useDictation((s) => s.clear);
-  const [confirm, setConfirm] = useState(false);
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Copied");
-    } catch {
-      toast.error("Could not copy to the clipboard");
-    }
-  };
-  return (
-    <Card>
-      <CardHeader
-        title="Recent dictations"
-        description="Kept on this computer only."
-        action={
-          history.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setConfirm(true)}>
-              Clear all
-            </Button>
-          )
-        }
-      />
-      <CardBody>
-        {history.length === 0 ? (
-          <EmptyState icon={<Mic />} title="Nothing dictated yet" description="What you dictate shows up here, ready to copy again." />
-        ) : (
-          <ul className="divide-y divide-line">
-            {history.map((h) => (
-              <li key={h.id} className="group flex items-start gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap text-ink">{h.text}</p>
-                  <p className="mt-1 text-[11.5px] text-faint">
-                    {relTime(h.at / 1000)} · {countWords(h.text)} words{h.language ? ` · ${langName(h.language)}` : ""}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-                  <Tooltip content="Copy">
-                    <button
-                      type="button"
-                      aria-label="Copy this dictation"
-                      onClick={() => copy(h.text)}
-                      className="flex size-8 items-center justify-center rounded-[9px] text-muted hover:bg-surface-3/70 hover:text-ink"
-                    >
-                      <Copy className="size-4" />
-                    </button>
-                  </Tooltip>
-                  <Tooltip content="Remove">
-                    <button
-                      type="button"
-                      aria-label="Remove this dictation"
-                      onClick={() => remove(h.id)}
-                      className="flex size-8 items-center justify-center rounded-[9px] text-muted hover:bg-bad-soft hover:text-bad"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </Tooltip>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardBody>
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title="Clear all recent dictations?"
-        description="The list is emptied. Text already typed into other programs stays where it is."
-        confirmLabel="Clear all"
-        onConfirm={() => {
-          clear();
-          setConfirm(false);
-        }}
-      />
-    </Card>
-  );
-}
+type Tab = "setup" | "dictionary" | "snippets" | "assistant" | "history";
+const TABS: { value: Tab; label: string; icon: typeof Mic }[] = [
+  { value: "setup", label: "Setup", icon: Settings2 },
+  { value: "dictionary", label: "Dictionary", icon: BookA },
+  { value: "snippets", label: "Snippets", icon: MessageSquareQuote },
+  { value: "assistant", label: "Writing assistant", icon: Sparkles },
+  { value: "history", label: "History", icon: HistoryIcon },
+];
 
 export function DictationView() {
+  const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem("dictation.tab") as Tab) || "setup");
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("dictation.tab", tab);
+    } catch {
+      /* private mode: the tab is simply not remembered */
+    }
+  }, [tab]);
   return (
-    <div className="mx-auto max-w-[820px] fade-up">
-      <PageHeader title="Dictation" subtitle="Speak in any program and FireVoice types what you say." />
+    <div className="mx-auto max-w-[860px] fade-up">
+      <PageHeader title="Dictation" subtitle="Speak in any program and FireVoice writes what you meant." />
       <div className="flex flex-col gap-4">
         <Stage />
-        <Stats />
-        <SettingsCard />
-        <History />
+        <nav role="tablist" aria-label="Dictation" className="flex gap-1 overflow-x-auto rounded-[14px] bg-surface-2 p-1">
+          {TABS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              onClick={() => setTab(value)}
+              className={cn(
+                "flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium whitespace-nowrap transition-colors",
+                tab === value ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink",
+              )}
+            >
+              <Icon className="size-4" />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div role="tabpanel" key={tab} className="fade-up">
+          {tab === "setup" && <SettingsCard />}
+          {tab === "dictionary" && <DictationVocabularyPanel />}
+          {tab === "snippets" && <DictationSnippetsPanel />}
+          {tab === "assistant" && <DictationAssistantPanel />}
+          {tab === "history" && <DictationHistoryPanel />}
+        </div>
       </div>
     </div>
   );

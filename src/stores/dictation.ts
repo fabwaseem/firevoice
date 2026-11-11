@@ -26,7 +26,28 @@ export interface DictationConfig {
   keepInTray: boolean;
   /** names and terms to spell right */
   keyterms: string[];
+  /** whisper mode: quiet speech is brought up to a normal level */
+  boostQuiet: boolean;
+  /** keep each dictation in the history */
+  history: boolean;
+  /** "when you stop" mode: the writing assistant cleans the text up before it goes in */
+  polish: boolean;
+  /** the writing style for each kind of app (messages, work chat, email, code, documents, other) */
+  styles: Record<AppKind, WritingStyle>;
+  /** command mode: select text, press this and say what to do with it ("" = off) */
+  commandHotkey: string;
 }
+
+export type AppKind = "messages" | "work chat" | "email" | "code" | "documents" | "other";
+export type WritingStyle = "formal" | "casual" | "very casual" | "code";
+export const DEFAULT_STYLES: Record<AppKind, WritingStyle> = {
+  messages: "casual",
+  "work chat": "casual",
+  email: "formal",
+  code: "code",
+  documents: "formal",
+  other: "formal",
+};
 
 export interface DictationEntry {
   id: string;
@@ -52,6 +73,11 @@ export const DEFAULT_DICTATION: DictationConfig = {
   mic: "",
   keepInTray: true,
   keyterms: [],
+  boostQuiet: false,
+  history: true,
+  polish: true,
+  styles: DEFAULT_STYLES,
+  commandHotkey: "Ctrl+Alt+Shift+Space",
 };
 
 const KEEP = 100;
@@ -92,7 +118,8 @@ export const useDictation = create<DictationStore>()(
       version: 1,
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<DictationStore>;
-        return { ...current, ...p, config: { ...DEFAULT_DICTATION, ...(p.config ?? {}) } };
+        const config = { ...DEFAULT_DICTATION, ...(p.config ?? {}) };
+        return { ...current, ...p, config: { ...config, styles: { ...DEFAULT_STYLES, ...(config.styles ?? {}) } } };
       },
     },
   ),
