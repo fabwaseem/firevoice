@@ -713,6 +713,10 @@ export interface DictationHistoryItem {
   words: number;
   seconds: number;
   language: string | null;
+  /** how sure the detector was of the language (automatic language) */
+  language_p?: number;
+  /** the language was the speaker's choice, not detected */
+  language_chosen?: boolean;
   /** the program it went to */
   app: string | null;
   mode: string;

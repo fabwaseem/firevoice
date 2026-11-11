@@ -20,7 +20,12 @@ from .dictation_text import PhraseRules, words_of
 MAX_WORDS = 500
 MAX_RULES = 500
 MAX_SNIPPET = 4000
-HISTORY_KEEP = 20000         # entries; the oldest go first past this
+HISTORY_KEEP = 20000
+PROFILE_P = 0.8              # a detected language teaches the profile only when the detector was at least this sure
+# ...and never one of a group of spoken siblings (Urdu and Hindi): which of them was written is a choice, not something
+# the detector heard, and a first pick must not become a habit
+from .dictation import SIBLINGS as _SIBLINGS  # noqa: E402
+_SIBLING_CODES = {c for g in _SIBLINGS for c in g}         # entries; the oldest go first past this
 
 
 def _id() -> str:
@@ -129,12 +134,17 @@ class DictationStore:
 
     # ------------------------------------------------------------------------------------------------ history
     def record(self, text: str, seconds: float, language: Optional[str] = None, app: Optional[str] = None,
-               raw: Optional[str] = None, mode: str = "dictation") -> Optional[dict]:
+               raw: Optional[str] = None, mode: str = "dictation", language_probability: Optional[float] = None,
+               language_chosen: bool = False) -> Optional[dict]:
         text = (text or "").strip()
         if not text:
             return None
         e = {"id": _id(), "at": time.time(), "text": text, "words": len(text.split()), "seconds": round(float(seconds or 0), 2),
              "language": language, "app": app, "mode": mode}
+        if language_probability is not None:
+            e["language_p"] = round(float(language_probability), 3)
+        if language_chosen:
+            e["language_chosen"] = True
         if raw and raw.strip() != text:
             e["raw"] = raw.strip()
         with self._lock:
@@ -182,6 +192,21 @@ class DictationStore:
         total_seconds = sum(float(r.get("seconds") or 0) for r in rows)
         limit = max(1, min(int(limit or 50), 500))
         return {"items": rows[offset: offset + limit], "total": len(rows), "words": total_words, "seconds": round(total_seconds, 1)}
+
+    def language_profile(self, last: int = 200) -> dict[str, float]:
+        """Which languages the speaker dictates in, from their recent history: {code: share}."""
+        with self._lock:
+            rows = self._all()[-last:]
+        counts: dict[str, int] = {}
+        for r in rows:
+            c = r.get("language")
+            # only what is certain teaches: a language the speaker chose, or one the detector was sure of (a wrong
+            # guess on a short clip must not become a habit)
+            sure = r.get("language_chosen") or ((r.get("language_p") or 0) >= PROFILE_P and c not in _SIBLING_CODES)
+            if c and sure and r.get("words", 0) >= 2:
+                counts[c] = counts.get(c, 0) + 1
+        n = sum(counts.values())
+        return {c: k / n for c, k in counts.items()} if n else {}
 
     def delete_history(self, hid: Optional[str] = None) -> int:
         """One entry by id, or every entry (hid=None). -> how many went."""

@@ -86,3 +86,15 @@ def test_without_a_gpu_other_languages_get_a_multilingual_model(svc, monkeypatch
     assert svc.dictation_aligner("de", None) is ml and made == ["small"]          # loaded once
     svc._aligner.model_name = "large-v3-turbo"                 # with a GPU the shared model knows every language
     assert svc.dictation_aligner("de", None) is svc._aligner
+
+
+def test_only_certain_languages_teach_the_profile(tmp_path):
+    st = DictationStore(tmp_path)
+    st.record("hola que tal amigo", 3, "es", language_probability=0.93)
+    st.record("hello there friend", 3, "en", language_chosen=True)
+    st.record("o que esta fazendo", 3, "pt", language_probability=0.41)       # a weak guess: not a habit
+    st.record("old entry without certainty", 3, "de")
+    st.record("mera naam waseem hai", 3, "hi", language_probability=0.95)     # Urdu or Hindi: the script was a pick, not heard
+    assert st.language_profile() == {"es": 0.5, "en": 0.5}
+    st.record("mera naam waseem hai", 3, "ur", language_chosen=True)          # chosen by the speaker: that teaches
+    assert st.language_profile()["ur"] > 0

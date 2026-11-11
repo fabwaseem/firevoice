@@ -30,6 +30,16 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   return invoke<T>(cmd, args);
 }
 
+/** The languages this computer is set up for (Windows' language list), as base codes: ["en", "ur"]. */
+export function systemLanguages(): string[] {
+  const out: string[] = [];
+  for (const l of typeof navigator !== "undefined" ? (navigator.languages ?? [navigator.language]) : []) {
+    const c = String(l).split("-")[0].toLowerCase();
+    if (c && !out.includes(c)) out.push(c);
+  }
+  return out;
+}
+
 export const dictation = {
   configure: (config: DictationConfig, server: string, token: string) =>
     call<DictationStatus>("dictation_configure", {
@@ -49,7 +59,8 @@ export const dictation = {
         history: config.history,
         command_hotkey: config.commandHotkey,
         // passed on to the server as they are
-        extra: { polish: config.polish, styles: config.styles, languages: config.languages },
+        // the computer's own language list: a hint for automatic language when no languages are listed
+        extra: { polish: config.polish, styles: config.styles, languages: config.languages, language_hints: systemLanguages() },
         server,
         token,
       },

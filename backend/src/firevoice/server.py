@@ -925,7 +925,8 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 app_title=first.get("app_title") or None, polish=bool(first.get("polish", False)),
                 styles=first.get("styles") if isinstance(first.get("styles"), dict) else None,
                 mode="command" if first.get("mode") == "command" else "dictation", selection=str(first.get("selection") or "")[:20000],
-                languages=first.get("languages") if isinstance(first.get("languages"), list) else None))
+                languages=first.get("languages") if isinstance(first.get("languages"), list) else None,
+                language_hints=first.get("language_hints") if isinstance(first.get("language_hints"), list) else None))
         except FireVoiceError as err:
             await ws.send_json({"type": "error", "code": err.code, "message": err.message})
             await ws.close()
@@ -977,7 +978,9 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                     try:
                         entry = await run_in_threadpool(lambda: svc.dictation_store.record(ev.get("text", ""), live.total, live.language,
                                                                                            app=first.get("app") or None,
-                                                                                           mode=first.get("mode") or "dictation"))
+                                                                                           mode=first.get("mode") or "dictation",
+                                                                                           language_probability=live.language_probability,
+                                                                                           language_chosen=live.fixed))
                     except Exception:  # noqa: BLE001  (history is a convenience: never fail the dictation over it)
                         import logging
                         logging.getLogger("firevoice").exception("dictation history could not be written")

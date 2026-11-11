@@ -30,6 +30,36 @@ MIN_NEW = 0.30          # seconds of new sound before another pass is worth it
 MAX_WINDOW = 26.0       # the model hears at most 30 s: beyond this the oldest words are released as they are
 KEEP_SETTLED = 6.0      # once this much settled sound sits at the front of the window, it is cut away...
 CONTEXT = 1.0           # ...except its last second, which the model keeps hearing as context
+# languages that sound (nearly) the same when spoken and differ mostly in how they are written: the detector cannot tell
+# them apart from a few seconds of speech, so they count as one and the speaker's own choice (or habit) picks the script
+SIBLINGS = (("ur", "hi"), ("ms", "id"), ("no", "nn"), ("bs", "hr", "sr"))
+PRIOR_FLOOR = 0.15      # automatic, no list: a language never dictated in before weighs this much against the history
+
+
+def merge_siblings(probs: list, allowed: Optional[list], prior: Optional[dict]) -> list:
+    """Put each group of spoken siblings together under the member the speaker writes: the one in their list, else the
+    one their history uses most, else the likeliest."""
+    out = dict(probs)
+    for group in SIBLINGS:
+        present = [c for c in group if c in out]
+        if len(present) < 2 and not (present and allowed and present[0] not in allowed):
+            continue
+        mass = sum(out.get(c, 0.0) for c in group)
+        mine = [c for c in group if allowed and c in allowed]
+        if mine:
+            keep = mine[0]
+        elif prior and any(prior.get(c) for c in group):
+            keep = max(group, key=lambda c: prior.get(c, 0.0))
+        else:
+            keep = max(present, key=lambda c: out.get(c, 0.0))
+        for c in group:
+            out.pop(c, None)
+        out[keep] = mass
+    return sorted(out.items(), key=lambda t: -t[1])
+
+
+UNSURE_P = 0.5          # a guess less sure than this, before the language is settled, gives way to the speaker's habits
+SURE_P = 0.9            # at the end, a language less sure than this is put to the test (both ways, the better kept)
 LOCK_P = 0.75           # automatic language: settled once this sure (among the speaker's languages)...
 LOCK_AFTER = 4.0        # ...or after this much sound, whichever comes first
 RECHECK_P = 0.6         # at the end, the whole dictation overrules the early guess when it is at least this sure
@@ -44,7 +74,8 @@ class LiveTranscriber:
     def __init__(self, transcribe: Transcribe, language: Optional[str] = None, keyterms: Optional[list] = None,
                  commands: bool = True, fillers: bool = True, refine: bool = False, rules: Optional[PhraseRules] = None,
                  finalize: Optional[Callable[[str], str]] = None, languages: Optional[list] = None,
-                 detect: Optional[Callable[[np.ndarray], list]] = None):
+                 detect: Optional[Callable[[np.ndarray], list]] = None, prior: Optional[dict] = None,
+                 scored: Optional[Callable[..., tuple]] = None):
         """language=None detects it from the first second and a half of speech, then keeps it. refine=True makes
         finish() transcribe a short dictation once more as a whole (more accurate; for clients that insert the text
         only at the end, since it may differ from what was released along the way). rules: the spoken phrases to act on
@@ -63,6 +94,8 @@ class LiveTranscriber:
         self.language = language or None
         self.fixed = self.language is not None           # chosen by the speaker: never changed
         self._detect = detect
+        self.prior = {str(k): float(v) for k, v in (prior or {}).items()}   # share of past dictations, per language
+        self._scored = scored
         self.language_probability: Optional[float] = None
         self.hotwords = ", ".join(str(k).strip() for k in (keyterms or []) if str(k).strip())[:800] or None
         self.commands, self.fillers, self.refine = commands, fillers, refine
@@ -128,13 +161,31 @@ class LiveTranscriber:
         last = heard[j - 1][0] if j and self._tail and _norm(heard[j - 1][0]) == self._tail[-1][0] else None
         return heard[j:], last
 
-    def _which_language(self, audio: np.ndarray) -> Optional[tuple[str, float]]:
-        """The likeliest of the speaker's languages for this sound, and how sure (renormalised among theirs)."""
+    def _ranked(self, audio: np.ndarray) -> list[tuple[str, float]]:
+        """The speaker's likeliest languages for this sound, most likely first, renormalised among the candidates."""
         if self._detect is None:
-            return None
-        probs = self._detect(audio)
+            return []
+        probs = merge_siblings(self._detect(audio), self.allowed, self.prior)
         if self.allowed:
             probs = [(c, p) for c, p in probs if c in self.allowed]
+        elif self.prior:
+            probs = [(c, p * (PRIOR_FLOOR + self.prior.get(c, 0.0))) for c, p in probs]
+        total = sum(p for _, p in probs)
+        return sorted(((c, p / total) for c, p in probs), key=lambda t: -t[1]) if total > 0 else []
+
+    def _which_language(self, audio: np.ndarray) -> Optional[tuple[str, float]]:
+        """The likeliest of the speaker's languages for this sound, and how sure (renormalised among theirs).
+
+        Spoken siblings (Urdu and Hindi above all) count as one language, written the way the speaker writes it.
+        With no list of languages, the speaker's history weighs in: a language they have dictated in before needs far
+        less evidence than one they never used, because a few seconds of speech are too little to tell 100 apart."""
+        if self._detect is None:
+            return None
+        probs = merge_siblings(self._detect(audio), self.allowed, self.prior)
+        if self.allowed:
+            probs = [(c, p) for c, p in probs if c in self.allowed]
+        elif self.prior:
+            probs = [(c, p * (PRIOR_FLOOR + self.prior.get(c, 0.0))) for c, p in probs]
         total = sum(p for _, p in probs)
         if not probs or total <= 0:
             return None
@@ -149,8 +200,12 @@ class LiveTranscriber:
             return self._lang_guess
         g = self._which_language(audio)
         if g is None:
-            return None
-        self._lang_guess, p = g
+            return self._lang_guess
+        guess, p = g
+        if p < UNSURE_P and self.prior and not self.allowed:
+            # a second of sound says little: lean on the languages the speaker uses until the sound says more
+            guess = max(self.prior, key=self.prior.get)
+        self._lang_guess = guess
         if (p >= LOCK_P and self.total >= 1.5) or self.total >= LOCK_AFTER:
             self.language, self.language_probability = g
         return self._lang_guess
@@ -216,6 +271,8 @@ class LiveTranscriber:
         agree = 0
         while agree < min(len(keys), len(self._guess)) and keys[agree] == self._guess[agree]:
             agree += 1
+        if self.language is None and self._detect is not None and not self.refine:
+            agree = 0           # live: nothing is typed until the language is settled (words in a wrong one cannot be taken back)
         if window > MAX_WINDOW and len(cand) - agree > 2:
             agree = len(cand) - 2                        # the window is full: let go of all but the newest words
         delta = ""
@@ -242,8 +299,10 @@ class LiveTranscriber:
                     g = self._which_language(self._whole)
                     if g is not None and (self.language is None or (g[0] != self.language and g[1] >= RECHECK_P)):
                         self.language, self.language_probability = g
-                words, lang = self._transcribe(self._whole, language=self.language, prompt=None, hotwords=self.hotwords, beam=5)
-                self.language = self.language or lang
+                words = self._settle_by_score()
+                if words is None:
+                    words, lang = self._transcribe(self._whole, language=self.language, prompt=None, hotwords=self.hotwords, beam=5)
+                    self.language = self.language or lang
                 text = format_words([w for w, _, _ in words if w.strip()], self.commands, self.fillers, final=True, rules=self.rules)
                 return self._finished(text, self._sent, refined=True)
         cand, last = self._pass(beam=3)
@@ -252,6 +311,26 @@ class LiveTranscriber:
         self._release([w for w, _, _ in cand], final=True)
         self._guess = []
         return self._finished(self._sent, before, refined=False)
+
+    def _settle_by_score(self) -> Optional[list]:
+        """A short dictation whose language is still in doubt between two of the speaker's: transcribe it in the other
+        one too and keep the version the speech model is more confident of (speech written in the wrong language,
+        or translated into it, scores clearly lower). -> the words to keep, or None when there is no doubt (then the
+        usual final pass is made)."""
+        if self.fixed or self._scored is None or self._whole is None:
+            return None
+        ranked = self._ranked(self._whole)
+        if len(ranked) < 2 or ranked[0][1] >= SURE_P or ranked[1][1] < 0.05:
+            return None
+        best = None
+        for code, _ in ranked[:2]:
+            w, _, score = self._scored(self._whole, language=code, prompt=None, hotwords=self.hotwords, beam=5)
+            if best is None or score > best[2]:
+                best = (w, code, score)
+        if best is None:
+            return None
+        self.language = best[1]
+        return best[0]
 
     def _finished(self, text: str, before: str, refined: bool) -> dict:
         """The last event: the whole text through `finalize` (when set). replace=True: "text" is the better version of

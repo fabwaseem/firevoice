@@ -473,7 +473,8 @@ class FireVoice:
     # -------------------------------------------------------------------- dictation
     def dictation(self, language: Optional[str] = None, keyterms: Optional[list] = None, commands: bool = True, fillers: bool = True,
                   refine: bool = False, app: Optional[str] = None, app_title: Optional[str] = None, polish: bool = False,
-                  styles: Optional[dict] = None, mode: str = "dictation", selection: str = "", languages: Optional[list] = None):
+                  styles: Optional[dict] = None, mode: str = "dictation", selection: str = "", languages: Optional[list] = None,
+                  language_hints: Optional[list] = None):
         """A live dictation (dictation.py) on the shared Whisper model.
 
         The speech model is told to expect your dictation words, what your replacements write, the caller's terms and
@@ -523,8 +524,12 @@ class FireVoice:
 
         live = LiveTranscriber(asr.transcribe_window, language=lang, keyterms=terms[:60], commands=commands and not command,
                                fillers=fillers, refine=refine or command, rules=rules, finalize=finalize if (refine or command) else None,
-                               languages=langs, detect=getattr(asr, "detect_language", None))
+                               languages=langs, detect=getattr(asr, "detect_language", None), scored=getattr(asr, "transcribe_scored", None),
+                               prior=None if langs else _language_prior(store.language_profile(), language_hints))
         live.context = context
+        import logging
+        logging.getLogger("firevoice").info("dictation: language=%s, yours=%s, leaning on=%s, model=%s", lang or "auto", langs,
+                                            {k: round(v, 2) for k, v in live.prior.items()} or None, getattr(asr, "model_name", "?"))
         return live
 
     def dictation_warm(self) -> dict:
@@ -532,7 +537,13 @@ class FireVoice:
         a = self.aligner()
         a.transcribe_window(np.zeros(8000, dtype=np.float32), language="en")
         # the careful pass "when you stop" mode makes at the end (beam 5) takes its own first-time setup: do it now too
-        a.transcribe_window(np.random.default_rng(0).normal(0, 0.05, 16000).astype(np.float32), language="en", beam=5)
+        noise = np.random.default_rng(0).normal(0, 0.05, 16000).astype(np.float32)
+        a.transcribe_window(noise, language="en", beam=5)
+        # automatic language: the detector and the scored pass have their own first-time setup as well
+        if hasattr(a, "detect_language"):
+            a.detect_language(noise)
+        if hasattr(a, "transcribe_scored"):
+            a.transcribe_scored(noise, language="en")
         return {"model": getattr(a, "model_name", "?"), "device": getattr(a, "device", "?")}
 
     # -------------------------------------------------------------------- tts
@@ -2333,6 +2344,20 @@ class FireVoice:
 
 DESIGN_TEXT = ("Hello there, and welcome; today I want to walk you through something I genuinely love, one small step at a time, "
                "so get comfortable, grab something warm to drink, and let's begin together.")
+
+
+def _language_prior(profile: dict, hints: Optional[list]) -> dict:
+    """What automatic language leans on when the speaker listed none: the languages they dictated in before (by
+    share), and the ones their computer is set up for (its language list), each counting as a fair share too."""
+    prior = dict(profile)
+    codes = []
+    for h in hints or []:
+        c = str(h).split("-")[0].lower()
+        if 1 < len(c) <= 3 and c not in codes:
+            codes.append(c)
+    for c in codes[:6]:
+        prior[c] = max(prior.get(c, 0.0), 0.3)
+    return prior
 
 
 def _style_rules(text: str, style: str) -> str:

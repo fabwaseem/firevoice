@@ -136,6 +136,27 @@ class FasterWhisperAligner:
             words = [(w.word.strip(), float(w.start), float(w.end)) for s in segs for w in (s.words or [])]
         return words, getattr(info, "language", language)
 
+    def transcribe_scored(self, audio: np.ndarray, language: Optional[str] = None, prompt: Optional[str] = None,
+                          hotwords: Optional[str] = None, beam: int = 5) -> tuple[list[tuple[str, float, float]], Optional[str], float]:
+        """transcribe_window, and how confident the model was of its own words (mean log-probability per token,
+        weighted by length): speech written in the wrong language (or translated into it) scores clearly lower."""
+        kw = {"initial_prompt": prompt} if prompt else {}
+        if hotwords:
+            kw["hotwords"] = hotwords
+        with self._sem:
+            try:
+                segs, info = self.m.transcribe(audio, word_timestamps=True, language=language, beam_size=beam, temperature=0.0,
+                                               condition_on_previous_text=False, vad_filter=True, **kw)
+            except TypeError:
+                kw.pop("hotwords", None)
+                segs, info = self.m.transcribe(audio, word_timestamps=True, language=language, beam_size=beam, temperature=0.0,
+                                               condition_on_previous_text=False, vad_filter=True, **kw)
+            segs = list(segs)
+        words = [(w.word.strip(), float(w.start), float(w.end)) for s in segs for w in (s.words or [])]
+        n = sum(max(1, len(s.tokens or [])) for s in segs)
+        score = sum(float(s.avg_logprob) * max(1, len(s.tokens or [])) for s in segs) / n if n else -9.0
+        return words, getattr(info, "language", language), score
+
     def detect_language(self, audio: np.ndarray) -> list[tuple[str, float]]:
         """How likely each language is for a stretch of 16 kHz speech: [(code, probability)], most likely first.
         Silence is cut out first, so a pause does not dilute the guess."""

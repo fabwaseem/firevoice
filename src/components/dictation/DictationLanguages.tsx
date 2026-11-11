@@ -1,5 +1,8 @@
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Select } from "@/components/ui";
+import { api } from "@/lib/api/client";
+import { systemLanguages } from "@/lib/dictation";
 import { SPEECH_LANGUAGES, speechLanguageName } from "@/lib/speechLanguages";
 import { useDictation } from "@/stores/dictation";
 
@@ -9,6 +12,14 @@ export function DictationLanguages() {
   const set = useDictation((s) => s.set);
   const mine = config.languages;
   const auto = config.language === "auto";
+  const recent = useQuery({ queryKey: ["dictation-history", "", 200], queryFn: () => api.dictationHistory("", 200), enabled: auto, staleTime: 30_000 });
+  // what to suggest: the languages FireVoice was sure of in your dictations, then the ones this computer is set up for
+  const known = new Set(SPEECH_LANGUAGES.map((l) => l.code));
+  const seen: string[] = [];
+  for (const h of recent.data?.items ?? []) {
+    if (h.language && (h.language_chosen || (h.language_p ?? 0) >= 0.8) && !seen.includes(h.language)) seen.push(h.language);
+  }
+  const suggestions = [...seen, ...systemLanguages()].filter((c, i, a) => known.has(c) && a.indexOf(c) === i && !mine.includes(c)).slice(0, 5);
 
   return (
     <div className="space-y-3">
@@ -69,6 +80,21 @@ export function DictationLanguages() {
             </div>
           ) : (
             <p className="mt-1.5 text-[12px] text-faint">None yet: every language the speech model knows is possible, which makes a wrong guess likelier.</p>
+          )}
+          {suggestions.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[12px] text-faint">Suggested:</span>
+              {suggestions.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => set({ languages: [...mine, c] })}
+                  className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-line-strong px-2.5 text-[12.5px] text-ink-2 hover:border-fire hover:text-fire"
+                >
+                  <Plus className="size-3" /> {speechLanguageName(c)}
+                </button>
+              ))}
+            </div>
           )}
           {mine.includes("ur") && mine.includes("hi") && (
             <p className="mt-2 text-[12px] text-warn">

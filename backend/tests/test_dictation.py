@@ -201,3 +201,21 @@ def test_a_chosen_language_is_never_changed_and_one_language_needs_no_detection(
     assert live.language == "en"
     one = LiveTranscriber(ScriptLang("hello there"), languages=["ur"], detect=det)
     assert one.language == "ur" and one.fixed
+
+
+def test_urdu_and_hindi_count_as_one_spoken_language_written_the_speakers_way():
+    from firevoice.dictation import merge_siblings
+    probs = [("hi", 0.45), ("ur", 0.35), ("en", 0.2)]
+    assert merge_siblings(probs, ["en", "ur"], None)[0] == ("ur", 0.8)        # the one in their list
+    assert merge_siblings(probs, None, {"ur": 0.7, "en": 0.3})[0] == ("ur", 0.8)   # the one their history uses
+    assert merge_siblings(probs, None, None)[0] == ("hi", 0.8)                # else the likeliest
+    assert merge_siblings([("hi", 0.9), ("en", 0.1)], ["en", "ur"], None)[0] == ("ur", 0.9)   # only Hindi heard
+
+
+def test_with_no_list_the_history_outweighs_a_weak_guess():
+    det = Langs(early=[("de", 0.40), ("ur", 0.30), ("en", 0.30)], late=[("de", 0.40), ("ur", 0.30), ("en", 0.30)])
+    live = LiveTranscriber(ScriptLang("mera naam waseem hai"), detect=det, prior={"ur": 0.6, "en": 0.4})
+    assert live._which_language(np.zeros(SR * 3, dtype=np.float32))[0] == "ur"
+    strong = Langs(early=[("de", 0.97), ("ur", 0.02), ("en", 0.01)], late=[("de", 0.97), ("ur", 0.02), ("en", 0.01)])
+    live2 = LiveTranscriber(ScriptLang("guten tag"), detect=strong, prior={"ur": 0.6, "en": 0.4})
+    assert live2._which_language(np.zeros(SR * 3, dtype=np.float32))[0] == "de"   # a new language, clearly heard, still wins
