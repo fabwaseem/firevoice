@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { inTauri } from "@/lib/backend";
 
 export type Theme = "system" | "light" | "dark";
 
@@ -85,4 +86,10 @@ export function applyTheme(theme: Theme) {
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const resolved = theme === "system" ? (prefersDark ? "dark" : "light") : theme;
   root.dataset.theme = resolved;
+  // the desktop window's title bar follows the app's theme, not only Windows' (null = follow the system)
+  if (inTauri()) {
+    void import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => getCurrentWindow().setTheme(theme === "system" ? null : theme))
+      .catch(() => undefined);
+  }
 }

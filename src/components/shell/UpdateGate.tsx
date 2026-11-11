@@ -4,7 +4,7 @@ import { AlertTriangle, ArrowDownToLine, Check, ChevronDown, ChevronUp, External
 import { updates, RELEASES_PAGE, type UpdateCheck, type UpdateStatus } from "@/lib/updates";
 import { openExternal } from "@/lib/external";
 import { fmtBytes, fmtEta, inTauri } from "@/lib/backend";
-import { Button, ProgressBar } from "@/components/ui";
+import { Button, Markdown, ProgressBar, Tooltip } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CornerHost, InCorner } from "./Corner";
 
@@ -153,27 +153,11 @@ function UpdateCard() {
 
   if (!check || check.status !== "available" || !check.version) return null;
   const state = installing ? "installing" : status?.version === check.version ? status.state || "idle" : "idle";
-  // "Later" hides an update that is not downloading; one that is downloading or ready stays as a pill
-  if (dismissed === check.version && (state === "idle" || state === "failed")) return null;
+  // "Later" or folding closes the card; the pill in the sidebar (UpdatePill) keeps the update in sight and reopens it
+  if ((folded || dismissed === check.version) && state !== "installing") return null;
 
   const frac = status?.total ? Math.min(1, status.downloaded / status.total) : 0;
   const eta = status?.total ? fmtEta(status.total - status.downloaded, status.bytes_per_sec) : "";
-
-  if (folded || (dismissed === check.version && state !== "installing")) {
-    return (
-      <InCorner order={0}>
-        <button
-          type="button"
-          onClick={() => set({ folded: false, dismissed: null })}
-          className="surface-raised flex items-center gap-2.5 rounded-full py-2 pr-4 pl-3 text-[12.5px] font-medium text-ink shadow-lg transition-transform hover:-translate-y-0.5"
-          aria-label="Show the update"
-        >
-          {state === "ready" ? <Check className="size-4 text-ok" strokeWidth={3} /> : state === "downloading" ? <Loader2 className="size-4 animate-spin text-fire" /> : <Sparkles className="size-4 text-fire" />}
-          {state === "ready" ? `Update ready · restart to install` : state === "downloading" ? `Updating · ${Math.round(frac * 100)}%` : `FireVoice ${check.version} is available`}
-        </button>
-      </InCorner>
-    );
-  }
 
   return (
     <InCorner order={0}>
@@ -218,8 +202,8 @@ function UpdateCard() {
               {notesOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </button>
             {notesOpen && (
-              <div className="mt-2 max-h-[180px] overflow-y-auto rounded-lg bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed whitespace-pre-line text-ink-2">
-                {check.notes}
+              <div className="mt-2 max-h-[200px] overflow-y-auto rounded-lg bg-surface-2 px-3 py-2.5">
+                <Markdown text={check.notes} />
               </div>
             )}
           </div>
@@ -292,5 +276,45 @@ function UpdateCard() {
         </div>
       </section>
     </InCorner>
+  );
+}
+
+/** The update, always in sight once its card is closed: a pill in the sidebar that opens the card again. */
+export function UpdatePill({ collapsed }: { collapsed: boolean }) {
+  const { check, status, installing, folded, dismissed } = useUpdates();
+  const set = useUpdates((s) => s.set);
+  if (!check || check.status !== "available" || !check.version) return null;
+  const state = installing ? "installing" : status?.version === check.version ? status.state || "idle" : "idle";
+  // while the card is open it says everything; while installing there is nothing left to choose
+  if ((!folded && dismissed !== check.version) || state === "installing") return null;
+
+  const frac = status?.total ? Math.min(1, status.downloaded / status.total) : 0;
+  const label =
+    state === "ready" ? "Restart to update" : state === "downloading" ? `Updating · ${Math.round(frac * 100)}%` : state === "failed" ? "Update failed · retry" : "Update available";
+  const Icon = state === "ready" ? Check : state === "downloading" ? Loader2 : state === "failed" ? AlertTriangle : Sparkles;
+  const tone = state === "ready" ? "bg-ok-soft text-ok hover:bg-ok-soft/70" : state === "failed" ? "bg-bad-soft text-bad hover:bg-bad-soft/70" : "bg-fire-soft text-fire hover:bg-fire-soft/70";
+  const open = () => set({ dismissed: null, folded: false });
+
+  if (collapsed) {
+    return (
+      <Tooltip content={`${label}: FireVoice ${check.version}`} side="right">
+        <button type="button" onClick={open} aria-label={`${label}: FireVoice ${check.version}`} className={cn("relative mx-auto flex size-10 items-center justify-center rounded-[10px] transition-colors", tone)}>
+          <Icon className={cn("size-[18px]", state === "downloading" && "animate-spin")} strokeWidth={state === "ready" ? 3 : 2} />
+          {state === "idle" && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-fire ring-2 ring-bg-elev" />}
+        </button>
+      </Tooltip>
+    );
+  }
+  return (
+    <button type="button" onClick={open} aria-label={`${label}: FireVoice ${check.version}`} className={cn("relative flex w-full items-center gap-2.5 overflow-hidden rounded-[10px] px-3 py-2 text-left text-[13px] font-medium transition-colors", tone)}>
+      <Icon className={cn("size-4 shrink-0", state === "downloading" && "animate-spin")} strokeWidth={state === "ready" ? 3 : 2} />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="shrink-0 text-[11px] font-normal tabular opacity-70">{check.version}</span>
+      {state === "downloading" && (
+        <span className="absolute inset-x-0 bottom-0 h-0.5 bg-fire/20" aria-hidden>
+          <span className="block h-full bg-fire transition-[width] duration-300" style={{ width: `${frac * 100}%` }} />
+        </span>
+      )}
+    </button>
   );
 }

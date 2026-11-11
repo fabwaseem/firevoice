@@ -8,3 +8,4 @@ export * from "./tooltip";
 export * from "./dialog";
 export * from "./misc";
 export * from "./audio-player";
+export * from "./markdown";

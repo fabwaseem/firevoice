@@ -30,6 +30,7 @@ import { useSettings, type Theme } from "@/stores/settings";
 import { useHealth, useSystem } from "@/lib/api/hooks";
 import { Tooltip } from "@/components/ui";
 import { ServerStatus } from "./ServerStatus";
+import { UpdatePill } from "./UpdateGate";
 import { Logo } from "./Logo";
 
 type Item = { to: string; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; end?: boolean; badge?: "jobs" };
@@ -249,6 +250,7 @@ export function Sidebar() {
 
       {/* settings, theme, connection */}
       <div className={cn("shrink-0 border-t border-line pt-2.5 pb-3", collapsed ? "px-2 space-y-1.5" : "px-2.5 space-y-2.5")}>
+        <UpdatePill collapsed={collapsed} />
         <NavItem item={{ to: "/settings", label: "Settings", icon: Settings }} collapsed={collapsed} />
         <ThemeSwitch collapsed={collapsed} />
         <ServerStatus compact={collapsed} />
