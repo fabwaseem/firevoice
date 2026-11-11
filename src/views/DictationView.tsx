@@ -129,7 +129,7 @@ function Stage() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={4}
-              placeholder="Click here, start dictating, and your words appear as you speak. Say “new line” for a line break."
+              placeholder={config.mode === "onstop" ? "Click here, start dictating, and stop: your words appear here, polished. Say “new line” for a line break." : "Click here, start dictating, and your words appear as you speak. Say “new line” for a line break."}
               className={cn(
                 "w-full resize-y rounded-[12px] border bg-surface-2 px-3.5 py-3 text-[14px] leading-relaxed text-ink outline-none transition-[border-color,box-shadow]",
                 "placeholder:text-faint focus:border-fire focus:shadow-[0_0_0_3px_var(--fire-soft)]",

@@ -121,6 +121,7 @@ function InstallCard() {
     mutationFn: api.installAssistant,
     onSuccess: (j) => {
       setJobId(j.id);
+      useDictation.getState().set({ assistantDeclined: false });
       void qc.invalidateQueries({ queryKey: ["jobs"] });
     },
     onError: (e) => toast.error(errMessage(e)),
@@ -130,6 +131,7 @@ function InstallCard() {
     mutationFn: api.removeAssistant,
     onSuccess: (s) => {
       setRemoving(false);
+      useDictation.getState().set({ assistantDeclined: true });      // removed on purpose: not downloaded again by itself
       qc.setQueryData(ASSISTANT_KEY, s);
     },
     onError: (e) => toast.error(errMessage(e)),
@@ -160,7 +162,7 @@ function InstallCard() {
                 A small writing model that runs on this computer, like the voice engines. It turns what you say into what you meant to write, and edits
                 text by voice. Nothing leaves your computer. It adds about a tenth of a second on a graphics card, a second or two on a processor.
               </p>
-              {s && !s.supported && <p className="mt-1 text-[12.5px] text-warn">It runs on Windows and Linux.</p>}
+              {s && !s.installed && !s.suits && s.suits_reason && <p className="mt-1 text-[12.5px] text-warn">{s.suits_reason}</p>}
             </div>
           </div>
           {!s?.installed && !running && (

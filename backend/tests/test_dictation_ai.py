@@ -61,3 +61,16 @@ def test_not_installed_is_reported_and_command_mode_refuses(svc, tmp_path, monke
     with pytest.raises(FireVoiceError) as e:
         svc.dictation(mode="command")
     assert "writing assistant" in e.value.message
+
+
+def test_suits_follows_memory_and_disk(monkeypatch, tmp_path):
+    from firevoice import hardware
+    monkeypatch.setenv("FIREVOICE_ENGINES_DIR", str(tmp_path / "engines"))
+    monkeypatch.setattr(hardware, "detect", lambda gpu=None: {"ram_gb": 16.0, "disk_free_gb": 200.0})
+    assert ai.suits() == (True, "")
+    monkeypatch.setattr(hardware, "detect", lambda gpu=None: {"ram_gb": 4.0, "disk_free_gb": 200.0})
+    ok, why = ai.suits()
+    assert not ok and "memory" in why
+    monkeypatch.setattr(hardware, "detect", lambda gpu=None: {"ram_gb": 16.0, "disk_free_gb": 2.0})
+    ok, why = ai.suits()
+    assert not ok and "disk" in why

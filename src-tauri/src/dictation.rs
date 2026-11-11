@@ -72,7 +72,7 @@ impl Default for Config {
             enabled: false,
             hotkey: "Ctrl+Alt+Space".into(),
             activation: "toggle".into(),
-            mode: "realtime".into(),
+            mode: "onstop".into(),
             language: "auto".into(),
             insert: "type".into(),
             commands: true,

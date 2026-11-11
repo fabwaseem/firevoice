@@ -120,9 +120,31 @@ def supported() -> bool:
     return sys.platform == "win32" or sys.platform.startswith("linux")
 
 
+MIN_RAM_GB = 8.0      # the model takes some 3 GB, on the graphics card or in memory, next to everything else
+
+
+def suits() -> tuple[bool, str]:
+    """Whether this computer runs the assistant well enough to set it up without being asked: -> (yes, why not)."""
+    if not supported():
+        return False, "It runs on Windows and Linux."
+    try:
+        from . import hardware
+        hw = hardware.detect()
+    except Exception:  # noqa: BLE001
+        return True, ""
+    ram, disk = hw.get("ram_gb"), hw.get("disk_free_gb")
+    if ram is not None and ram < MIN_RAM_GB:
+        return False, f"It needs about {MIN_RAM_GB:.0f} GB of memory and this computer has {ram:.0f} GB."
+    need = (MODEL["bytes"] + _runtime()["bytes"]) / 1e9 + 2.0
+    if disk is not None and not installed() and disk < need:
+        return False, f"It needs about {need:.0f} GB of free disk space and {disk:.0f} GB is free."
+    return True, ""
+
+
 def status() -> dict:
+    ok, why = suits()
     return {"name": NAME, "installed": installed(), "loaded": _alive(), "size_gb": round((MODEL["bytes"] + _runtime()["bytes"]) / 1e9, 1),
-            "device": _SERVER.get("device"), "supported": supported()}
+            "device": _SERVER.get("device"), "supported": supported(), "suits": ok, "suits_reason": why}
 
 
 def install(progress: Callable[[float, float, str], None], cancel: threading.Event) -> dict:

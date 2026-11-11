@@ -734,4 +734,8 @@ export interface DictationAssistant {
   device: "gpu" | "cpu" | null;
   /** it runs on this system (Windows and Linux) */
   supported: boolean;
+  /** this computer runs it well (memory, disk): it is set up in the background without being asked */
+  suits: boolean;
+  /** why not, when it does not */
+  suits_reason: string;
 }

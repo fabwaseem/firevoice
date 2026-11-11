@@ -36,6 +36,8 @@ export interface DictationConfig {
   styles: Record<AppKind, WritingStyle>;
   /** command mode: select text, press this and say what to do with it ("" = off) */
   commandHotkey: string;
+  /** the writing assistant was removed on purpose: never download it again by itself */
+  assistantDeclined: boolean;
 }
 
 export type AppKind = "messages" | "work chat" | "email" | "code" | "documents" | "other";
@@ -64,7 +66,7 @@ export const DEFAULT_DICTATION: DictationConfig = {
   enabled: false,
   hotkey: "Ctrl+Alt+Space",
   activation: "toggle",
-  mode: "realtime",
+  mode: "onstop",
   language: "auto",
   insert: "type",
   commands: true,
@@ -78,6 +80,7 @@ export const DEFAULT_DICTATION: DictationConfig = {
   polish: true,
   styles: DEFAULT_STYLES,
   commandHotkey: "Ctrl+Alt+Shift+Space",
+  assistantDeclined: false,
 };
 
 const KEEP = 100;
@@ -115,7 +118,13 @@ export const useDictation = create<DictationStore>()(
     }),
     {
       name: "firevoice.dictation",
-      version: 1,
+      version: 2,
+      // 1 -> 2: Polished ("when you stop") became the default mode; settings from before take it too
+      migrate: (persisted, version) => {
+        const p = (persisted ?? {}) as Partial<DictationStore>;
+        if (version < 2 && p.config) p.config = { ...p.config, mode: "onstop" };
+        return p as DictationStore;
+      },
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<DictationStore>;
         const config = { ...DEFAULT_DICTATION, ...(p.config ?? {}) };

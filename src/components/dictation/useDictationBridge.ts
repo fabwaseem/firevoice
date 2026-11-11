@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
+import { useAutoAssistant } from "./useAutoAssistant";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { dictation, onDictation, type DictationResultEvent, type DictationStateEvent, type DictationTextEvent } from "@/lib/dictation";
@@ -18,6 +19,7 @@ export function useDictationBridge() {
   const token = useSettings((s) => s.token);
   const online = useHealth().isSuccess;
   const qc = useQueryClient();
+  useAutoAssistant();
 
   // settings -> shell (also registers the hotkey)
   useEffect(() => {
