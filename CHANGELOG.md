@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.1 (2026-11-11)
+
+FireVoice now runs on more computers, and on Linux.
+
+- **Linux.** FireVoice is available for Linux (64-bit, Ubuntu 22.04 or newer and similar): an AppImage that updates itself, a .deb and an .rpm.
+- **No NVIDIA card? It still works.** Computers with an AMD or Intel graphics card, or none, get a much smaller setup (about 200 MB instead of several GB) and run FireVoice on the processor.
+- **Every engine says whether it runs on your computer.** The Engines page marks each one as ready, slower than real time here, or "Can't run here" with the reason in plain words (for example, not enough graphics memory, or an NVIDIA driver that isn't working). FireVoice never downloads an engine your computer can't run.
+- **Setup fix.** The voice libraries step no longer fails on computers without developer tools installed.
+
 ## 1.8.0 (2026-11-11)
 
 A first run that just works: one setup, then your first render is a click away.
