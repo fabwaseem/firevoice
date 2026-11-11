@@ -86,6 +86,7 @@ class EngineInfo:
     notes: str = ""
     params: list = field(default_factory=list)
     requires: Optional[str] = None  # python package that must import (engines that run in the main venv)
+    hub: Optional[tuple] = None     # (hub repo, [file patterns]) an engine in the main venv loads from the Hugging Face cache
     task: str = "tts"               # "tts" (text to speech) or "vc" (voice changer: speech to speech)
 
     def param(self, name: str) -> Optional[Param]:
@@ -113,6 +114,11 @@ class EngineInfo:
             venv_ok = py.exists()
         w = _weights_path(self.weights) if self.weights else None
         weights_ok = w is None or (w.exists() and any(w.glob("*")) and not any(".cache" not in f.parts for f in w.rglob("*.incomplete")))
+        if self.hub is not None and venv_ok:
+            from .. import installer
+            hub_present = installer.hub_ok(*self.hub)
+            weights_ok = weights_ok and hub_present
+            w = f"{self.hub[0]} (Hugging Face cache)"
         problems = []
         if not venv_ok:
             problems.append(f"python package {self.requires!r} is not installed" if self.venv is None else f"missing venv {ENVS / self.venv}")
@@ -141,10 +147,12 @@ T_TOPP = Param("top_p", "float", 0.95, 0.1, 1.0, 0.01, label="Top-p")
 CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
     EngineInfo("null", "Null (test)", clone=True, needs_reference=False, design=True, instruct=True, tags=True, languages=["*"], notes="silence, for tests"),
     EngineInfo("chatterbox-turbo", "Chatterbox Turbo 350M", tags=True, languages=["en"], speed_rtf=0.22, requires="chatterbox",
+               hub=("ResembleAI/chatterbox-turbo", ["*.safetensors", "*.json", "*.txt", "*.pt", "*.model"]),
                notes="fastest cloner; [laugh] [sigh] tags; PerTh watermark",
                params=[T_TEMP, T_TOPP, Param("top_k", "int", 1000, 1, 4000, 1, label="Top-k"),
                        Param("repetition_penalty", "float", 1.2, 1.0, 2.0, 0.05, label="Repetition penalty")]),
     EngineInfo("chatterbox", "Chatterbox 500M", needs_reference=False, languages=["en"], requires="chatterbox",
+               hub=("ResembleAI/chatterbox", ["ve.safetensors", "t3_cfg.safetensors", "s3gen.safetensors", "tokenizer.json", "conds.pt"]),
                notes="built-in voice when no reference; exaggeration knob",
                params=[T_TEMP, Param("exaggeration", "float", 0.5, 0.25, 2.0, 0.05, label="Exaggeration", help="emotional intensity"),
                        Param("cfg", "float", 0.5, 0.0, 1.0, 0.05, label="CFG weight", help="lower = slower, more deliberate")]),
@@ -209,6 +217,7 @@ CATALOG: dict[str, EngineInfo] = {e.name: e for e in [
                params=[Param("duration", "float", 8.0, 2.0, 180.0, 0.5, label="Length (s)",
                                     help="past 30 s the music is continued in 20 s passes"), Param("guidance", "float", 3.0, 1.0, 6.0, 0.5, label="Guidance")]),
     EngineInfo("chatterbox-vc", "Chatterbox voice changer", languages=["*"], requires="chatterbox", task="vc",
+               hub=("ResembleAI/chatterbox", ["s3gen.safetensors", "conds.pt"]),
                notes="speech to speech: keeps the words, timing and delivery of a recording, swaps the voice"),
     EngineInfo("maya1", "Maya1 3B", clone=False, needs_reference=False, design=True, tags=True, languages=["en"], venv="maya1", weights="maya1", speed_rtf=2.03,
                notes="voice from a description; 20 emotion tags",

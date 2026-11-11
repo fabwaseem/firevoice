@@ -15,6 +15,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import sys
 import time
 import urllib.parse
@@ -148,6 +149,17 @@ def main() -> None:
             base = f[: -len(".part")] if f.endswith(".part") else f[: -len(".ok")] if f.endswith(".ok") else f
             if base.endswith(".whl") and base not in keep:
                 os.remove(os.path.join(dest, f))
+        # room first: what is left to download, what uv unpacks from the wheels into its cache (about twice their size)
+        # and the libraries that follow; better told now than as a failed write half way through
+        left = sum(t for _n, _u, f, _s, t in wanted if not os.path.exists(os.path.join(dest, f + ".ok")))
+        have_part = sum(os.path.getsize(os.path.join(dest, f + ".part")) for _n, _u, f, _s, _t in wanted if os.path.exists(os.path.join(dest, f + ".part")))
+        need = int(max(0, left - have_part) + left * 2.2 + 1.5e9)
+        free = shutil.disk_usage(dest).free
+        if left and free < need:
+            drive = os.path.splitdrive(os.path.abspath(dest))[0] or "the disk"
+            say(event="error", code="disk", need_gb=round(need / 1e9, 1), free_gb=round(free / 1e9, 1), drive=drive)
+            print(f"not enough free disk space on {drive}: {need / 1e9:.1f} GB needed, {free / 1e9:.1f} GB free", file=sys.stderr, flush=True)
+            raise SystemExit(3)
         say(event="plan", items=[{"name": n, "file": f, "total": t} for n, _, f, _, t in wanted])
         for name, url, fname, sha, total in wanted:
             fetch(dest, name, url, fname, sha, total, touch)

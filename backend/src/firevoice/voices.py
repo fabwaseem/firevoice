@@ -207,7 +207,21 @@ class VoiceLibrary:
             if self.exists(vid):
                 return vid
         voices = [v for v in self.list() if v.get("has_ref")]
-        return voices[0]["voice_id"] if len(voices) == 1 else None
+        if len(voices) == 1:
+            return voices[0]["voice_id"]
+        if voices:
+            # several voices and none marked: the library's own pick when it is here, else the best-rated featured voice
+            try:
+                from .voicepack import info
+                pick = info().get("default")
+            except Exception:
+                pick = None
+            if pick and any(v["voice_id"] == pick for v in voices):
+                return pick
+            featured = sorted((v for v in voices if v.get("featured")), key=lambda v: (v.get("quality") or {}).get("rank", 999))
+            if featured:
+                return featured[0]["voice_id"]
+        return None
 
     def default_ref(self) -> Optional[str]:
         d = self.default_id()

@@ -58,10 +58,13 @@ class Manifest:
     # file patterns the weights download leaves out: repos that ship every weight twice (.bin and .safetensors)
     # would otherwise download it all twice
     skip: list = field(default_factory=list)
+    # engines that run inside the backend's own environment have no venv of their own, only weights to fetch ahead of the
+    # first render: [(hub repo, [file patterns])], the same files the engine's own loader asks for
+    prefetch: list = field(default_factory=list)
 
     @property
     def auto(self) -> bool:
-        return self.manual is None and self.venv is not None
+        return self.manual is None and (self.venv is not None or bool(self.prefetch))
 
 
 _T211 = "2.11.0"
@@ -103,10 +106,13 @@ MANIFESTS: dict[str, Manifest] = {m.engine: m for m in [
                      "[s.load_model(model_filename=m) for m in " + repr(list(SEPARATOR_MODELS.values())) + "]; print('ready')"),
              notes="voice/music separation and neural denoise (UVR RoFormer models via audio-separator, MIT; model licences vary); "
                    "about 1.5 GB of models"),
-    Manifest("chatterbox-turbo", None, manual="runs inside the backend's own environment: install the backend with the "
-             "`gpu` extra (pip install \"firevoice[gpu]\"); the desktop app's bundled backend includes it"),
-    Manifest("chatterbox", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),
-    Manifest("chatterbox-vc", None, manual="runs inside the backend's own environment: install the backend with the `gpu` extra"),
+    Manifest("chatterbox-turbo", None, check="chatterbox", prefetch=[("ResembleAI/chatterbox-turbo", ["*.safetensors", "*.json", "*.txt", "*.pt", "*.model"])],
+             notes="runs inside the backend's own environment (the `gpu` extra, which the desktop app installs); this fetches its weights"),
+    Manifest("chatterbox", None, check="chatterbox",
+             prefetch=[("ResembleAI/chatterbox", ["ve.safetensors", "t3_cfg.safetensors", "s3gen.safetensors", "tokenizer.json", "conds.pt"])],
+             notes="runs inside the backend's own environment (the `gpu` extra); this fetches its weights"),
+    Manifest("chatterbox-vc", None, check="chatterbox", prefetch=[("ResembleAI/chatterbox", ["s3gen.safetensors", "conds.pt"])],
+             notes="runs inside the backend's own environment (the `gpu` extra); this fetches its weights"),
     Manifest("indextts2", "indextts", "2.8.0", python="3.11", git=_INDEX_GIT, editable=True, repo_code=True, packages=["hf_xet"],
              warmup="from indextts.infer_v2 import IndexTTS2; IndexTTS2(cfg_path='{weights}/config.yaml', model_dir='{weights}', "
                     "use_fp16=True, use_cuda_kernel=False, use_deepspeed=False); print('ready')",
@@ -139,7 +145,9 @@ def _name(engine: str) -> str:
 
 def _forget_status() -> None:
     """Engine status is cached for a few seconds; an install or removal shows at once."""
+    import importlib
     from .core import catalog
+    importlib.invalidate_caches()      # packages installed while the server runs (the app's setup does that) are found at once
     catalog._STATUS.clear()
 
 
@@ -172,6 +180,9 @@ def uv_env() -> dict:
     build already used by another venv is neither downloaded nor stored again."""
     env = dict(os.environ)
     env.setdefault("UV_LINK_MODE", "hardlink")
+    # Hugging Face's xet downloader keeps whole files in memory and writes them at the end: no real progress to show, and
+    # an interrupted download starts over. The plain downloader grows the file as it goes and resumes where it stopped.
+    env.setdefault("HF_HUB_DISABLE_XET", "1")
     env["PYTHONUTF8"] = "1"
     env.pop("VIRTUAL_ENV", None)
     return env
@@ -236,12 +247,13 @@ def weights_ok(folder: str) -> bool:
     return w.exists() and any(w.glob("*")) and not any(".cache" not in f.parts for f in w.rglob("*.incomplete"))
 
 
-def _repo_size(repo: str, revision: Optional[str] = None, skip: list = ()) -> Optional[int]:
+def _repo_size(repo: str, revision: Optional[str] = None, skip: list = (), allow: list = ()) -> Optional[int]:
     try:
         from fnmatch import fnmatch
         from huggingface_hub import HfApi
         info = HfApi().model_info(repo, revision=revision, files_metadata=True)
-        return sum((s.size or 0) for s in info.siblings or [] if not any(fnmatch(s.rfilename, p) for p in skip))
+        return sum((s.size or 0) for s in info.siblings or []
+                   if not any(fnmatch(s.rfilename, p) for p in skip) and (not allow or any(fnmatch(s.rfilename, p) for p in allow)))
     except Exception:
         return None
 
@@ -250,6 +262,16 @@ def plan(engine: str, sizes: bool = False) -> dict:
     """What an install would do, what is already there, and roughly how much it downloads."""
     m = manifest(engine)
     steps = []
+    if m.venv is None and m.check:
+        import importlib.util
+        steps.append({"step": "package", "what": f"python package {m.check} (installed with the backend's `gpu` extra)",
+                      "done": importlib.util.find_spec(m.check) is not None})
+    for repo, patterns in m.prefetch:
+        st = {"step": "weights", "what": f"{repo} ({', '.join(patterns)})", "repo": repo, "done": hub_ok(repo, patterns)}
+        if sizes and not st["done"]:
+            b = _repo_size(repo, None, (), patterns)
+            st["gb"] = round(b / 1e9, 2) if b else None
+        steps.append(st)
     if m.venv:
         steps.append({"step": "venv", "what": f"Python {m.python} venv at {paths.engines_dir() / m.venv}", "done": venv_ok(m)})
         if m.git:
@@ -266,7 +288,7 @@ def plan(engine: str, sizes: bool = False) -> dict:
             b = _repo_size(repo, rev, m.skip)
             st["gb"] = round(b / 1e9, 2) if b else None
         steps.append(st)
-    if m.check:
+    if m.check and m.venv is not None:
         steps.append({"step": "check", "what": f"import {m.check}", "done": venv_ok(m)})
     todo_gb = sum(s.get("gb") or 0 for s in steps if s["step"] == "weights" and not s["done"])
     if m.venv and not venv_ok(m):
@@ -324,6 +346,74 @@ def _wait_for_shared_download(progress: Callable[[str], None], cancel: threading
             return
 
 
+MAIN_TORCH = "2.11.0"        # the torch of the app's own runtime (scripts/backend-recipe.mjs): engines on it share its files
+
+
+def hub_ok(repo: str, patterns: list) -> bool:
+    """Whether every file an engine's loader asks the Hugging Face hub for is already in the local cache (no network)."""
+    try:
+        from huggingface_hub import snapshot_download
+        snapshot_download(repo, allow_patterns=list(patterns), local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
+def _drive(p: Path) -> str:
+    return Path(p).anchor or str(p)
+
+
+def disk_message(need_gb: Optional[float], where: Path, free_gb: Optional[float] = None) -> str:
+    """The plain-language "disk is full" message; `need_gb` None when only the failure is known, not the amount."""
+    from .hardware import free_gb as _free
+    free = free_gb if free_gb is not None else _free(where)
+    have = f"{free:.1f} GB is free on {_drive(where)}" if free is not None else f"{_drive(where)} is full"
+    if need_gb:
+        need = f"This needs about {need_gb:.1f} GB and {have}. "
+    else:
+        need = f"Drive {_drive(where)} has only {free:.1f} GB free. " if free is not None else f"Drive {_drive(where)} is full. "
+    return ("Not enough free disk space. " + need +
+            "Free some space and try again, or move the engines folder to a bigger drive (Settings, Engines and storage).")
+
+
+def _check_disk(need_gb: float, where: Optional[Path] = None) -> None:
+    from .hardware import free_gb as _free
+    where = where or paths.engines_dir()
+    free = _free(where)
+    if free is not None and free < need_gb:
+        raise InstallError(disk_message(need_gb, where, free))
+
+
+def _need_gb(m: "Manifest", weights_gb: float, build: bool) -> float:
+    """What an install adds: its own environment (small when it shares the runtime's torch), its weights, and slack."""
+    own = 0.0
+    if build:
+        own = m.venv_gb if (m.torch and m.torch != MAIN_TORCH) else min(m.venv_gb, 2.0)
+    return round(own + weights_gb + 1.0, 1)
+
+
+_DISK = ("os error 112", "not enough space", "no space left", "enospc", "disk is full", "there is not enough space")
+_NET = ("error sending request", "connection refused", "connection reset", "timed out", "dns error", "failed to lookup", "name resolution",
+        "temporary failure", "connectionerror", "max retries exceeded", "ssl", "network is unreachable", "tls handshake")
+_DENIED = ("access is denied", "os error 5", "permission denied", "winerror 5")
+
+
+def friendly(lines: list, where: Optional[Path] = None) -> Optional[str]:
+    """A plain-language reason for a failed command from the last lines it printed, or None when nothing is recognised."""
+    text = " | ".join(lines).lower()
+    if any(k in text for k in _DISK):
+        import re
+        # the failing drive is the one in the error's own path (often uv's cache, not the engines folder)
+        hit = re.search(r"([A-Za-z]:[\\/][^\s'`\"|]*)", " | ".join(lines))
+        return disk_message(None, Path(hit.group(1)) if hit else (where or paths.engines_dir()))
+    if any(k in text for k in _DENIED):
+        return ("Windows would not let FireVoice write its files (an antivirus or a protected folder?). Allow FireVoice in your antivirus, "
+                "or choose another folder for the engines in Settings, Engines and storage, then try again.")
+    if any(k in text for k in _NET):
+        return "FireVoice could not reach the download servers. Check your internet connection (and any proxy or firewall) and try again."
+    return None
+
+
 def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = None, on_line: Optional[Callable[[str], None]] = None,
          cwd: Optional[str] = None) -> None:
     log(f"$ {' '.join(cmd)}")
@@ -351,7 +441,8 @@ def _run(cmd: list[str], log, cancel: threading.Event, env: Optional[dict] = Non
         time.sleep(0.3)
     t.join(timeout=5)
     if p.returncode != 0:
-        raise InstallError(f"{Path(cmd[0]).name} exited with {p.returncode}: " + " | ".join(tail[-4:]))
+        why = friendly(tail)
+        raise InstallError(why or f"{Path(cmd[0]).name} exited with {p.returncode}: " + " | ".join(tail[-4:]))
 
 
 # Weights go through the shared Hugging Face cache, then are hardlinked into the weights folder (copied when the cache is
@@ -397,6 +488,8 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
     m = manifest(engine)
     if not m.auto:
         raise InstallError(m.manual or f"{_name(m.engine)} cannot be installed automatically")
+    if m.venv is None:
+        return _install_main(m, progress, cancel, log_file, force)
     u = uv()
     if not u:
         raise InstallError("uv not found: install it (https://docs.astral.sh/uv/) or the backend's `server` extra, which includes it")
@@ -415,6 +508,9 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
     k = 0
     t0 = time.time()
     try:
+        # not enough room is told at once, in plain words, instead of half way through a multi-gigabyte download
+        wgb = sum((_repo_size(r, v, m.skip) or 0) for r, _f, v in todo_weights) / 1e9
+        _check_disk(_need_gb(m, wgb, build))
         with _venv_lock(m.venv):
             if build:
                 paths.engines_dir().mkdir(parents=True, exist_ok=True)
@@ -470,7 +566,7 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
                     while not stop.wait(2.0):
                         if total:
                             have = max(_dir_bytes(dest), (_dir_bytes(cache) - start_bytes) if cache else 0)
-                            progress(k, steps, f"{label}: {min(100, round(100 * have / total))}%")
+                            progress(k + min(0.99, have / total), steps, f"{label}: {min(100, round(100 * have / total))}%")
                 w = threading.Thread(target=watch, daemon=True)
                 w.start()
                 try:
@@ -504,6 +600,63 @@ def install(engine: str, progress: Callable[[int, int, str], None], cancel: thre
     _forget_status()
     return {"engine": m.engine, "venv": str(paths.engines_dir() / m.venv), "built_venv": build,
             "weights": [f for _, f, _ in todo_weights], "seconds": round(time.time() - t0, 1)}
+
+
+_PREFETCH = """
+import json, sys
+from huggingface_hub import snapshot_download
+snapshot_download(sys.argv[1], allow_patterns=json.loads(sys.argv[2]))
+"""
+
+
+def _install_main(m: Manifest, progress: Callable[[float, float, str], None], cancel: threading.Event, log_file: Optional[Path], force: bool) -> dict:
+    """An engine that runs inside the backend's own environment: nothing to build, only its weights to fetch (into the
+    Hugging Face cache, where the engine's own loader looks), with real progress."""
+    import importlib.util
+    import json
+    fh = open(log_file, "a", encoding="utf-8") if log_file else None
+
+    def log(line: str) -> None:
+        if fh:
+            fh.write(line + "\n")
+            fh.flush()
+    t0 = time.time()
+    try:
+        if m.check and importlib.util.find_spec(m.check) is None:
+            raise InstallError("FireVoice is still setting up its environment (the graphics support download has not finished). Try again in a few minutes.")
+        todo = [(r, p) for r, p in m.prefetch if force or not hub_ok(r, p)]
+        sizes = [_repo_size(r, None, (), p) or 0 for r, p in todo]
+        _check_disk(_need_gb(m, sum(sizes) / 1e9, False))
+        env = uv_env()
+        total_all = max(sum(sizes), 1)
+        done_before = 0
+        for (repo, patterns), size in zip(todo, sizes):
+            label = f"Downloading {_name(m.engine)}" + (f" ({size / 1e9:.1f} GB)" if size else "")
+            progress(done_before, total_all, label)
+            stop = threading.Event()
+            cache = _hub_cache_dir(repo)
+            start = _dir_bytes(cache) if cache else 0
+
+            def watch(base=done_before, size=size, label=label, cache=cache, start=start):
+                while not stop.wait(1.5):
+                    if size and cache:
+                        # never claim the end before the download process has really finished: files in the cache
+                        # can show their full size before their bytes have arrived
+                        have = min(max(0, _dir_bytes(cache) - start), int(size * 0.99))
+                        progress(base + have, total_all, f"{label}: {round(100 * have / size)}%")
+            t = threading.Thread(target=watch, daemon=True)
+            t.start()
+            try:
+                _run([sys.executable, "-c", _PREFETCH, repo, json.dumps(patterns)], log, cancel, env)
+            finally:
+                stop.set()
+            done_before += size
+        _forget_status()
+        progress(total_all, total_all, "installed")
+    finally:
+        if fh:
+            fh.close()
+    return {"engine": m.engine, "venv": None, "built_venv": False, "weights": [r for r, _ in m.prefetch], "seconds": round(time.time() - t0, 1)}
 
 
 def uninstall(engine: str, weights: bool = False) -> dict:

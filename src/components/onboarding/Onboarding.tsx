@@ -1,20 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, Check, Compass, Cpu, Download, FileText, HardDrive, Keyboard, Loader2, Lock, Mic, Play, Rocket, RotateCw,
-  Sparkles, Square, Volume2, VolumeX, Zap,
+  AlertTriangle, ArrowLeft, ArrowRight, Check, Compass, Cpu, FileText, HardDrive, Keyboard, Loader2, Lock, Mic, Play, Rocket, RotateCw,
+  Sparkles, Square, Volume2, VolumeX,
 } from "lucide-react";
-import { BackgroundSetup } from "@/components/shell/BackgroundSetup";
 import { HotkeyRecorder } from "@/components/dictation/HotkeyRecorder";
 import { useTour } from "@/components/tour/Tour";
 import { startAmbient, stopAmbient } from "./ambient";
+import { SetupStep } from "./SetupStep";
 import { api } from "@/lib/api/client";
-import { errMessage, useHealth, useInstallEngine, useJob, useSetupReport, useVoices } from "@/lib/api/hooks";
-import type { EnginePick, Job } from "@/lib/api/types";
+import { errMessage, useHealth, useSetupReport, useVoices } from "@/lib/api/hooks";
 import { backend, inTauri } from "@/lib/backend";
 import { dictation, hotkeyLabels } from "@/lib/dictation";
 import { useBackend } from "@/stores/backend";
 import { useDictation, useDictationLive, type DictationConfig } from "@/stores/dictation";
+import { useResumeSetup } from "@/stores/firstrun";
 import { useSettings } from "@/stores/settings";
 import { useStudio } from "@/stores/studio";
 import { AudioPlayer, Badge, Button, Dialog, Kbd, ProgressBar, Segmented, Select, Switch, Textarea } from "@/components/ui";
@@ -24,89 +23,68 @@ import { FEATURES, OnboardingFrame, StepHeader, Waveform, type StepInfo } from "
 
 const HELLO = "Hello! This is FireVoice, speaking from your own computer. Everything you write stays right here.";
 
-type StepId = "welcome" | "setup" | "engine" | "voice" | "dictation" | "ready";
+type StepId = "welcome" | "setup" | "voice" | "dictation" | "ready";
 
 /* ------------------------------------------------------------------------------------------------------------------
- * The whole first run: welcome, the quick setup (only while this computer still needs it), choose an engine, first
- * words, dictation, and a last screen that opens the app (with an optional tour). It stays on screen until the user
- * finishes it or presses "Skip to app"; nothing moves on behind their back.
+ * The whole first run: welcome, the setup (the environment, the voice library and the voice engine that suits this
+ * computer, all downloaded and loaded before anything else happens), first words, dictation, and a last screen that
+ * opens the app (with an optional tour). Nothing in the setup can be skipped: when it is done FireVoice is ready, and
+ * a first render in Speak just works. `resume` finishes the setup for someone who has already seen the welcome.
  * ---------------------------------------------------------------------------------------------------------------- */
-export function Onboarding() {
-  const info = useBackend((s) => s.info);
+export function Onboarding({ resume = false }: { resume?: boolean }) {
   const phase = useBackend((s) => s.phase);
-  const [step, setStep] = useState<StepId>("welcome");
-  // the setup step is listed only on computers that need it (it stays listed once it was needed)
-  const needed = inTauri() && (phase === "needs-setup" || phase === "setting-up" || phase === "failed" || (!!info && info.mode === "bundled" && !info.ready));
-  const neededOnce = useRef(false);
-  if (needed) neededOnce.current = true;
+  const [step, setStep] = useState<StepId>(resume ? "setup" : "welcome");
   const steps: StepInfo[] = [
     { id: "welcome", title: "Welcome" },
-    ...(neededOnce.current ? [{ id: "setup", title: "Get ready" }] : []),
-    { id: "engine", title: "Engine" },
+    { id: "setup", title: "Set up" },
     { id: "voice", title: "First words" },
     { id: "dictation", title: "Dictation" },
     { id: "ready", title: "Ready" },
   ];
-  const [engine, setEngine] = useState<string | null>(null);
-  const [installJob, setInstallJob] = useState<string | null>(null);
+  const engine = useStudio((s) => s.engine);
   const music = useSetupMusic();
-  const health = useHealth();
-  // the quick setup often finishes while the welcome screen is still up: then there is nothing to wait for
-  const coreReady = health.isSuccess && phase === "idle";
 
   const finish = (tour: boolean) => {
     music.stop();
-    if (engine) useStudio.getState().set({ engine });
     if (tour) useTour.getState().queue();
     useSettings.getState().set({ onboarded: true });
+    useResumeSetup.getState().set({ resume: false });
   };
 
-  // the engine stopped or needs (re)installing part way through: show that, then carry on where the user was
-  const blocked = inTauri() && (phase === "failed" || phase === "needs-setup" || phase === "setting-up" || phase === "starting");
-  const current: StepId = step !== "welcome" && blocked ? "setup" : step;
+  // the engine of the app stopped part way through the later steps: say so, and carry on where the person was
+  const blocked = inTauri() && step !== "welcome" && step !== "setup" && (phase === "failed" || phase === "needs-setup" || phase === "setting-up" || phase === "starting");
 
   const actions = (
     <>
       <MusicToggle music={music} />
-      <Button variant="ghost" size="sm" trailing={<ArrowRight className="size-3.5" />} onClick={() => finish(false)}>
-        Skip to app
-      </Button>
+      {resume && (
+        <Button variant="ghost" size="sm" onClick={() => useResumeSetup.getState().set({ resume: false, dismissed: true })}>
+          Not now
+        </Button>
+      )}
     </>
   );
 
-  if (current === "welcome") {
+  if (step === "welcome") {
     return (
       <OnboardingFrame wide actions={actions}>
         <WelcomeHero
           onStart={() => {
             music.startIfOn();
-            setStep(coreReady || !(blocked || neededOnce.current) ? "engine" : "setup");
+            setStep("setup");
           }}
         />
       </OnboardingFrame>
     );
   }
   return (
-    <>
-      <OnboardingFrame steps={steps} current={current} actions={actions}>
-        {current === "setup" && <SetupPanel onReady={step === "setup" ? () => setStep("engine") : undefined} />}
-        {current === "engine" && (
-          <EngineStep
-            jobId={installJob}
-            onJob={setInstallJob}
-            onNext={(e) => {
-              setEngine(e);
-              setStep("voice");
-            }}
-            onSkip={() => setStep("dictation")}
-          />
-        )}
-        {current === "voice" && <FirstWords engine={engine} jobId={installJob} onNext={() => setStep("dictation")} onBack={() => setStep("engine")} />}
-        {current === "dictation" && <DictationStep onNext={() => setStep("ready")} onBack={() => setStep(engine ? "voice" : "engine")} />}
-        {current === "ready" && <ReadyStep engine={engine} jobId={installJob} onFinish={finish} onBack={() => setStep("dictation")} />}
-      </OnboardingFrame>
-      {current !== "setup" && <BackgroundSetup startFolded />}
-    </>
+    <OnboardingFrame steps={resume ? undefined : steps} current={blocked ? "setup" : step} actions={actions}>
+      {blocked && <SetupPanel />}
+      {!blocked && step === "setup" && <SetupStep onReady={() => (resume ? finish(false) : setStep("voice"))} />}
+      {!blocked && step === "voice" && <FirstWords engine={engine} onNext={() => setStep("dictation")} onBack={() => setStep("setup")} />}
+      {!blocked && step === "dictation" && <DictationStep onNext={() => setStep("ready")} onBack={() => setStep("voice")} />}
+      {!blocked && step === "ready" && <ReadyStep engine={engine} onFinish={finish} onBack={() => setStep("dictation")} />}
+    </OnboardingFrame>
   );
 }
 
@@ -171,37 +149,6 @@ function MusicToggle({ music }: { music: ReturnType<typeof useSetupMusic> }) {
   );
 }
 
-/** An engine install job, kept fresh while it runs (the app's job feed is not running yet during the first run). */
-function useLiveJob(id: string | null): Job | undefined {
-  const q = useJob(id);
-  const job = q.data;
-  const active = !!job && (job.status === "queued" || job.status === "running");
-  const { refetch } = q;
-  useEffect(() => {
-    if (!id || (job && !active)) return;
-    const t = setInterval(() => void refetch(), 1500);
-    return () => clearInterval(t);
-  }, [id, job, active, refetch]);
-  return job;
-}
-
-const jobActive = (j?: Job) => !!j && (j.status === "queued" || j.status === "running");
-
-function InstallProgress({ job, title }: { job: Job; title: string }) {
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-4">
-      <div className="mb-2 flex items-baseline justify-between text-[13px]">
-        <span className="flex items-center gap-2 font-medium text-ink">
-          <Loader2 className="size-4 animate-spin text-fire" /> Installing {title}
-        </span>
-        <span className="text-faint tabular">{Math.round((job.progress ?? 0) * 100)}%</span>
-      </div>
-      <ProgressBar value={job.progress ?? 0} />
-      <p className="mt-2 truncate text-[12.5px] text-muted" title={job.message ?? undefined}>{job.message || "Starting…"}</p>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------------------------------------------- 1. welcome ---- */
 
 function WelcomeHero({ onStart }: { onStart: () => void }) {
@@ -253,7 +200,7 @@ function WelcomeHero({ onStart }: { onStart: () => void }) {
           Get started
         </Button>
         <p className="flex items-center gap-1.5 text-[12.5px] text-faint">
-          <Lock className="size-3.5" /> About two minutes. Nothing you make ever leaves this computer.
+          <Lock className="size-3.5" /> The first setup downloads a few GB, about 10 minutes. Nothing you make ever leaves this computer.
         </p>
         {status && (
           <p className="onb-in flex items-center gap-2 rounded-full bg-surface/70 px-3 py-1 text-[12px] text-muted backdrop-blur-sm">
@@ -449,171 +396,9 @@ function LogDialog({ log, onClose }: { log: string | null; onClose: () => void }
   );
 }
 
-/* ---------------------------------------------------------------------------------------------- 3. engine ---- */
-
-function EngineStep({
-  jobId,
-  onJob,
-  onNext,
-  onSkip,
-}: {
-  jobId: string | null;
-  onJob: (id: string) => void;
-  onNext: (engine: string) => void;
-  onSkip: () => void;
-}) {
-  const health = useHealth();
-  const report = useSetupReport(health.isSuccess);
-  const qc = useQueryClient();
-  const install = useInstallEngine();
-  const job = useLiveJob(jobId);
-  const r = report.data;
-  const [pick, setPick] = useState<string | null>((job?.payload?.engine as string | undefined) ?? null);
-
-  useEffect(() => {
-    if (r && !pick) setPick(r.recommended.engine);
-  }, [r, pick]);
-  useEffect(() => {
-    if (job?.status === "done") for (const k of ["setup-report", "engines", "options"]) void qc.invalidateQueries({ queryKey: [k] });
-  }, [job?.status, qc]);
-
-  const options: EnginePick[] = r ? [r.recommended, ...r.alternatives] : [];
-  const chosen = options.find((o) => o.engine === pick) ?? r?.recommended;
-  const jobFor = job?.payload?.engine as string | undefined;
-  const installing = jobActive(job) && jobFor === chosen?.engine;
-  const installed = !!chosen && (chosen.ready || (job?.status === "done" && jobFor === chosen.engine));
-
-  if (!health.isSuccess || (!r && !report.isError)) {
-    return (
-      <>
-        <StepHeader eyebrow="Your engine" title="Getting to know this computer" />
-        <div className="flex items-center justify-center gap-3 rounded-2xl border border-line bg-surface px-5 py-5 text-[14px] text-muted">
-          <Loader2 className="size-5 animate-spin text-fire" /> Checking your graphics card…
-        </div>
-      </>
-    );
-  }
-  if (!r) {
-    return (
-      <>
-        <StepHeader eyebrow="Your engine" title="Couldn't check this computer">
-          That's fine: try again, or choose an engine later on the Engines page.
-        </StepHeader>
-        <StepActions>
-          <Button variant="primary" leading={<RotateCw className="size-4" />} loading={report.isFetching} onClick={() => void report.refetch()}>
-            Try again
-          </Button>
-          <Button variant="ghost" trailing={<ArrowRight className="size-4" />} onClick={onSkip}>
-            Choose later
-          </Button>
-        </StepActions>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <StepHeader eyebrow="Your engine" title="Pick the engine that makes your voices">
-        Each engine has its own strengths. This one suits your computer best; you can add others any time.
-      </StepHeader>
-
-      <div className="mb-4 flex items-center justify-center gap-3 rounded-2xl bg-surface-2 px-4 py-3">
-        <Cpu className="size-5 shrink-0 text-fire" />
-        <div className="min-w-0 text-[13px]">
-          <span className="font-medium text-ink">{r.gpu?.name ?? "No NVIDIA graphics card found"}</span>
-          <span className="text-muted">
-            {r.vram_gb ? ` · ${r.vram_gb.toFixed(0)} GB of graphics memory` : " · FireVoice will use the processor"} · {r.voices} voices ready
-          </span>
-        </div>
-      </div>
-
-      <div role="radiogroup" aria-label="Engine" className="space-y-2.5">
-        {options.map((o, i) => {
-          const on = pick === o.engine;
-          return (
-            <button
-              key={o.engine}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              disabled={jobActive(job)}
-              onClick={() => setPick(o.engine)}
-              className={cn(
-                "flex w-full items-start gap-3.5 rounded-2xl border px-4 py-3.5 text-left transition-colors disabled:opacity-70",
-                on ? "border-fire/60 bg-fire-soft/60" : "border-line bg-surface hover:border-line-strong",
-              )}
-            >
-              <span className={cn("mt-1 flex size-[18px] shrink-0 items-center justify-center rounded-full border-2", on ? "border-fire" : "border-line-strong")}>
-                {on && <span className="size-2 rounded-full bg-fire" />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px] font-semibold text-ink">{o.title}</span>
-                  {i === 0 && <Badge tone="fire"><Sparkles className="size-3" /> Best for you</Badge>}
-                  {o.tier?.quality && o.tier.quality !== "-" && <Badge>{o.tier.quality}</Badge>}
-                  {o.tier?.speed && o.tier.speed !== "-" && <Badge><Zap className="size-3" /> {o.tier.speed}</Badge>}
-                  {o.ready || (job?.status === "done" && jobFor === o.engine) ? (
-                    <Badge tone="ok">Ready</Badge>
-                  ) : (
-                    !o.installable && <Badge tone="warn">Not available here</Badge>
-                  )}
-                </span>
-                <span className="mt-1 block text-[13px] leading-relaxed text-muted">{o.reason}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {installing && job && (
-        <div className="mt-4">
-          <InstallProgress job={job} title={chosen?.title ?? "the engine"} />
-        </div>
-      )}
-      {job?.status === "failed" && jobFor === chosen?.engine && (
-        <p className="mt-3 text-center text-[13px] text-bad">
-          {typeof job.error === "string" ? job.error : job.error?.message || "The install did not finish."}
-        </p>
-      )}
-      {!installed && !installing && chosen?.installable && (
-        <p className="mt-4 flex items-start justify-center gap-2 text-center text-[12.5px] leading-relaxed text-muted">
-          <Download className="mt-0.5 size-3.5 shrink-0 text-fire" />
-          A few GB. You can carry on with the next steps while it downloads.
-        </p>
-      )}
-
-      <StepActions>
-        {installed ? (
-          <Button variant="primary" size="lg" trailing={<ArrowRight className="size-4" />} onClick={() => onNext(chosen!.engine)}>
-            Continue with {chosen!.title}
-          </Button>
-        ) : installing ? (
-          <Button variant="primary" size="lg" trailing={<ArrowRight className="size-4" />} onClick={() => onNext(chosen!.engine)}>
-            Continue while it installs
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            size="lg"
-            leading={<Download className="size-4" />}
-            disabled={!chosen?.installable}
-            loading={install.isPending}
-            onClick={() => chosen && install.mutate({ name: chosen.engine }, { onSuccess: (j) => onJob(j.id) })}
-          >
-            Install {chosen?.title ?? ""}
-          </Button>
-        )}
-        <Button variant="ghost" size="lg" onClick={onSkip}>
-          Choose later
-        </Button>
-      </StepActions>
-    </>
-  );
-}
-
 /* ----------------------------------------------------------------------------------------- 4. first words ---- */
 
-function FirstWords({ engine, jobId, onNext, onBack }: { engine: string | null; jobId: string | null; onNext: () => void; onBack: () => void }) {
+function FirstWords({ engine, onNext, onBack }: { engine: string | null; onNext: () => void; onBack: () => void }) {
   const voices = useVoices();
   const featured = (voices.data ?? []).filter((v) => v.featured).slice(0, 5);
   const [voice, setVoice] = useState<string>("default");
@@ -621,9 +406,6 @@ function FirstWords({ engine, jobId, onNext, onBack }: { engine: string | null; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audio, setAudio] = useState<{ url: string; blob: Blob } | null>(null);
-  const job = useLiveJob(jobId);
-  // the engine picked a moment ago may still be installing: then this step waits for it (or the user moves on)
-  const waiting = jobActive(job) && job?.payload?.engine === engine;
 
   useEffect(() => () => { if (audio) URL.revokeObjectURL(audio.url); }, [audio]);
 
@@ -680,9 +462,7 @@ function FirstWords({ engine, jobId, onNext, onBack }: { engine: string | null; 
       <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className="text-[15px] leading-relaxed" aria-label="What FireVoice says" />
 
       <div className="mt-4">
-        {waiting && job ? (
-          <InstallProgress job={job} title="your engine" />
-        ) : audio ? (
+        {audio ? (
           <AudioPlayer src={audio.url} autoPlay label="Your first line" />
         ) : (
           <div className="flex h-[54px] items-center justify-center rounded-xl border border-dashed border-line bg-surface-2/50">
@@ -695,7 +475,6 @@ function FirstWords({ engine, jobId, onNext, onBack }: { engine: string | null; 
             )}
           </div>
         )}
-        {waiting && <p className="mt-2 text-center text-[12.5px] text-muted">You can try it once the engine is installed, or carry on and come back to it later.</p>}
         {error && (
           <p className="mt-3 text-center text-[13px] text-bad">
             {error} {!engine && "You can install an engine on the Engines page."}
@@ -709,7 +488,6 @@ function FirstWords({ engine, jobId, onNext, onBack }: { engine: string | null; 
           size="lg"
           leading={audio ? <RotateCw className="size-4" /> : <Play className="size-4 fill-current" />}
           loading={busy}
-          disabled={waiting}
           onClick={() => void say()}
         >
           {audio ? "Say it again" : "Say it"}
@@ -882,29 +660,15 @@ function DictationStep({ onNext, onBack }: { onNext: () => void; onBack: () => v
 
 /* ------------------------------------------------------------------------------------------------ 6. ready ---- */
 
-function ReadyStep({
-  engine,
-  jobId,
-  onFinish,
-  onBack,
-}: {
-  engine: string | null;
-  jobId: string | null;
-  onFinish: (tour: boolean) => void;
-  onBack: () => void;
-}) {
+function ReadyStep({ engine, onFinish, onBack }: { engine: string | null; onFinish: (tour: boolean) => void; onBack: () => void }) {
   const [tour, setTour] = useState(true);
-  const job = useLiveJob(jobId);
   const config = useDictation((s) => s.config);
-  const extras = useBackend((s) => s.extras);
   const report = useSetupReport(useHealth().isSuccess);
   const engineTitle = [report.data?.recommended, ...(report.data?.alternatives ?? [])].find((o) => o?.engine === engine)?.title ?? engine;
+  const voices = report.data?.voices ?? 0;
   const rows = [
-    {
-      label: "Voice engine",
-      value: !engine ? "Choose one later on the Engines page" : jobActive(job) ? `${engineTitle} · installing, ${Math.round((job?.progress ?? 0) * 100)}%` : `${engineTitle} · ready`,
-      ok: !!engine && !jobActive(job),
-    },
+    { label: "Voice engine", value: engineTitle ? `${engineTitle} · loaded and ready` : "Choose one on the Engines page", ok: !!engine },
+    { label: "Voice library", value: voices ? `${voices} voices ready to use` : "Add voices on the Voices page", ok: voices > 0 },
     {
       label: "Dictation",
       value: config.enabled ? (
@@ -916,11 +680,6 @@ function ReadyStep({
       ),
       ok: config.enabled,
     },
-    {
-      label: "Graphics card support",
-      value: extras?.status === "running" ? `Downloading in the background · ${Math.round(extras.progress * 100)}%` : "Installed",
-      ok: extras?.status !== "running",
-    },
   ];
   return (
     <>
@@ -928,7 +687,7 @@ function ReadyStep({
         <Check className="size-8" strokeWidth={3} />
       </div>
       <StepHeader eyebrow="Ready" title="FireVoice is ready for you">
-        Here's where things stand. Anything still installing carries on in the background, and the corner of the window shows how far it is.
+        Everything is installed and loaded, so your first render in Speak starts right away.
       </StepHeader>
       <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
         {rows.map((r) => (

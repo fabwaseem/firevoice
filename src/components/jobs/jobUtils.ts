@@ -90,7 +90,7 @@ export function resultCount(job: Job, key: string): number | undefined {
 
 export const KIND_LABEL: Record<Job["kind"], string> = {
   tts: "Speech", batch: "Batch", design: "Voice design", previews: "Previews", project: "Project", style_refs: "Style clips",
-  dialogue: "Dialogue", install: "Engine install", dub: "Dubbing",
+  dialogue: "Dialogue", install: "Engine install", dub: "Dubbing", voices: "Voice library",
 };
 export function kindLabel(kind: Job["kind"]): string {
   return KIND_LABEL[kind] ?? (kind ? (kind.charAt(0).toUpperCase() + kind.slice(1)).replace(/_/g, " ") : "Job");

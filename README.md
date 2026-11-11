@@ -32,24 +32,40 @@ Both environments are built from one recipe (`scripts/backend-recipe.mjs`: Pytho
 is downloaded twice. Settings > Engines and storage can point engines or weights elsewhere (it writes
 `~/.firevoice/settings.json`, which every build reads).
 
-### First run: in the app within about a minute
+### First run: one setup, then it just works
 
-The installed app builds its runtime in two parts (`src-tauri/src/backend.rs`), so a new user is never stuck behind a
-multi-gigabyte download:
+A new computer gets one setup screen that cannot be skipped, so the first render in Speak works the moment it is done.
+It runs six steps in order and reports each one honestly (`src/components/onboarding/useFirstRunSetup.ts`); every step
+is safe to repeat, so a setup that was closed half way carries on where it stopped:
 
-1. **Quick part, behind the welcome screen** (starts by itself when the app opens): Python 3.12 and the backend with
-   only what its server needs (`core_extras`, about 100 MB). The server starts and the user picks an engine.
-2. **The rest, in the background** (once the server answers, and resumed on the next start if the app was closed):
-   torch and torchaudio, downloaded by `src-tauri/src/fetch_wheels.py` with exact progress, resume and a checksum,
-   then every other package. A card in the corner of the window shows each download, the speed and the time left,
-   and engine installs running alongside; it folds down to a pill. Features that need torch say so until it is done.
+1. **Environment.** Python 3.12 and the backend's server (about 100 MB), built by the desktop shell
+   (`src-tauri/src/backend.rs`); it starts while the welcome screen is still up.
+2. **GPU support.** torch and torchaudio, downloaded by `src-tauri/src/fetch_wheels.py` with exact progress, resume and
+   a checksum. It checks the free disk space first and stops with a plain message if there is not enough.
+3. **Voice libraries.** Every other package of the runtime, pinned at build time in `constraints.txt`
+   (`scripts/bundle-backend.mjs`), so installing them never replaces a file the running server has open.
+4. **The voice library.** 100 ready-made voices, one zip downloaded from the releases repo (`backend/src/firevoice/voicepack.py`;
+   a server job, running alongside steps 2 and 3). Voices a person has edited, renamed or deleted are never touched, and
+   the default voice is set only when there is none.
+5. **The engine for this computer.** `backend/src/firevoice/hardware.py` reads the graphics card (name and memory), the
+   RAM and the free disk, and picks the engine that runs comfortably faster than real time on it and sounds best (an
+   RTX 5080 gets Inferno, an RTX 4060 or 3060 gets Flare, a weak card or none gets Spark). It is installed with its
+   weights, with progress.
+6. **Getting it ready.** The engine is loaded into the graphics card and becomes Speak's engine.
 
-The build pins every package of the full runtime in `constraints.txt` (`scripts/bundle-backend.mjs`, `uv pip
-compile`). The quick part installs with those pins, so the background part only adds packages and never replaces one
-the running server has open (Windows locks those). Engine installs reuse the downloaded torch wheels
-(`FIREVOICE_WHEELS`, `--find-links`) and wait for that download instead of fetching the same file twice.
+Someone who skipped the setup in an older version sees a "Finish setup" prompt in the app until they have an engine and
+the voice library; it opens the same screen. Failures are told in plain words (a full disk names the drive, a network
+problem says so) with a **Try again** button.
 
-`FIREVOICE_RUNTIME_DIR` builds the runtime in another folder, to try a first run without touching the real one.
+**The voice library pack.** `backend/.venv/Scripts/python.exe scripts/build-voices-pack.py` builds
+`release/voices/FireVoice-voices-N.zip` from your voices folder and rewrites `backend/src/firevoice/voicepack.json`
+(version, URL, size, SHA-256, the ids, the default voice). Only the ids listed in that committed file ever ship. Publish
+the zip once, before the release that needs it: `gh release create voices-N <zip> --repo fabwaseem/firevoice-releases`
+(the script prints the command). Add voices with `--all` (every voice in the folder) and publish the new version.
+
+`FIREVOICE_RUNTIME_DIR` builds the runtime in another folder, `FIREVOICE_VOICES_URL` points the voice pack download at
+another file or address (a local `file:///` path works), and `FIREVOICE_HOME`, `FIREVOICE_ENGINES_DIR` and `HF_HOME` move
+the data, the engines and the model cache: together they let you try a first run without touching the real one.
 
 ## Develop
 

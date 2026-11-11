@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from "react";
 import { useHealth } from "@/lib/api/hooks";
 import { useBackend } from "@/stores/backend";
+import { useResumeSetup } from "@/stores/firstrun";
 import { useSettings } from "@/stores/settings";
 import { useBackendLifecycle, useManagesEngine } from "@/components/shell/useBackendLifecycle";
 import { useDictationBridge } from "@/components/dictation/useDictationBridge";
@@ -15,6 +16,7 @@ export function StartupGate({ children }: { children: ReactNode }) {
   // dictation works from the first run on (onboarding has a step to set it up and try it), not only inside the app
   useDictationBridge();
   const onboarded = useSettings((s) => s.onboarded);
+  const resume = useResumeSetup((s) => s.resume);
   const managed = useManagesEngine();
   const health = useHealth();
   const phase = useBackend((s) => s.phase);
@@ -25,7 +27,8 @@ export function StartupGate({ children }: { children: ReactNode }) {
   const booted = useRef(false);
   if (health.isSuccess && onboarded) booted.current = true;
 
-  if (!onboarded) return <Onboarding />;
+  // the first run, or the same setup again for someone who left it unfinished (and asked to finish it)
+  if (!onboarded || resume) return <Onboarding resume={onboarded} />;
   if (!managed || health.isSuccess) return <>{children}</>;
   if (booted.current) {
     const problem = phase === "needs-setup" || phase === "setting-up" || phase === "failed";

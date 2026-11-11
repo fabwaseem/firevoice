@@ -1,4 +1,4 @@
-import { AudioLines, Ban, BookOpen, Download, HardDriveDownload, Languages, Layers, MessagesSquare, Palette, Play, Sparkles, Trash2 } from "lucide-react";
+import { AudioLines, Ban, BookOpen, Download, HardDriveDownload, Languages, Layers, Library, MessagesSquare, Palette, Play, Sparkles, Trash2 } from "lucide-react";
 import type { Job } from "@/lib/api/types";
 import { errMessage } from "@/lib/api/hooks";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { ArtTile, Badge, Button, Equalizer, ProgressBar, Tooltip } from "@/compo
 import { downloadJobAudio, errorText, hasAudio, jobAudioSrc, isTerminal, jobTitle, kindLabel, resultNumber, statusLabel, statusTone } from "./jobUtils";
 
 const KIND_ICON: Record<Job["kind"], typeof AudioLines> = {
-  tts: AudioLines, batch: Layers, design: Sparkles, previews: Play, project: BookOpen, style_refs: Palette, dialogue: MessagesSquare, install: HardDriveDownload, dub: Languages,
+  tts: AudioLines, batch: Layers, design: Sparkles, previews: Play, project: BookOpen, style_refs: Palette, dialogue: MessagesSquare, install: HardDriveDownload, dub: Languages, voices: Library,
 };
 
 export function JobRow({

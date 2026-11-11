@@ -1,6 +1,6 @@
 import { useSettings } from "@/stores/settings";
 import type { HistoryItem, HistoryKind, Stats } from "./types";
-import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, WatermarkResult, WordTime } from "./types";
+import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, VoiceLibraryStatus, WatermarkResult, WordTime } from "./types";
 import { rememberEngineNames } from "@/lib/engineNames";
 import { saveBlob } from "@/lib/audio";
 import { DEFAULT_SERVER, normaliseServerUrl } from "@/stores/settings";
@@ -142,8 +142,11 @@ export const api = {
     return { blob: await res.blob(), seed: h("X-Seed"), duration: h("X-Duration"), engine: h("X-Engine"), historyId: h("X-History-Id") || null };
   },
   engine: (name: string) => request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}`),
+  // loading a model into the graphics card can take minutes the first time (it is compiled and warmed up)
   loadEngine: (name: string, workers?: number) =>
-    request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/load`, { method: "POST", body: json(workers ? { workers } : {}) }),
+    request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/load`, { method: "POST", body: json(workers ? { workers } : {}), timeoutMs: 20 * 60_000 }),
+  // the speech model that checks every render (and types dictation): about 1.6 GB, fetched the first time it is used
+  warmSpeech: () => request<{ model: string; device: string }>("/api/v1/dictate/warm", { method: "POST", timeoutMs: 20 * 60_000 }),
   unloadEngine: (name: string) => request<Engine>(`/api/v1/engines/${encodeURIComponent(name)}/unload`, { method: "POST" }),
   installPlan: (name: string, sizes = true) => request<InstallPlan>(`/api/v1/engines/${encodeURIComponent(name)}/install`, {}, { sizes }),
   installEngine: (name: string, force = false) =>
@@ -151,7 +154,9 @@ export const api = {
   uninstallEngine: (name: string, weights = false) =>
     request<{ engine: string; removed: string[]; also_affects: string[] }>(`/api/v1/engines/${encodeURIComponent(name)}/install`, { method: "DELETE" }, { weights }),
   paths: () => request<PathsReport>("/api/v1/system/paths", { timeoutMs: QUICK_TIMEOUT }),
-  setupReport: () => request<SetupReport>("/api/v1/system/setup", { timeoutMs: QUICK_TIMEOUT * 2 }),
+  setupReport: () => request<SetupReport>("/api/v1/system/setup", { timeoutMs: QUICK_TIMEOUT * 4 }),
+  voiceLibrary: () => request<VoiceLibraryStatus>("/api/v1/voices/library", { timeoutMs: QUICK_TIMEOUT }),
+  installVoiceLibrary: () => request<Job>("/api/v1/voices/library", { method: "POST" }),
   saveSettings: (body: Partial<Record<PathSettingKey, string>>) =>
     request<{ settings: PathsReport["settings"]; restart_required: boolean; paths: PathsReport }>("/api/v1/system/settings", { method: "PUT", body: json(body) }),
 

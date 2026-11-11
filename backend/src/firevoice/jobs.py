@@ -29,8 +29,8 @@ from typing import Iterator, Optional
 from .core.brands import name_of
 
 TERMINAL = ("done", "failed", "cancelled")
-KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install", "dub")
-OWN_THREAD = ("install",)   # long, GPU-free work that must not hold up renders queued behind it
+KINDS = ("tts", "batch", "design", "previews", "project", "style_refs", "dialogue", "install", "dub", "voices")
+OWN_THREAD = ("install", "voices")   # long, GPU-free work that must not hold up renders queued behind it
 
 
 @dataclass
@@ -180,7 +180,7 @@ class JobManager:
                 raise FireVoiceError("not_found", str(e).strip("'\""))
             if not m.auto:
                 raise FireVoiceError("bad_request", f"{name_of(m.engine)} cannot be installed automatically: {m.manual}")
-            if not installer.uv():
+            if m.venv is not None and not installer.uv():
                 raise FireVoiceError("unavailable", "uv not found: install uv or the backend's server extra, which includes it")
             busy = [x for x in self.jobs.values() if x.kind == "install" and x.status not in TERMINAL
                     and installer.MANIFESTS.get(x.payload.get("engine"), m).venv == m.venv]
@@ -188,6 +188,14 @@ class JobManager:
                 raise FireVoiceError("conflict", f"{m.venv} is already being installed (job {busy[0].id})")
             payload = {**payload, "engine": m.engine}
             title = title or f"install {name_of(m.engine)}"
+        elif kind == "voices":
+            from . import voicepack
+            if not voicepack.status()["available"]:
+                raise FireVoiceError("bad_request", "this version of FireVoice has no voice library to download")
+            busy = [x for x in self.jobs.values() if x.kind == "voices" and x.status not in TERMINAL]
+            if busy:
+                raise FireVoiceError("conflict", f"the voice library is already being added (job {busy[0].id})")
+            title = title or "add the voice library"
         job = Job(id=time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6], kind=kind, title=title, payload=payload, owner=os.getpid())
         with self.lock:
             self.jobs[job.id] = job
@@ -558,6 +566,18 @@ class JobManager:
         except installer.InstallError as e:
             raise FireVoiceError("internal", f"{e} (full log: install.log)")
         j.result["files"] = ["install.log"]
+
+    def _run_voices(self, j: Job, cancel: threading.Event) -> None:
+        """Download the voice library and add its voices (voicepack.install)."""
+        from . import voicepack
+        from .service import FireVoiceError
+        from .types import Cancelled
+        try:
+            j.result = voicepack.install(lambda done, total, msg: self._progress(j, done, max(total, 1), msg), cancel)
+        except voicepack.VoicePackCancelled:
+            raise Cancelled("cancelled")
+        except voicepack.VoicePackError as e:
+            raise FireVoiceError("internal", str(e))
 
     def _run_style_refs(self, j: Job, cancel: threading.Event) -> None:
         """Build a voice's own clip for each listed style, one by one."""

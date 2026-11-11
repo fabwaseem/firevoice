@@ -433,8 +433,34 @@ fn run_logged(app: &AppHandle, log: &Path, label: &str, cmd: &mut Command, on_li
     if status.success() {
         Ok(())
     } else {
-        Err(format!("{label} failed ({status}): {}", lock(&tail).join(" | ")))
+        let tail = lock(&tail).join(" | ");
+        Err(friendly(&tail).unwrap_or_else(|| format!("{label} failed ({status}): {tail}")))
     }
+}
+
+/// "C:" for the first `C:\...` or `C:/...` in a text (the drive an error is about), if any.
+fn drive_in(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    (0..b.len().saturating_sub(2))
+        .find(|&i| b[i].is_ascii_alphabetic() && b[i + 1] == b':' && (b[i + 2] == b'\\' || b[i + 2] == b'/') && (i == 0 || !b[i - 1].is_ascii_alphanumeric()))
+        .map(|i| format!("{}:", (b[i] as char).to_ascii_uppercase()))
+}
+
+/// A plain-language reason for a failed setup command, from the last lines it printed (None when nothing is recognised).
+fn friendly(tail: &str) -> Option<String> {
+    let t = tail.to_lowercase();
+    let has = |keys: &[&str]| keys.iter().any(|k| t.contains(k));
+    if has(&["os error 112", "not enough space", "no space left", "enospc", "disk is full"]) {
+        let on = drive_in(tail).map(|d| format!(" on drive {d}")).unwrap_or_default();
+        return Some(format!("Not enough free disk space{on}. FireVoice needs about 12 GB free to set itself up. Free some space and try again."));
+    }
+    if has(&["access is denied", "os error 5", "permission denied"]) {
+        return Some("Windows would not let FireVoice write its files (an antivirus or a protected folder?). Allow FireVoice in your antivirus and try again.".into());
+    }
+    if has(&["error sending request", "connection refused", "connection reset", "timed out", "dns error", "failed to lookup", "name resolution", "network is unreachable", "tls handshake"]) {
+        return Some("FireVoice could not reach the download servers. Check your internet connection (and any proxy or firewall) and try again.".into());
+    }
+    None
 }
 
 /// The latest line of a step, for the progress screen.
@@ -706,11 +732,19 @@ fn parse_size(s: &str) -> u64 {
 }
 
 /// The downloader's "@@ {json}" lines.
-fn on_download_line(app: &AppHandle, line: &str) {
+fn on_download_line(app: &AppHandle, line: &str, problem: &Mutex<Option<String>>) {
     let Some(json) = line.strip_prefix("@@ ") else { return };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else { return };
     let name = v["name"].as_str().unwrap_or_default().to_string();
     match v["event"].as_str() {
+        Some("error") if v["code"].as_str() == Some("disk") => {
+            *lock(problem) = Some(format!(
+                "Not enough free disk space on {}: FireVoice needs about {:.0} GB free to set itself up and {:.1} GB is free. Free some space and try again.",
+                v["drive"].as_str().unwrap_or("the disk"),
+                v["need_gb"].as_f64().unwrap_or(12.0),
+                v["free_gb"].as_f64().unwrap_or(0.0)
+            ));
+        }
         Some("plan") => extras_update(app, true, |x| {
             let mut wheels: Vec<ExtrasItem> = v["items"]
                 .as_array()
@@ -813,7 +847,13 @@ fn finish_steps(app: &AppHandle, r: &Recipe, res: &Path, lock_file: &Path) -> Re
         .env_remove("PYTHONPATH")
         .env_remove("PYTHONHOME");
     let a = app.clone();
-    if let Err(e) = run_logged(app, &log, "Download", &mut fetch, Arc::new(move |l: &str| on_download_line(&a, l))) {
+    let problem: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let p2 = problem.clone();
+    if let Err(e) = run_logged(app, &log, "Download", &mut fetch, Arc::new(move |l: &str| on_download_line(&a, l, &p2))) {
+        // no room is the one failure uv cannot get around: say so now instead of failing again half way through its install
+        if let Some(msg) = lock(&problem).take() {
+            return Err(msg);
+        }
         log::warn!("the app's own torch download failed, uv downloads it instead: {e}");
         extras_update(app, true, |x| {
             for i in x.items.iter_mut().filter(|i| i.id.starts_with("wheel:") && i.state != "done") {
@@ -924,4 +964,34 @@ pub fn backend_finish_setup(app: AppHandle, st: State<Backend>) -> Result<(), St
 #[tauri::command]
 pub fn backend_extras_status(st: State<Backend>) -> Extras {
     lock(&st.extras).clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_full_disk_is_said_in_plain_words_and_names_the_drive() {
+        let m = friendly(r"failed to write to file `C:\Users\naeem\AppData\Local\uv\cache\x.dll`: There is not enough space on the disk. (os error 112)").unwrap();
+        assert!(m.starts_with("Not enough free disk space on drive C:"), "{m}");
+        assert!(friendly("OSError: [Errno 28] No space left on device").unwrap().starts_with("Not enough free disk space"));
+    }
+
+    #[test]
+    fn network_and_permission_failures_are_recognised() {
+        assert!(friendly("error sending request for url (https://download.pytorch.org/whl/cu128/)").unwrap().contains("internet connection"));
+        assert!(friendly("PermissionError: [WinError 5] Access is denied").unwrap().contains("Windows would not let"));
+    }
+
+    #[test]
+    fn anything_else_is_left_as_it_is() {
+        assert!(friendly("something nobody has seen before").is_none());
+    }
+
+    #[test]
+    fn the_drive_is_found_in_a_path() {
+        assert_eq!(drive_in(r"into `d:\x\y`").as_deref(), Some("D:"));
+        assert_eq!(drive_in("at E:/data").as_deref(), Some("E:"));
+        assert_eq!(drive_in("no path here, only a:b").as_deref(), None);
+    }
 }

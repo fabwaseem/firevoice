@@ -8,6 +8,7 @@ import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { OfflineBanner } from "./OfflineBanner";
 import { BackendManager } from "./BackendManager";
+import { FinishSetupBanner } from "./FinishSetupBanner";
 import { BackgroundSetup } from "./BackgroundSetup";
 import { usePlayer } from "@/stores/player";
 import { useStagger } from "@/lib/stagger";
@@ -56,6 +57,7 @@ export function AppShell() {
             className="main-scroll relative min-h-0 flex-1 overflow-y-auto px-8 pt-7 pb-6 transition-[padding] duration-300"
             style={{ paddingBottom: hasTrack ? 116 : 28 }}
           >
+            <FinishSetupBanner />
             <BackendManager />
             <OfflineBanner />
             <Suspense fallback={<PageLoading />}>

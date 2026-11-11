@@ -603,6 +603,19 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     def voices(language: Optional[str] = None, gender: Optional[str] = None, tag: Optional[str] = None, kind: Optional[str] = None, q: Optional[str] = None):
         return {"voices": svc.voice_list(language=language, gender=gender, tag=tag, q=q, kind=kind)}
 
+    @app.get("/api/v1/voices/library", dependencies=deps, tags=["voices"])
+    def voice_library():
+        """The ready-made voice library: how much of it this computer has (`present` of `count`, `installed` when
+        nothing is missing) and whether this version can download it (`available`)."""
+        from . import voicepack
+        return voicepack.status(svc.voices.root)
+
+    @app.post("/api/v1/voices/library", dependencies=deps, tags=["voices"], status_code=202)
+    def voice_library_install():
+        """Download the voice library and add its voices, as a background job (kind `voices`). Safe to repeat: voices you
+        have edited, renamed or deleted are left alone, and the default voice is set only when there is none."""
+        return svc.jobs.submit("voices", {})
+
     @app.post("/api/v1/voices", dependencies=deps, tags=["voices"], status_code=201)
     async def voice_add(file: UploadFile = File(...), name: str = Form(...), consent: bool = Form(False), description: str = Form(""),
                         gender: str = Form(""), language: str = Form(""), accent: str = Form(""), tags: str = Form(""), transcript: str = Form(""),

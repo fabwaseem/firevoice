@@ -117,11 +117,38 @@ export interface EnginePick {
   vram_gb?: number | null;
   model?: string | null;
   tier?: EngineTier | null;
+  /** estimated seconds to make one second of speech on this computer (below 1 is faster than real time) */
+  est_rtf?: number | null;
+}
+
+/** What this computer can run (from the server): the card, its memory, the system memory and the free disk space. */
+export interface Hardware {
+  gpu: string | null;
+  vram_gb: number | null;
+  vram_free_gb: number | null;
+  speed: number | null;
+  ram_gb: number | null;
+  cpu_cores: number | null;
+  disk_free_gb: number | null;
+  disk_path: string;
+}
+
+/** The ready-made voice library: how much of it this computer has, and whether it can be downloaded. */
+export interface VoiceLibraryStatus {
+  version: number;
+  count: number;
+  present: number;
+  missing: number;
+  installed: boolean;
+  bytes: number | null;
+  available: boolean;
 }
 
 export interface SetupReport {
   gpu: GPUInfo | null;
   vram_gb: number | null;
+  hardware: Hardware;
+  library: VoiceLibraryStatus;
   recommended: EnginePick;
   alternatives: EnginePick[];
   ffmpeg: string | null;
@@ -496,7 +523,7 @@ export interface STTResult {
   segments?: { start: number; end: number; text: string; speaker?: string }[];
 }
 
-export type JobKind = "tts" | "batch" | "design" | "previews" | "project" | "style_refs" | "dialogue" | "install" | "dub";
+export type JobKind = "tts" | "batch" | "design" | "previews" | "project" | "style_refs" | "dialogue" | "install" | "dub" | "voices";
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 
 export interface Job {
