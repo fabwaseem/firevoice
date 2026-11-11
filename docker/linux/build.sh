@@ -17,6 +17,8 @@ pnpm install --frozen-lockfile
 export CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=/work=firevoice"
 unset FIREVOICE_PLAIN_BACKEND
 
+# the build folder is a cache kept between runs: packages from an earlier version must not be picked up below
+rm -rf src-tauri/target/release/bundle
 pnpm tauri build --bundles "${FIREVOICE_BUNDLES:-appimage,deb,rpm}"
 
 mkdir -p /out

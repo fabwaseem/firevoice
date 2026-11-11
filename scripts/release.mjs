@@ -186,7 +186,8 @@ else {
 
 // ---- Linux: the same version, built in Docker (the updater reads the AppImage; the .deb and .rpm are for manual installs)
 const LINUX_FILE = /.(AppImage|AppImage.sig|deb|rpm)$/;
-const linuxFiles = () => readdirSync(dir).filter((f) => LINUX_FILE.test(f));
+// only this version's files: a cached build folder can still hold an earlier version's packages
+const linuxFiles = () => readdirSync(dir).filter((f) => LINUX_FILE.test(f) && f.includes(version));
 if (flag("--skip-linux")) info("Linux packages skipped");
 else if (linuxFiles().some((f) => f.endsWith(".AppImage")) && !flag("--rebuild") && (dry || !existsSync(DRY_MARK))) info("Linux packages already in this folder");
 else {
@@ -197,7 +198,7 @@ else {
     restore();
     fail("the Linux build failed (use --skip-linux to release without it).");
   }
-  for (const f of readdirSync(tmp)) if (LINUX_FILE.test(f)) copyFileSync(join(tmp, f), join(dir, f));
+  for (const f of readdirSync(tmp)) if (LINUX_FILE.test(f) && f.includes(version)) copyFileSync(join(tmp, f), join(dir, f));
   rmSync(tmp, { recursive: true, force: true });
 }
 restore();
