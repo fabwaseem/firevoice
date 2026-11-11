@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.9.0 (2026-11-11)
+
+Dictation now writes what you meant, in any language.
+
+- **Writing assistant.** A small writing model on your computer polishes every dictation: punctuation, grammar, no false starts, numbered lists, in the style of the app you are typing in (casual for chat, formal for email, exact for code). It downloads by itself after setup when your computer suits it, and adds about a tenth of a second on a graphics card.
+- **Translate as you dictate.** Speak Urdu, Spanish or any language and have it written in the language you choose.
+- **Edit by voice.** Select text in any app, press the command keys and say what to do: "make it shorter", "more polite", "translate to German".
+- **Correct yourself out loud.** Say "no wait" or "scratch that" and only the correction goes in. Say "comma", "question mark", "new line" and more.
+- **Your words and snippets.** Teach FireVoice the names and terms you use, fix words it keeps getting wrong, and type whole texts from a short phrase ("my email").
+- **Better languages.** Pick the languages you speak and Automatic only chooses among them, checks again when you stop, and keeps Urdu in Urdu script. All 100 speech languages are available, and other languages work without an NVIDIA card too.
+- **Hands-free and whisper mode.** Double-tap the keys to keep listening; whisper mode hears you when you speak softly.
+- **Searchable history.** Every dictation is kept on your computer, with the app it went to, ready to copy again.
+- **Polished by default.** Dictations now go in when you stop, cleaned up. Live typing as you speak is still one click away.
+- Downloads show how much is left, the speed and the time remaining, and resume where they stopped.
+- Engine cards are simpler, and only an engine your computer cannot run says so.
+
 ## 1.8.1 (2026-11-11)
 
 FireVoice now runs on more computers, and on Linux.
