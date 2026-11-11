@@ -27,13 +27,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSettings, type Theme } from "@/stores/settings";
+import { FEATURES_VERSION, useDictation } from "@/stores/dictation";
 import { useHealth, useSystem } from "@/lib/api/hooks";
 import { Tooltip } from "@/components/ui";
 import { ServerStatus } from "./ServerStatus";
 import { UpdatePill } from "./UpdateGate";
 import { Logo } from "./Logo";
 
-type Item = { to: string; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; end?: boolean; badge?: "jobs" };
+type Item = { to: string; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; end?: boolean; badge?: "jobs" | "dictation" };
 
 const GROUPS: { title?: string; items: Item[] }[] = [
   { items: [{ to: "/", label: "Home", icon: Home, end: true }] },
@@ -47,7 +48,7 @@ const GROUPS: { title?: string; items: Item[] }[] = [
       { to: "/dub", label: "Dubbing", icon: Languages },
       { to: "/sound", label: "Sound", icon: Waves },
       { to: "/transcribe", label: "Transcribe", icon: Mic },
-      { to: "/dictation", label: "Dictation", icon: Keyboard },
+      { to: "/dictation", label: "Dictation", icon: Keyboard, badge: "dictation" },
       { to: "/tools", label: "Tools", icon: Wrench },
     ],
   },
@@ -83,7 +84,7 @@ function useActiveJobs(): number {
   return (jobs?.running ?? 0) + (jobs?.queued ?? 0);
 }
 
-function NavItem({ item, collapsed, count }: { item: Item; collapsed: boolean; count?: number }) {
+function NavItem({ item, collapsed, count, fresh }: { item: Item; collapsed: boolean; count?: number; fresh?: boolean }) {
   const Icon = item.icon;
   // the active state is worked out here, not through NavLink's className function: the tooltip's trigger
   // (Radix Slot) merges className as a string, which turned that function into text in compact mode
@@ -105,6 +106,17 @@ function NavItem({ item, collapsed, count }: { item: Item; collapsed: boolean; c
       >
         <Icon className="size-[18px] shrink-0 transition-transform duration-150 group-active:scale-90" strokeWidth={isActive ? 2.2 : 1.85} />
         {!collapsed && <span className="truncate">{item.label}</span>}
+        {fresh && !count && (
+          <span
+            className={cn(
+              "rounded-full fire-gradient font-semibold text-white",
+              collapsed ? "absolute top-0.5 right-0.5 size-2" : "ml-auto px-1.5 py-px text-[10px] tracking-wide uppercase",
+            )}
+            aria-label="New features"
+          >
+            {!collapsed && "New"}
+          </span>
+        )}
         {!!count && (
           <span
             className={cn(
@@ -173,6 +185,7 @@ export function Sidebar() {
   const collapsed = useSettings((s) => s.sidebarCollapsed);
   const set = useSettings((s) => s.set);
   const activeJobs = useActiveJobs();
+  const dictationNew = useDictation((s) => s.config.featuresVisited < FEATURES_VERSION);
   const toggle = () => set({ sidebarCollapsed: !collapsed });
 
   return (
@@ -241,7 +254,13 @@ export function Sidebar() {
               ))}
             <div className="flex flex-col gap-0.5">
               {g.items.map((it) => (
-                <NavItem key={it.to} item={it} collapsed={collapsed} count={it.badge === "jobs" ? activeJobs : undefined} />
+                <NavItem
+                  key={it.to}
+                  item={it}
+                  collapsed={collapsed}
+                  count={it.badge === "jobs" ? activeJobs : undefined}
+                  fresh={it.badge === "dictation" && dictationNew}
+                />
               ))}
             </div>
           </div>

@@ -24,13 +24,16 @@ function jobSubtitle(j: Job, nameOf: (id?: string | null) => string, voiceName: 
   return [nameOf(engine), voiceName(voice)].filter(Boolean).join(" · ") || undefined;
 }
 
+const NOT_RENDERS = new Set<string>(["install", "voices", "writer"]);
+
 export function RecentRendersCard() {
-  const jobs = useJobs({ limit: 6 });
+  const jobs = useJobs({ limit: 20 });
   const nameOf = useEngineName();
   const voices = useVoices();
   const currentId = usePlayer((s) => s.track?.id);
   const playing = usePlayer((s) => s.playing);
-  const list = jobs.data?.jobs ?? [];
+  // renders only: installs, the voice library and the writing assistant are not things you made
+  const list = (jobs.data?.jobs ?? []).filter((j) => !NOT_RENDERS.has(j.kind)).slice(0, 6);
   const voiceName = (id?: string) => (id ? (voices.data ?? []).find((v) => v.voice_id === id)?.name || (id === "default" ? "Default voice" : id) : undefined);
 
   const play = (j: Job) => {

@@ -67,7 +67,7 @@ export function DictationHistoryPanel() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
           { icon: Type, label: query ? "Words in these" : "Words dictated", value: d ? d.words.toLocaleString() : "–" },
-          { icon: Zap, label: "Speaking speed (words a minute)", value: wpm ? `${wpm} wpm` : "–" },
+          { icon: Zap, label: "Speaking speed", value: wpm ? `${wpm} wpm` : "–" },
           { icon: Clock, label: "Time saved over typing", value: saved >= 1 ? `${Math.round(saved)} min` : "–" },
         ].map(({ icon: Icon, label, value }) => (
           <Card key={label} className="flex items-center gap-3 px-4 py-3.5">

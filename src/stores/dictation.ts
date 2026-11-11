@@ -42,7 +42,14 @@ export interface DictationConfig {
   languages: string[];
   /** translated dictation: write what is said in this language ("" = off) */
   translateTo: string;
+  /** the newest batch of dictation features the user has opened the page since (the sidebar's "New" goes) */
+  featuresVisited: number;
+  /** ...and has closed the "What's new" card for */
+  featuresSeen: number;
 }
+
+/** Raise when dictation gains features worth pointing out: the sidebar says "New" and the page shows what came. */
+export const FEATURES_VERSION = 1;
 
 export type AppKind = "messages" | "work chat" | "email" | "code" | "documents" | "other";
 export type WritingStyle = "formal" | "casual" | "very casual" | "code";
@@ -87,6 +94,8 @@ export const DEFAULT_DICTATION: DictationConfig = {
   assistantDeclined: false,
   languages: [],
   translateTo: "",
+  featuresVisited: 0,
+  featuresSeen: 0,
 };
 
 const KEEP = 100;

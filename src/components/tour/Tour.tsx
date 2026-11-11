@@ -79,6 +79,13 @@ const STEPS: Step[] = [
     ),
   },
   {
+    target: "dictation-tabs",
+    route: "/dictation",
+    side: "bottom",
+    title: "Make it yours",
+    body: "Add the names you use and snippets you say often, let the writing assistant polish what you dictate (or translate it), and find every dictation again in History.",
+  },
+  {
     target: "nav-/settings",
     route: "/dictation",
     side: "right",

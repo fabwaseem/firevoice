@@ -10,11 +10,12 @@ import { DictationAssistantPanel } from "@/components/dictation/DictationAssista
 import { DictationHistoryPanel } from "@/components/dictation/DictationHistory";
 import { DictationLanguages } from "@/components/dictation/DictationLanguages";
 import { DictationTranslate } from "@/components/dictation/DictationTranslate";
+import { DictationWhatsNew, type DictationTab } from "@/components/dictation/DictationWhatsNew";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { dictation, hotkeyLabels } from "@/lib/dictation";
 import { cn } from "@/lib/utils";
-import { useDictation, useDictationLive, type DictationConfig } from "@/stores/dictation";
+import { FEATURES_VERSION, useDictation, useDictationLive, type DictationConfig } from "@/stores/dictation";
 
 
 function Row({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
@@ -265,7 +266,7 @@ function SettingsCard() {
   );
 }
 
-type Tab = "setup" | "dictionary" | "snippets" | "assistant" | "history";
+type Tab = DictationTab;
 const TABS: { value: Tab; label: string; icon: typeof Mic }[] = [
   { value: "setup", label: "Setup", icon: Settings2 },
   { value: "dictionary", label: "Dictionary", icon: BookA },
@@ -283,12 +284,22 @@ export function DictationView() {
       /* private mode: the tab is simply not remembered */
     }
   }, [tab]);
+  // the page was opened: the sidebar stops saying "New"
+  useEffect(() => {
+    if (useDictation.getState().config.featuresVisited < FEATURES_VERSION) useDictation.getState().set({ featuresVisited: FEATURES_VERSION });
+  }, []);
+  const open = (t: Tab) => {
+    setTab(t);
+    // once the tab has rendered: bring it into view (the card above can be taller than the window)
+    setTimeout(() => document.querySelector('[data-tour="dictation-tabs"]')?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  };
   return (
     <div className="mx-auto max-w-[860px] fade-up">
       <PageHeader title="Dictation" subtitle="Speak in any program and FireVoice writes what you meant." />
       <div className="flex flex-col gap-4">
         <Stage />
-        <nav role="tablist" aria-label="Dictation" className="flex gap-1 overflow-x-auto rounded-[14px] bg-surface-2 p-1">
+        <DictationWhatsNew open={open} />
+        <nav role="tablist" aria-label="Dictation" data-tour="dictation-tabs" className="flex gap-1 overflow-x-auto rounded-[14px] bg-surface-2 p-1">
           {TABS.map(({ value, label, icon: Icon }) => (
             <button
               key={value}

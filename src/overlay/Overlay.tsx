@@ -37,6 +37,39 @@ function chime(up: boolean) {
   }
 }
 
+/** Tips for the first dictations, shown while listening before any words appear: one per dictation, in turn, and only
+ * the ones that fit the settings. The count lives in its own key (the main window owns the settings' storage). */
+const TIP_KEY = "firevoice.dictation.tips";
+const TIP_DICTATIONS = 30;
+
+function tipsFor(cfg: DictationConfig): string[] {
+  const out: string[] = [];
+  if (cfg.commands) {
+    out.push("Tip: say “no wait” or “scratch that” to correct yourself");
+    out.push("Tip: say “comma”, “question mark” or “new line”");
+  }
+  if (cfg.commandHotkey) out.push(`Tip: select text and press ${hotkeyLabels(cfg.commandHotkey).join(" + ")} to edit it by voice`);
+  if (cfg.activation === "hold") out.push("Tip: double-tap the keys to keep listening hands-free");
+  if (cfg.translateTo) out.push("Tip: speak in any language, it is written in your chosen one");
+  else out.push("Tip: Translate in Dictation settings writes what you say in another language");
+  out.push("Tip: snippets type a whole text from a short phrase (Dictation, Snippets)");
+  out.push("Tip: add names FireVoice gets wrong in Dictation, Dictionary");
+  return out;
+}
+
+/** The tip for the dictation that is starting, or null once enough dictations have shown one. */
+function nextTip(cfg: DictationConfig): string | null {
+  try {
+    const n = Number(localStorage.getItem(TIP_KEY) ?? "0") || 0;
+    if (n >= TIP_DICTATIONS) return null;
+    localStorage.setItem(TIP_KEY, String(n + 1));
+    const tips = tipsFor(cfg);
+    return tips[n % tips.length] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** The small window that floats over other programs while dictating: the voice's level, the words as they form,
@@ -48,6 +81,7 @@ export function Overlay() {
   const [tentative, setTentative] = useState("");
   const [seconds, setSeconds] = useState(0);
   const [config, setConfig] = useState(savedConfig);
+  const [tip, setTip] = useState<string | null>(null);
   const bars = useRef<HTMLDivElement>(null);
   const levels = useRef<number[]>(Array(BARS).fill(0));
   const phaseRef = useRef(phase);
@@ -60,6 +94,7 @@ export function Overlay() {
         const was = phaseRef.current;
         if (e.state === "starting") {
           setConfig(cfg);
+          setTip(nextTip(cfg));
           setText("");
           setTentative("");
           setSeconds(0);
@@ -125,6 +160,7 @@ export function Overlay() {
   return (
     <div className="ov-stage" role="status" aria-live="polite">
       {phase === "error" && message && <div className="ov-glass ov-text ov-in">{message}</div>}
+      {phase === "listening" && !showText && tip && <div className="ov-glass ov-text ov-tip ov-in">{tip}</div>}
       {showText && (
         <div className="ov-glass ov-text ov-in">
           <span>

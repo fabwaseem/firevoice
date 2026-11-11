@@ -167,3 +167,9 @@ body,
     animation: none;
   }
 }
+
+/* a tip for the first dictations, while nothing has been said yet: quieter than the words */
+.ov-tip {
+  font-size: 12px;
+  opacity: 0.72;
+}
