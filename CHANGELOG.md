@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.2 (2026-11-11)
+
+- **Clearer update notes.** "What's new" in the update card now shows proper formatting: lists, bold text and links, instead of raw symbols.
+- **The update stays in sight.** If you close the update card, a pill in the sidebar ("Update available") remains. Click it to reopen the card. It shows the download progress and turns green with "Restart to update" when the update is ready.
+- **Title bar matches the app.** The window's title bar now follows FireVoice's own theme (light, dark or system), so a light app no longer sits under a dark title bar.
+
 ## 1.7.1 (2026-11-11)
 
 - **Updates are noticed while FireVoice runs.** It checks every 30 minutes, when you bring the window back (for example from the tray) and when your connection returns. If the window is hidden, a notification tells you a new version is ready. You still choose when to download and install.
