@@ -1,24 +1,26 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AudioLines, Clock, Gauge, Layers, ListPlus, Mic2, Palette, Radio, Repeat, Square, Zap } from "lucide-react";
+import { AudioLines, Clock, Gauge, ListPlus, Mic2, Palette, Repeat, Square, Zap } from "lucide-react";
 import { useCreateJob, useEngines, useHealth, useOptions, useStyles, useEngineName } from "@/lib/api/hooks";
 import type { TTSRequest } from "@/lib/api/types";
 import { useStudio } from "@/stores/studio";
 import { useSettings } from "@/stores/settings";
 import { PageHeader } from "@/components/shell/PageHeader";
-import { Badge, Button, Card, Label, ProgressBar, Segmented, Skeleton, Tooltip } from "@/components/ui";
+import { Badge, Button, Card, Label, ProgressBar, Skeleton, Tooltip } from "@/components/ui";
 import { ScriptEditor } from "@/components/speak/ScriptEditor";
 import { VoicePicker } from "@/components/speak/VoicePicker";
 import { StylePicker } from "@/components/speak/StylePicker";
+import { actsStyles, PLAIN_STYLE } from "@/lib/styles";
 import { SettingsPanel } from "@/components/speak/SettingsPanel";
 import { ReadAlong } from "@/components/speak/ReadAlong";
 import { useRender } from "@/components/speak/useRender";
 import { TakesPanel, SubtitleButtons } from "@/components/speak/TakesPanel";
-import { fmtDuration, truncate } from "@/lib/utils";
+import { cn, fmtDuration, truncate } from "@/lib/utils";
 
 export function SpeakView() {
   // Only what this view shows; the full request is read from the store when a render starts.
   const hasText = useStudio((x) => !!x.text.trim());
+  const wordCount = useStudio((x) => x.text.replace(/\[[^\]]*\]/g, " ").split(/\s+/).filter(Boolean).length);
   const studioEngine = useStudio((x) => x.engine);
   const voice = useStudio((x) => x.voice);
   const styleName = useStudio((x) => x.style);
@@ -27,11 +29,9 @@ export function SpeakView() {
   const options = useOptions();
   const enginesQ = useEngines();
   const stylesQ = useStyles();
-  const stream = useSettings((x) => x.streamByDefault);
   const format = useSettings((x) => x.format);
-  const setSettings = useSettings((x) => x.set);
   const createJob = useCreateJob();
-  const { state, busy, renderWhole, renderStream, stop, replaceResult } = useRender();
+  const { state, busy, renderWhole, stop, replaceResult } = useRender();
 
   const engines = enginesQ.data ?? options.data?.engines ?? [];
   const styles = stylesQ.data ?? options.data?.styles ?? [];
@@ -57,7 +57,8 @@ export function SpeakView() {
       text: s.text,
       engine: s.engine,
       voice: s.voice,
-      style: s.style,
+      // styles are a Firebrand feature: other engines read in the voice's own delivery
+      style: actsStyles(engine) ? s.style : PLAIN_STYLE,
       pace: s.pace,
       seed: s.seed,
       language: s.language,
@@ -79,7 +80,7 @@ export function SpeakView() {
   const canRender = hasText && !offline && !busy;
   const go = () => {
     const request = buildRequest();
-    return stream ? renderStream(request) : renderWhole(request);
+    return renderWhole(request);
   };
   const queueJob = () => {
     const { format: f, sample_rate, ...req } = buildRequest();
@@ -105,42 +106,34 @@ export function SpeakView() {
     <div className="mx-auto max-w-[1400px]">
       <PageHeader
         title="Speak"
-        subtitle="Write a script, pick a voice and a delivery, and render it on your GPU."
-        actions={
-          <Segmented
-            ariaLabel="Render mode"
-            value={stream ? "stream" : "file"}
-            onChange={(v) => setSettings({ streamByDefault: v === "stream" })}
-            options={[
-              { value: "stream", label: "Stream", icon: <Radio className="size-3.5" /> },
-              { value: "file", label: "Whole file", icon: <Layers className="size-3.5" /> },
-            ]}
-          />
-        }
+        subtitle="Write a script, pick a voice, and render it on your GPU."
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* Left: voice, style, script, render */}
         <div className="flex min-w-0 flex-col gap-4">
           <Card className="p-4">
-            <div className="grid gap-4 xl:grid-cols-2">
+            {/* styles are a Firebrand feature: with any other engine the voice picker has the whole row */}
+            <div className={cn("grid gap-4", actsStyles(engine) && "xl:grid-cols-2")}>
               <div>
                 <Label icon={<Mic2 />}>Voice</Label>
                 <VoicePicker value={voice} onChange={(v) => setStudio({ voice: v })} engine={engine} disabled={busy} />
               </div>
-              <div className="min-w-0">
-                <Label icon={<Palette />}>Style</Label>
-                {stylesQ.isLoading && !styles.length ? (
-                  <Skeleton className="h-[62px] w-full rounded-xl" />
-                ) : (
-                  <StylePicker styles={styles} value={styleName} onChange={(st) => setStudio({ style: st, instruct: null })} disabled={busy} />
-                )}
-              </div>
+              {actsStyles(engine) && (
+                <div className="min-w-0">
+                  <Label icon={<Palette />}>Style</Label>
+                  {stylesQ.isLoading && !styles.length ? (
+                    <Skeleton className="h-[62px] w-full rounded-xl" />
+                  ) : (
+                    <StylePicker styles={styles} value={styleName} onChange={(st) => setStudio({ style: st, instruct: null })} disabled={busy} />
+                  )}
+                </div>
+              )}
             </div>
           </Card>
 
           <Card raised data-tour="speak-editor" className="flex min-h-[420px] flex-col p-4">
-            <ScriptEditor supportsTags={!!engine?.tags} disabled={busy} className="flex-1" />
+            <ScriptEditor supportsTags={!!engine?.tags} supportsStyles={actsStyles(engine)} disabled={busy} className="flex-1" />
           </Card>
 
           {/* Render bar */}
@@ -150,7 +143,7 @@ export function SpeakView() {
                 Stop <span className="ml-1 text-[11px] opacity-60">Esc</span>
               </Button>
             ) : (
-              <Tooltip content={stream ? "Hear it as each sentence finishes" : "Render the whole file, mastered"} shortcut="Ctrl ↵">
+              <Tooltip content="Render the whole script: every sentence checked and mastered" shortcut="Ctrl ↵">
                 <Button size="lg" variant="primary" onClick={go} disabled={!canRender} leading={<AudioLines className="size-[18px]" />} className="min-w-44">
                   {state.phase === "done" ? "Render again" : "Render"}
                 </Button>
@@ -162,7 +155,14 @@ export function SpeakView() {
               </Button>
             </Tooltip>
             <div className="min-w-0 flex-1">
-              <RenderStatus phase={state.phase} got={state.chunksGot} total={state.chunksTotal} error={state.error} engineLoaded={!!engine?.loaded} />
+              <RenderStatus
+                phase={state.phase}
+                startedAt={state.startedAt}
+                words={wordCount}
+                rtf={engine?.speed_rtf ?? engine?.tier?.rtf ?? null}
+                error={state.error}
+                engineLoaded={!!engine?.loaded}
+              />
             </div>
           </div>
 
@@ -210,20 +210,40 @@ function Stat({ icon, label, value }: { icon?: React.ReactNode; label: string; v
   );
 }
 
-function RenderStatus({ phase, got, total, error, engineLoaded }: { phase: string; got: number; total: number; error: string | null; engineLoaded: boolean }) {
-  if (phase === "starting" || phase === "rendering") {
+function RenderStatus({ phase, startedAt, words, rtf, error, engineLoaded }: {
+  phase: string;
+  startedAt?: number;
+  words: number;
+  rtf?: number | null;
+  error: string | null;
+  engineLoaded: boolean;
+}) {
+  const working = phase === "starting" || phase === "rendering";
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!working) return;
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [working]);
+  if (working) {
+    const elapsed = startedAt ? Math.max(0, (now - startedAt) / 1000) : 0;
+    // a rough expectation: about 2.6 spoken words a second, made at the engine's real-time factor, sentences in
+    // parallel (so never less than a few seconds); the bar never claims to be done before the render is
+    const estimate = engineLoaded && rtf ? Math.max(4, (words / 2.6) * rtf * 1.4) : null;
+    const frac = estimate ? Math.min(0.95, elapsed / estimate) : null;
+    const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
     return (
-      <div className="flex items-center gap-3 text-[13px] text-muted">
-        <span className="size-2 animate-pulse rounded-full bg-fire" />
-        {engineLoaded ? (phase === "rendering" ? "Rendering every sentence in parallel…" : "Rendering the first sentence…") : "Loading the engine first. The first load can take a minute or two…"}
-      </div>
-    );
-  }
-  if (phase === "streaming") {
-    return (
-      <div className="flex items-center gap-3">
-        <ProgressBar value={total ? got / total : 0} className="max-w-64" tone="ok" />
-        <span className="text-[12.5px] text-muted tabular">{got} / {total} sentences</span>
+      <div className="flex min-w-0 items-center gap-3 text-[13px] text-muted">
+        {frac != null ? (
+          <ProgressBar value={frac} className="max-w-48" />
+        ) : (
+          <span className="size-2 shrink-0 animate-pulse rounded-full bg-fire" />
+        )}
+        <span className="shrink-0 tabular text-ink-2">
+          {clock(elapsed)}
+          {estimate && elapsed < estimate * 1.5 && <span className="text-faint"> / ~{clock(estimate)}</span>}
+        </span>
+        <span className="truncate">{engineLoaded ? "Rendering and checking every sentence" : "Loading the engine (the first time takes a minute or two)"}</span>
       </div>
     );
   }

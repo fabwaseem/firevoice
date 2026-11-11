@@ -7,6 +7,7 @@ import { errMessage, useStyles, useVoices, useEngines } from "@/lib/api/hooks";
 import type { DialogueResult } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { useStudio } from "@/stores/studio";
+import { useActsStyles } from "@/lib/styles";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { ArtTile, AudioPlayer, Badge, Button, Card, EmptyState, Label, NativeSelect, Slider, Textarea } from "@/components/ui";
 import { cn, fmtTime } from "@/lib/utils";
@@ -71,7 +72,14 @@ export function DialogueView() {
   // Speak's engine is the default for every speaker, but only when it is a speech engine that is set up
   const speechEngines = useEngines("tts");
   const engine = studioEngine && (speechEngines.data ?? []).some((e) => e.name === studioEngine && e.ready) ? studioEngine : undefined;
-  const body = () => ({ script, cast, gap_ms: gap, defaults: { engine } });
+  // styles are a Firebrand feature: with another engine every speaker reads in their voice's own delivery
+  const { acts: styled } = useActsStyles(engine);
+  const body = () => ({
+    script,
+    cast: styled ? cast : Object.fromEntries(Object.entries(cast).map(([n, c]) => [n, { voice: c.voice }])),
+    gap_ms: gap,
+    defaults: { engine },
+  });
   // the mix's object URL is released when a new mix replaces it (it stays while you are on other pages)
   useReleaseOnReplace(result?.url);
 
@@ -139,10 +147,12 @@ export function DialogueView() {
                     <NativeSelect aria-label={`Voice for ${n}`} value={c.voice ?? ""} onChange={(e) => setCast({ ...cast, [n]: { ...c, voice: e.target.value } })}>
                       {(voices.data ?? []).map((x) => <option key={x.voice_id} value={x.voice_id}>{x.name || x.voice_id}</option>)}
                     </NativeSelect>
+{styled && (
                     <NativeSelect aria-label={`Style for ${n}`} className="w-36 shrink-0" value={c.style ?? ""} onChange={(e) => setCast({ ...cast, [n]: { ...c, style: e.target.value || undefined } })}>
                       <option value="">default style</option>
                       {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
                     </NativeSelect>
+                    )}
                     <Button size="icon-sm" variant="ghost" aria-label={`Hear ${n}'s voice`} onClick={() => {
                       if (!c.voice) return;
                       preview.current?.pause();

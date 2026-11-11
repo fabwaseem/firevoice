@@ -89,13 +89,14 @@ export function PlayerBar() {
         {track && (
           <motion.div
             key="player"
-            initial={{ y: 80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
+            // slide only: an ancestor that fades (opacity) cuts the bar's backdrop blur off from the page behind it
+            initial={{ y: 120 }}
+            animate={{ y: 0 }}
+            exit={{ y: 120 }}
             transition={{ type: "spring", stiffness: 380, damping: 34 }}
             className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-4 pb-4"
           >
-            <div className="glass pointer-events-auto mx-auto flex h-[76px] max-w-[1400px] items-center gap-4 rounded-2xl px-4 shadow-lg">
+            <div className="player-glass pointer-events-auto mx-auto flex h-[76px] max-w-[1400px] items-center gap-4 rounded-2xl px-4 shadow-lg">
               {/* Now playing */}
               <button
                 type="button"

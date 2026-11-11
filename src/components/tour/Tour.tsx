@@ -49,7 +49,7 @@ const STEPS: Step[] = [
     route: "/speak",
     side: "right",
     title: "Write, then press play",
-    body: "Type or paste your script here, choose a voice and a delivery on the right, and FireVoice reads it out. Long scripts are fine.",
+    body: "Type or paste your script here, choose a voice above, and FireVoice reads it out. Long scripts are fine. Delivery styles (excited, sad, whisper) come with the Firebrand engine.",
   },
   {
     target: "nav-/voices",

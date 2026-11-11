@@ -5,10 +5,10 @@ import { Button, Tooltip } from "@/components/ui";
 import { SAMPLE_TEXT, useStudio } from "@/stores/studio";
 import { cn } from "@/lib/utils";
 
-const MARKUP: { label: string; insert: string; hint: string; needsTags?: boolean }[] = [
+const MARKUP: { label: string; insert: string; hint: string; needsTags?: boolean; needsStyles?: boolean }[] = [
   { label: "Pause", insert: "[pause 500ms]", hint: "Silence of a given length" },
   { label: "Pace", insert: "[pace 0.9]", hint: "Change tempo from here on" },
-  { label: "Style", insert: "[style dramatic]", hint: "Switch delivery style mid-script" },
+  { label: "Style", insert: "[style dramatic]", hint: "Switch delivery style mid-script", needsStyles: true },
   { label: "¶", insert: "\n\n", hint: "Paragraph break (longer pause)" },
   { label: "[laugh]", insert: "[laugh]", hint: "Paralinguistic tag", needsTags: true },
   { label: "[sigh]", insert: "[sigh]", hint: "Paralinguistic tag", needsTags: true },
@@ -19,7 +19,7 @@ const MARKUP: { label: string; insert: string; hint: string; needsTags?: boolean
   { label: "[groan]", insert: "[groan]", hint: "Paralinguistic tag", needsTags: true },
 ];
 
-export function ScriptEditor({ supportsTags, disabled, className }: { supportsTags: boolean; disabled?: boolean; className?: string }) {
+export function ScriptEditor({ supportsTags, supportsStyles = true, disabled, className }: { supportsTags: boolean; supportsStyles?: boolean; disabled?: boolean; className?: string }) {
   const text = useStudio((s) => s.text);
   const set = useStudio((s) => s.set);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -51,7 +51,7 @@ export function ScriptEditor({ supportsTags, disabled, className }: { supportsTa
     <div className={cn("flex min-h-0 flex-col", className)}>
       <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
         <span className="mr-1 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">Insert</span>
-        {MARKUP.filter((m) => !m.needsTags || supportsTags).map((m) => (
+        {MARKUP.filter((m) => (!m.needsTags || supportsTags) && (!m.needsStyles || supportsStyles)).map((m) => (
           <Tooltip key={m.label} content={m.hint}>
             <button
               type="button"

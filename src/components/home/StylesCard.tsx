@@ -3,6 +3,7 @@ import { Card, CardBody, CardHeader, Chip, Skeleton } from "@/components/ui";
 import { useStyles } from "@/lib/api/hooks";
 import { useStudio } from "@/stores/studio";
 import { titleCase } from "@/lib/utils";
+import { useActsStyles } from "@/lib/styles";
 
 export function StylesCard() {
   const styles = useStyles();
@@ -10,6 +11,9 @@ export function StylesCard() {
   const set = useStudio((s) => s.set);
   const navigate = useNavigate();
   const list = (styles.data ?? []).slice(0, 10);
+  // styles are a Firebrand feature: with another engine there is nothing to pick here
+  const { acts, loading } = useActsStyles(useStudio((s) => s.engine));
+  if (!acts && !loading) return null;
 
   return (
     <Card>

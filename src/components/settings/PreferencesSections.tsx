@@ -34,7 +34,6 @@ export function AppearanceSection() {
 
 export function RenderingSection() {
   const format = useSettings((s) => s.format);
-  const stream = useSettings((s) => s.streamByDefault);
   const autoPlay = useSettings((s) => s.autoPlay);
   const advanced = useSettings((s) => s.showAdvanced);
   const set = useSettings((s) => s.set);
@@ -56,7 +55,6 @@ export function RenderingSection() {
             options={FORMATS.map((f) => ({ value: f, label: f.toUpperCase() }))}
           />
         </div>
-        <Switch checked={stream} onChange={(v) => set({ streamByDefault: v })} label="Stream renders" description="Start playback as the first sentence lands." />
         <Switch checked={autoPlay} onChange={(v) => set({ autoPlay: v })} label="Auto-play finished renders" />
         <Switch checked={advanced} onChange={(v) => set({ showAdvanced: v })} label="Open Quality and Output in Speak" description="Show these sections of Speak's settings expanded instead of folded away." />
       </CardBody>

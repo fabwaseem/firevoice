@@ -4,10 +4,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Check, ClipboardCheck, Download, Layers, Lock, LockOpen, Mic2, Package, Palette, Pause, Play, Plus, RotateCcw, Timer, Trash2, Zap } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { errMessage, qk, useJob, useProject, useStyles, useVoices } from "@/lib/api/hooks";
+import { errMessage, qk, useEngines, useJob, useProject, useStyles, useVoices } from "@/lib/api/hooks";
 import type { AudiobookCheck, ChapterEdit, Paragraph, ParagraphStatus, Project } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";
 import { usePlayer } from "@/stores/player";
+import { actsStyles, StylesNeedFirebrand } from "@/lib/styles";
 import { LoadError } from "@/components/shell/PageHeader";
 import { Badge, Button, Card, ConfirmDialog, Input, Label, NativeSelect, Skeleton, Switch, Textarea, Tooltip } from "@/components/ui";
 import { TakesPanel } from "@/components/speak/TakesPanel";
@@ -46,8 +47,11 @@ export function ProjectEditorView() {
   const audio = useRef<HTMLAudioElement | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const job = useJob(jobId);
+  const engines = useEngines();
 
   const p = q.data;
+  // styles are a Firebrand feature: with another engine the project reads in each voice's own delivery
+  const styled = actsStyles((engines.data ?? []).find((e) => e.name === p?.defaults.engine));
   // the editable copy starts from the server and then follows the user's typing
   useEffect(() => {
     if (p && draft === null) {
@@ -286,7 +290,7 @@ export function ProjectEditorView() {
 
       <details className="mb-4 rounded-2xl border border-line bg-surface p-4">
         <summary className="cursor-pointer text-[14px] font-semibold text-ink">
-          Defaults <span className="ml-2 text-[12.5px] font-normal text-muted">voice {voiceName(p.defaults.voice)} · style {p.defaults.style ?? "conversational"} · used by every paragraph without its own</span>
+          Defaults <span className="ml-2 text-[12.5px] font-normal text-muted">voice {voiceName(p.defaults.voice)}{styled ? ` · style ${p.defaults.style ?? "conversational"}` : ""} · used by every paragraph without its own</span>
         </summary>
         <div className="mt-3 grid gap-3 md:grid-cols-4">
           <div><Label icon={<Mic2 />}>Voice</Label>
@@ -294,10 +298,15 @@ export function ProjectEditorView() {
               <option value="default">Default voice</option>
               {(voices.data ?? []).map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name || v.voice_id}</option>)}
             </NativeSelect></div>
-          <div><Label icon={<Palette />}>Style</Label>
-            <NativeSelect value={p.defaults.style ?? "conversational"} onChange={(e) => void setDefaults({ style: e.target.value })}>
-              {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
-            </NativeSelect></div>
+          {styled ? (
+            <div><Label icon={<Palette />}>Style</Label>
+              <NativeSelect value={p.defaults.style ?? "conversational"} onChange={(e) => void setDefaults({ style: e.target.value })}>
+                {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
+              </NativeSelect></div>
+          ) : (
+            <div className="md:col-span-1"><Label icon={<Palette />}>Style</Label>
+              <StylesNeedFirebrand offerSwitch={false} /></div>
+          )}
           <div><Label icon={<Timer />}>Pause between paragraphs (ms)</Label>
             <Input type="number" min={0} max={30000} defaultValue={p.defaults.paragraph_gap_ms ?? 700} onBlur={(e) => void setDefaults({ paragraph_gap_ms: Number(e.target.value) })} /></div>
           <div><Label icon={<Timer />}>Pause between chapters (ms)</Label>
@@ -354,10 +363,12 @@ export function ProjectEditorView() {
                             <option value="">Project voice</option>
                             {(voices.data ?? []).map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name || v.voice_id}</option>)}
                           </NativeSelect>
+{styled && (
                           <NativeSelect aria-label="Style for this paragraph" className="h-7 w-auto max-w-44 text-[12px]" value={para.style ?? ""} onChange={(e) => update({ style: e.target.value || null })}>
                             <option value="">Project style</option>
                             {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
                           </NativeSelect>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-start gap-0.5">

@@ -9,8 +9,6 @@ export interface Settings {
   theme: Theme;
   /** Default output format for Speak renders */
   format: "mp3" | "wav" | "flac" | "ogg" | "opus" | "m4a";
-  /** Stream renders sentence by sentence instead of waiting for the full file */
-  streamByDefault: boolean;
   /** Auto-play finished renders */
   autoPlay: boolean;
   /** Show engine parameter panel expanded */
@@ -56,7 +54,6 @@ export const useSettings = create<Settings>()(
       token: "",
       theme: "system",
       format: "mp3",
-      streamByDefault: true,
       autoPlay: true,
       showAdvanced: false,
       sidebarCollapsed: false,

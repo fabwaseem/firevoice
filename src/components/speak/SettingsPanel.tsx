@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AudioWaveform, ChevronDown, Dices, FileAudio, Languages, MessageSquareText, RotateCcw } from "lucide-react";
+import { AudioWaveform, ChevronDown, Dices, FileAudio, Languages, MessageSquareText, Palette, RotateCcw } from "lucide-react";
 import type { Engine, Style } from "@/lib/api/types";
 import { useShallow } from "zustand/react/shallow";
 import { useStudio } from "@/stores/studio";
@@ -7,6 +7,7 @@ import { useSettings } from "@/stores/settings";
 import { Badge, Button, Label, LabeledSlider, Select, Switch, Textarea, Tooltip } from "@/components/ui";
 import { cn, langName } from "@/lib/utils";
 import { ParamControl } from "./ParamControl";
+import { actsStyles, STYLE_ENGINE } from "@/lib/styles";
 
 /** A collapsible group. Whether it is open is remembered (per section) across pages and restarts. */
 function Section({ title, children, defaultOpen = false, right }: { title: string; children: React.ReactNode; defaultOpen?: boolean; right?: React.ReactNode }) {
@@ -51,6 +52,7 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
     })),
   );
   const showAdvanced = useSettings((x) => x.showAdvanced);
+  const styleEngine = engines.find((e) => e.name === STYLE_ENGINE);
   const format = useSettings((x) => x.format);
   const setSettings = useSettings((x) => x.set);
 
@@ -97,6 +99,26 @@ export function SettingsPanel({ engines, engine, style, disabled }: { engines: E
           </div>
         )}
       </Section>
+
+      {/* styles come with Firebrand: with another engine this section says how to get them */}
+      {!actsStyles(engine) && (
+        <Section title="Styles">
+          <div className="flex items-start gap-3 rounded-xl bg-surface-2/60 px-3.5 py-3">
+            <Palette className="mt-0.5 size-4 shrink-0 text-fire" />
+            <div className="min-w-0 space-y-2">
+              <p className="text-[12.5px] leading-relaxed text-muted">
+                Delivery styles (excited, sad, whisper, newscaster…) work with <span className="font-medium text-ink-2">{styleEngine?.title ?? "Firebrand"}</span>.
+                Choose it as the engine and a style picker appears above the script.
+              </p>
+              {styleEngine && (
+                <Button size="sm" variant="outline" disabled={disabled} onClick={() => s.set({ engine: STYLE_ENGINE })}>
+                  Use {styleEngine.title}
+                </Button>
+              )}
+            </div>
+          </div>
+        </Section>
+      )}
 
       <Section title="Delivery">
         <LabeledSlider label="Pace" value={s.pace} min={0.5} max={2} step={0.05} onChange={(pace) => s.set({ pace })} onReset={s.pace !== 1 ? () => s.set({ pace: 1 }) : undefined} hint="Tempo on top of the style's own pacing" />

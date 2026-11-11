@@ -7,6 +7,7 @@ import { api } from "@/lib/api/client";
 import { errMessage, qk, useOptions, useProjects, useStyles, useVoices } from "@/lib/api/hooks";
 import type { ProjectSummary } from "@/lib/api/types";
 import { useStudio } from "@/stores/studio";
+import { PLAIN_STYLE, useActsStyles } from "@/lib/styles";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";
 import { Badge, Button, Card, Dialog, EmptyState, Input, Label, NativeSelect, Skeleton, Textarea } from "@/components/ui";
 import { fmtTime, relTime } from "@/lib/utils";
@@ -111,11 +112,12 @@ function NewProjectDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   const [voice, setVoice] = useState(studioVoice);
   const [style, setStyle] = useState("audiobook");
   const [busy, setBusy] = useState(false);
+  const { acts } = useActsStyles(studioEngine);
 
   const create = async () => {
     setBusy(true);
     try {
-      const p = await api.createProject({ title: title.trim() || "Untitled project", text, defaults: { voice, style, engine: studioEngine ?? options.data?.default_engine } });
+      const p = await api.createProject({ title: title.trim() || "Untitled project", text, defaults: { voice, style: acts ? style : PLAIN_STYLE, engine: studioEngine ?? options.data?.default_engine } });
       qc.invalidateQueries({ queryKey: qk.projects });
       onOpenChange(false);
       setTitle("");
@@ -146,10 +148,12 @@ function NewProjectDialog({ open, onOpenChange, onCreated }: { open: boolean; on
               <option value="default">Default voice</option>
               {(voices.data ?? []).map((v) => <option key={v.voice_id} value={v.voice_id}>{v.name || v.voice_id}{v.tagline ? ` · ${v.tagline}` : ""}</option>)}
             </NativeSelect></div>
-          <div><Label icon={<Palette />}>Style</Label>
-            <NativeSelect value={style} onChange={(e) => setStyle(e.target.value)}>
-              {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
-            </NativeSelect></div>
+          {acts && (
+            <div><Label icon={<Palette />}>Style</Label>
+              <NativeSelect value={style} onChange={(e) => setStyle(e.target.value)}>
+                {(styles.data ?? []).map((s) => <option key={s.name} value={s.name}>{s.title || s.name}</option>)}
+              </NativeSelect></div>
+          )}
         </div>
       </div>
     </Dialog>

@@ -1,3 +1,4 @@
+import { useActsStyles } from "@/lib/styles";
 import { useNavigate } from "react-router";
 import { ArrowRight, AudioLines, Mic2, Palette } from "lucide-react";
 import { Badge, Button, Card, CardBody, CardHeader, Textarea } from "@/components/ui";
@@ -13,6 +14,7 @@ export function QuickSpeakCard() {
   const set = useStudio((s) => s.set);
   const voices = useVoices();
   const styles = useStyles();
+  const { acts } = useActsStyles(useStudio((s) => s.engine));
   const voiceName = voice === "default" ? "Default voice" : (voices.data ?? []).find((v) => v.voice_id === voice)?.name || (voice.startsWith("design:") ? "Designed voice" : "Chosen voice");
   const styleName = (styles.data ?? []).find((s) => s.name === style)?.title || titleCase(style);
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
@@ -39,10 +41,12 @@ export function QuickSpeakCard() {
               <Mic2 className="size-3" />
               {voiceName}
             </Badge>
-            <Badge tone="neutral" className="gap-1.5">
-              <Palette className="size-3" />
-              {styleName}
-            </Badge>
+            {acts && (
+              <Badge tone="neutral" className="gap-1.5">
+                <Palette className="size-3" />
+                {styleName}
+              </Badge>
+            )}
           </div>
           <Button variant="primary" size="sm" leading={<AudioLines className="size-4" />} trailing={<ArrowRight className="size-4" />} onClick={() => navigate("/speak")}>
             Open in Speak

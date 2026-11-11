@@ -3,7 +3,8 @@
 //! Releases are published to the public releases repo; each carries a signed installer and `latest.json`, which the
 //! configured endpoint (`plugins.updater.endpoints` in tauri.conf.json) points at. Nothing here blocks the app:
 //!
-//! * `update_check` (at start and every few hours): `none` | `available` | `offline` (the release server could not be
+//! * `update_check` (at start, every half hour, and when the window comes back into view; a new version also shows in
+//!   the tray icon's tooltip and, while the window is hidden or behind others, as a Windows notification): `none` | `available` | `offline` (the release server could not be
 //!   reached; never an error for the user) | `skipped` (a dev build, unless `FIREVOICE_UPDATE_URL` names a test feed).
 //! * `update_download` starts the download in the background and returns at once. Progress arrives as
 //!   `update-progress` events (a few per second, with the speed), then `update-ready` once the file is downloaded and
@@ -27,6 +28,8 @@ pub struct Updates {
     state: Mutex<Status>,
     /// the downloaded, verified installer of `state.version`
     bytes: Mutex<Option<Vec<u8>>>,
+    /// the version the user was last told about outside the window (once per version)
+    notified: Mutex<Option<String>>,
 }
 
 #[derive(Serialize, Clone)]
@@ -89,6 +92,7 @@ pub async fn update_check(app: AppHandle, st: State<'_, Updates>) -> Result<Upda
                 reason: None,
             };
             log::info!("update {} -> {} available", current, u.version);
+            tell(&app, &st, &u.version);
             // a newer version than the one already downloaded makes that download stale
             let mut s = lock(&st.state);
             if s.version.as_deref() != Some(u.version.as_str()) && s.state != "downloading" {
@@ -108,6 +112,35 @@ pub async fn update_check(app: AppHandle, st: State<'_, Updates>) -> Result<Upda
             log::warn!("update check failed: {e}");
             Ok(base("offline", Some(e.to_string())))
         }
+    }
+}
+
+/// A new version: the tray icon says so, and when the window is hidden (in the tray) or behind other windows, a
+/// Windows notification tells the user too. Inside the window the corner card shows it. Once per version.
+fn tell(app: &AppHandle, st: &Updates, version: &str) {
+    if let Some(tray) = app.tray_by_id("firevoice") {
+        let _ = tray.set_tooltip(Some(format!("FireVoice: version {version} is available")));
+    }
+    let mut told = lock(&st.notified);
+    if told.as_deref() == Some(version) {
+        return;
+    }
+    *told = Some(version.to_string());
+    let in_view = app
+        .get_webview_window("main")
+        .is_some_and(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false) && w.is_focused().unwrap_or(false));
+    if in_view {
+        return;
+    }
+    use tauri_plugin_notification::NotificationExt;
+    if let Err(e) = app
+        .notification()
+        .builder()
+        .title(format!("FireVoice {version} is available"))
+        .body("Open FireVoice to download it. You choose when to install.")
+        .show()
+    {
+        log::warn!("could not show the update notification: {e}");
     }
 }
 

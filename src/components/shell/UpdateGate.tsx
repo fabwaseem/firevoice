@@ -8,8 +8,11 @@ import { Button, ProgressBar } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CornerHost, InCorner } from "./Corner";
 
-/** How often a running app looks for a new version. */
-const RECHECK_MS = 4 * 60 * 60 * 1000;
+/** How often a running app looks for a new version (it also looks when its window comes back into view, and when the
+ * connection returns). The feed is one small file on GitHub's download servers, so this costs next to nothing. */
+const RECHECK_MS = 30 * 60 * 1000;
+/** Looking again on focus or reconnect waits at least this long after the last look. */
+const MIN_GAP_MS = 5 * 60 * 1000;
 
 interface UpdatesState {
   check: UpdateCheck | null;
@@ -22,6 +25,8 @@ interface UpdatesState {
   dismissed: string | null;
   /** a check the user asked for (Settings): it says so when there is nothing new */
   manual: "checking" | "none" | "offline" | null;
+  /** when the last check ran (ms) */
+  lastCheck: number;
   set: (p: Partial<UpdatesState>) => void;
   /** look for a new version (`manual` from Settings: shows the card again and reports "up to date") */
   runCheck: (manual?: boolean) => Promise<void>;
@@ -37,10 +42,12 @@ export const useUpdates = create<UpdatesState>()((set, get) => ({
   folded: false,
   dismissed: null,
   manual: null,
+  lastCheck: 0,
   set: (p) => set(p),
   runCheck: async (manual = false) => {
     if (!inTauri()) return;
     void listen();
+    set({ lastCheck: Date.now() });
     if (manual) set({ manual: "checking", dismissed: null, folded: false });
     try {
       const r = await updates.check();
@@ -86,12 +93,23 @@ export function UpdateGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!enabled) return;
-    // a moment after start (the app first), then every few hours
-    const first = window.setTimeout(() => void useUpdates.getState().runCheck(), 3000);
-    const again = window.setInterval(() => void useUpdates.getState().runCheck(), RECHECK_MS);
+    const check = () => void useUpdates.getState().runCheck();
+    // the window shown again (from the tray, or brought to the front) or the connection back: look, unless we just did
+    const soon = () => {
+      if (document.visibilityState === "visible" && Date.now() - useUpdates.getState().lastCheck > MIN_GAP_MS) check();
+    };
+    // a moment after start (the app first), then every half hour
+    const first = window.setTimeout(check, 3000);
+    const again = window.setInterval(check, RECHECK_MS);
+    document.addEventListener("visibilitychange", soon);
+    window.addEventListener("focus", soon);
+    window.addEventListener("online", soon);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(again);
+      document.removeEventListener("visibilitychange", soon);
+      window.removeEventListener("focus", soon);
+      window.removeEventListener("online", soon);
     };
   }, [enabled]);
 

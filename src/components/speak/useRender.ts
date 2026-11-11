@@ -3,8 +3,8 @@ import { useSessionState } from "@/stores/session";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
-import type { StreamChunk, TTSRequest, WordTime } from "@/lib/api/types";
-import { audioContext, base64ToBytes, blobFromBase64, ChunkPlayer, chunksToWav } from "@/lib/audio";
+import type { TTSRequest, WordTime } from "@/lib/api/types";
+import { blobFromBase64 } from "@/lib/audio";
 import { usePlayer, type Track } from "@/stores/player";
 import { useSettings } from "@/stores/settings";
 import { uid, truncate } from "@/lib/utils";
@@ -23,7 +23,7 @@ export interface RenderStats {
   renderId?: string | null;
 }
 
-export type RenderPhase = "idle" | "starting" | "streaming" | "rendering" | "done" | "error";
+export type RenderPhase = "idle" | "starting" | "rendering" | "done" | "error";
 
 export interface RenderState {
   phase: RenderPhase;
@@ -32,6 +32,8 @@ export interface RenderState {
   words: WordTime[];
   chunksGot: number;
   chunksTotal: number;
+  /** when the render started (ms), for the elapsed time while it works */
+  startedAt?: number;
 }
 
 const idle: RenderState = { phase: "idle", stats: null, error: null, words: [], chunksGot: 0, chunksTotal: 0 };
@@ -49,39 +51,16 @@ function trackMeta(req: TTSRequest, engine?: string): Pick<Track, "title" | "sub
 // One render at a time, shared by every visit to Speak: leaving the page and coming back finds it as it was
 // (still rendering, with its Stop button, or done with its result).
 const abortRef: { current: AbortController | null } = { current: null };
-const chunkPlayerRef: { current: ChunkPlayer | null } = { current: null };
 
-/** Orchestrates whole-file and streamed renders and feeds the global player. */
+/** Renders the whole file (every sentence checked and mastered) and feeds the global player. Speak no longer
+ * streams; the API's /api/v1/tts/stream routes stay for programs that want audio as it is made. */
 export function useRender() {
   const [state, setState] = useSessionState<RenderState>("speak.render", idle);
-
-  // Live mode: pause/resume by suspending the AudioContext; follow volume.
-  useEffect(() => {
-    const unsub = usePlayer.subscribe((s, prev) => {
-      const cp = chunkPlayerRef.current;
-      if (!cp || !s.live) return;
-      if (s.playing !== prev.playing) {
-        const ctx = audioContext();
-        if (s.playing) void ctx.resume();
-        else void ctx.suspend();
-      }
-      if (s.volume !== prev.volume || s.muted !== prev.muted) cp.setVolume(s.muted ? 0 : s.volume);
-    });
-    return unsub;
-  }, []);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    chunkPlayerRef.current?.stop();
-    chunkPlayerRef.current = null;
-    void audioContext().resume();
-    const p = usePlayer.getState();
-    if (p.live) {
-      p.setLive(false);
-      p.setPlaying(false);
-    }
-    setState((s) => (s.phase === "streaming" || s.phase === "rendering" || s.phase === "starting" ? { ...s, phase: "idle" } : s));
+    setState((s) => (s.phase === "rendering" || s.phase === "starting" ? { ...s, phase: "idle" } : s));
   }, []);
 
   // Leaving the page does not cancel a render: it finishes (and is kept in History), playing in the player bar.
@@ -97,7 +76,7 @@ export function useRender() {
     stop();
     const ac = new AbortController();
     abortRef.current = ac;
-    setState({ ...idle, phase: "rendering" });
+    setState({ ...idle, phase: "rendering", startedAt: Date.now() });
     const { autoPlay } = useSettings.getState();
     try {
       const r = await api.ttsJson(req, ac.signal);
@@ -133,109 +112,6 @@ export function useRender() {
     }
   }, [stop]);
 
-  const renderStream = useCallback(async (req: TTSRequest) => {
-    stop();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    const player = usePlayer.getState();
-    const { muted, volume } = player;
-    const cp = new ChunkPlayer(muted ? 0 : volume);
-    chunkPlayerRef.current = cp;
-    const id = uid();
-    const meta = trackMeta(req);
-    const collected: { bytes: Uint8Array; start: number }[] = [];
-    const words: WordTime[] = [];
-    let passages = 0;
-    setState({ ...idle, phase: "starting" });
-
-    player.load({ id, ...meta, src: "", href: "/speak" }, true);
-    player.setLive(true, { got: 0, total: 0 });
-    cp.onProgress = (pos) => {
-      const s = usePlayer.getState();
-      if (s.live) {
-        s.setPosition(pos);
-        if (cp.duration !== s.duration) s.setDuration(cp.duration);
-      }
-    };
-
-    const finalise = async (stats: RenderStats | null) => {
-      const wav = await chunksToWav(collected);
-      const s = usePlayer.getState();
-      if (!wav) {
-        s.setLive(false);
-        s.clear();
-        return;
-      }
-      s.setLive(false);
-      s.load({ id, ...meta, src: URL.createObjectURL(wav.blob), blob: wav.blob, format: "wav", duration: wav.duration, words, href: "/speak" }, false);
-      if (!mounted.current) toast.success("Your render is finished", { description: "Saved in History." });
-      setState((st) => ({ ...st, phase: "done", words, stats: stats ?? { duration: wav.duration, warnings: [], chunks: collected.length } }));
-    };
-
-    let doneStats: RenderStats | null = null;
-    cp.onEnded = () => {
-      chunkPlayerRef.current = null;
-      void finalise(doneStats);
-    };
-
-    try {
-      for await (const ev of api.ttsStream({ ...req, format: "wav" }, ac.signal)) {
-        if (ev.type === "chunk") {
-          const c = ev as StreamChunk;
-          words.push(...c.words);
-          // an event can carry only words (the end of a streamed passage) or only a piece of one (partial)
-          if (c.audio_base64) {
-            const bytes = base64ToBytes(c.audio_base64);
-            collected.push({ bytes, start: c.start });
-            await cp.push(bytes, c.start);
-          }
-          if (!c.partial) passages += 1;
-          const got = passages;
-          const total = Math.max(c.total ?? 0, got);
-          if (usePlayer.getState().live) usePlayer.getState().setLive(true, { got, total });
-          setState((s) => ({ ...s, phase: "streaming", chunksGot: got, chunksTotal: total, words: [...words] }));
-        } else if (ev.type === "done") {
-          const d = ev as Record<string, unknown>;
-          doneStats = {
-            duration: Number(d.duration ?? cp.duration),
-            seconds: d.seconds as number | undefined,
-            rtf: d.rtf as number | undefined,
-            chunks: passages,
-            takes: d.takes as number | undefined,
-            retries: d.retries as number | undefined,
-            warnings: (d.warnings as string[]) ?? [],
-            engine: d.engine as string | undefined,
-            renderId: (d.render_id as string | null | undefined) ?? null,
-          };
-          cp.finish();
-          setState((s) => ({ ...s, stats: doneStats }));
-          if (doneStats.warnings.length) toast.warning(doneStats.warnings[0]);
-        } else if (ev.type === "error") {
-          throw new Error(String((ev as { message?: string }).message ?? "render failed"));
-        }
-      }
-      if (!collected.length) {
-        cp.stop();
-        chunkPlayerRef.current = null;
-        usePlayer.getState().setLive(false);
-        usePlayer.getState().clear();
-        setState({ ...idle, phase: "error", error: "The server sent no audio." });
-      }
-    } catch (e) {
-      if (ac.signal.aborted) return;
-      const msg = errMessage(e);
-      cp.stop();
-      chunkPlayerRef.current = null;
-      usePlayer.getState().setLive(false);
-      if (collected.length) void finalise(null);
-      else usePlayer.getState().clear();
-      setState((s) => ({ ...s, phase: "error", error: msg }));
-      toast.error(msg);
-    } finally {
-      if (abortRef.current === ac) abortRef.current = null;
-    }
-  }, [stop]);
-
   /** After a take is swapped in a kept render: load the re-stitched audio and its word times. */
   const replaceResult = useCallback((blob: Blob, format: string, words: WordTime[], duration: number) => {
     const p = usePlayer.getState();
@@ -244,6 +120,6 @@ export function useRender() {
     setState((s) => ({ ...s, words, stats: s.stats ? { ...s.stats, duration } : s.stats }));
   }, []);
 
-  const busy = state.phase === "starting" || state.phase === "streaming" || state.phase === "rendering";
-  return { state, busy, renderWhole, renderStream, stop, replaceResult };
+  const busy = state.phase === "starting" || state.phase === "rendering";
+  return { state, busy, renderWhole, stop, replaceResult };
 }

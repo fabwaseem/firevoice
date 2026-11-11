@@ -147,11 +147,13 @@ a new key means everyone reinstalls by hand.
 ## Updates
 
 Updates never block the app (`src-tauri/src/updater.rs`, `src/components/shell/UpdateGate.tsx`). A few seconds after
-start, and every four hours, the app asks the feed
+start, every 30 minutes, and whenever its window comes back into view (from the tray) or the connection returns (at
+most once every 5 minutes), the app asks the feed
 (`https://github.com/fabwaseem/firevoice-releases/releases/latest/download/latest.json`) for the newest version.
 Settings > Check for updates asks right away.
 
-* **Newer version:** a card in the bottom-right corner says so, with what's new. **Download update** fetches it in the
+* **Newer version:** a card in the bottom-right corner says so, with what's new. If the window is hidden in the tray or
+  behind other windows, a Windows notification says so too (once per version), and the tray icon's tooltip names it. **Download update** fetches it in the
   background with real progress (bytes, speed, time left) while the user keeps working; **Later** hides it until the
   next start. The card folds down to a pill.
 * **Downloaded:** the installer's signature is checked against the public key built into the app, then the card offers
