@@ -10,6 +10,7 @@ import { DictationAssistantPanel } from "@/components/dictation/DictationAssista
 import { DictationHistoryPanel } from "@/components/dictation/DictationHistory";
 import { DictationLanguages } from "@/components/dictation/DictationLanguages";
 import { DictationTranslate } from "@/components/dictation/DictationTranslate";
+import { DictationWakeTeach } from "@/components/dictation/DictationWakeTeach";
 import { DictationWhatsNew, type DictationTab } from "@/components/dictation/DictationWhatsNew";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
@@ -234,6 +235,13 @@ function SettingsCard() {
           />
         </Row>
         <div className="space-y-4 border-t border-line pt-5">
+          <Switch
+            checked={config.wake}
+            onChange={(v) => set({ wake: v })}
+            label="Start with “Hey FireVoice”"
+            description="Say “Hey FireVoice” in any program and keep talking: what follows is written, and it stops when you do. While it waits, the microphone stays on (Windows shows its icon); what it hears never leaves this computer."
+          />
+          {config.wake && config.enabled && <DictationWakeTeach />}
           <Switch
             checked={config.commands}
             onChange={(v) => set({ commands: v })}

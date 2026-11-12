@@ -1,5 +1,5 @@
 import { useSettings } from "@/stores/settings";
-import type { DictationAssistant, DictationHistory, DictationReplacement, DictationSnippet, DictationVocabulary, HistoryItem, HistoryKind, Stats } from "./types";
+import type { DictationAssistant, DictationHistory, DictationReplacement, DictationSnippet, DictationVocabulary, HistoryItem, HistoryKind, Stats, WakeTeaching } from "./types";
 import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecord, DesignBatch, DialogueParse, DialogueResult, DictRule, DictRuleInput, DictView, Engine, Health, InstallPlan, Job, JobEvent, JobKind, KeptRender, Options, PathSettingKey, PathsReport, Project, ProjectSummary, QualityReport, STTResult, SetupReport, StreamEvent, Style, SystemInfo, TTSJson, TTSRequest, Voice, VoiceCollection, VoiceLibraryStatus, WatermarkResult, WordTime } from "./types";
 import { rememberEngineNames } from "@/lib/engineNames";
 import { saveBlob } from "@/lib/audio";
@@ -158,6 +158,9 @@ export const api = {
   deleteReplacement: (id: string) => request<unknown>(`/api/v1/dictation/replacements/${encodeURIComponent(id)}`, { method: "DELETE" }),
   saveSnippet: (s: { id?: string; trigger: string; text: string }) => request<DictationSnippet>("/api/v1/dictation/snippets", { method: "POST", body: json(s) }),
   deleteSnippet: (id: string) => request<unknown>(`/api/v1/dictation/snippets/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  dictationWake: () => request<WakeTeaching>("/api/v1/dictation/wake"),
+  teachWake: (action: "start" | "save" | "cancel") => request<WakeTeaching>("/api/v1/dictation/wake/teach", { method: "POST", body: json({ action }) }),
+  forgetWake: () => request<WakeTeaching>("/api/v1/dictation/wake/forms", { method: "DELETE" }),
   dictationHistory: (q = "", limit = 50, offset = 0) => request<DictationHistory>("/api/v1/dictation/history", {}, { q, limit, offset }),
   deleteDictation: (id: string) => request<unknown>(`/api/v1/dictation/history/${encodeURIComponent(id)}`, { method: "DELETE" }),
   clearDictationHistory: () => request<{ deleted: number }>("/api/v1/dictation/history", { method: "DELETE" }),

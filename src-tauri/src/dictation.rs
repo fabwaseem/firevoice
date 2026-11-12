@@ -60,6 +60,8 @@ pub struct Config {
     pub history: bool,
     /// command mode: select text, press this, say what to do with it ("" = off)
     pub command_hotkey: String,
+    /// the wake phrase: "Hey FireVoice" starts a dictation, hands-free (the microphone stays open while it waits)
+    pub wake: bool,
     /// the first-dictation guide: the screen dims around the pill, with a word on what to do (until one has worked)
     pub spotlight: bool,
     /// more start options for the server, passed on as they are (the writing assistant: "polish", "styles")
@@ -86,6 +88,7 @@ impl Default for Config {
             history: true,
             command_hotkey: String::new(),
             spotlight: false,
+            wake: false,
             extra: serde_json::Value::Null,
             server: "http://127.0.0.1:8787".into(),
             token: String::new(),
@@ -106,6 +109,30 @@ struct Session {
     command: bool,
 }
 
+/// A microphone that is already open, handed from the wake phrase listener to the dictation it starts: nothing said
+/// right after the phrase is lost to reopening it.
+struct Handoff {
+    audio: UnboundedReceiver<Vec<u8>>,
+    mic_stop: Arc<AtomicBool>,
+    level: Arc<AtomicU32>,
+    rate: u32,
+    /// what was said after the phrase, before the dictation started (16-bit PCM at `rate`)
+    prefill: Vec<u8>,
+}
+
+/// Closes the microphone when dropped, unless it has been handed on.
+struct StopMic {
+    flag: Arc<AtomicBool>,
+    armed: bool,
+}
+impl Drop for StopMic {
+    fn drop(&mut self) {
+        if self.armed {
+            self.flag.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Dictation {
     config: Mutex<Config>,
@@ -117,6 +144,8 @@ pub struct Dictation {
     last_tap: Mutex<Option<Instant>>,
     /// hold-to-talk: the release that follows the tap that ended a hands-free dictation is not a new one
     swallow_release: Mutex<bool>,
+    /// the wake phrase listener that is running: setting the flag ends it
+    wake: Mutex<Option<Arc<AtomicBool>>>,
 }
 
 /// A second tap this soon after a quick one is a double tap: hands-free dictation.
@@ -598,14 +627,14 @@ fn grab_selection() -> String {
 
 // ---------------------------------------------------------------------------------------------- one dictation
 
-fn ws_url(server: &str, token: &str) -> String {
+fn ws_url(server: &str, token: &str, route: &str) -> String {
     let base = server.trim_end_matches('/');
     let base = if let Some(rest) = base.strip_prefix("https://") {
         format!("wss://{rest}")
     } else {
         format!("ws://{}", base.strip_prefix("http://").unwrap_or(base))
     };
-    if token.is_empty() { format!("{base}/api/v1/dictate") } else { format!("{base}/api/v1/dictate?token={token}") }
+    if token.is_empty() { format!("{base}/api/v1/{route}") } else { format!("{base}/api/v1/{route}?token={token}") }
 }
 
 #[derive(Deserialize, Debug)]
@@ -627,25 +656,35 @@ struct ServerMsg {
 }
 
 /// Connect, stream the microphone, insert the text. -> what was dictated, or a message for the user.
-async fn run(app: &AppHandle, cfg: &Config, target: (String, String), command: bool, stop: Arc<AtomicBool>, cancel: Arc<AtomicBool>) -> Result<Option<ResultEvent>, String> {
+async fn run(
+    app: &AppHandle,
+    cfg: &Config,
+    target: (String, String),
+    command: bool,
+    stop: Arc<AtomicBool>,
+    cancel: Arc<AtomicBool>,
+    handoff: Option<Handoff>,
+) -> Result<Option<ResultEvent>, String> {
     let engine_down = "FireVoice's voice engine is not running. Open FireVoice and wait until it is ready.";
-    let level = Arc::new(AtomicU32::new(0));
-    let mic_stop = Arc::new(AtomicBool::new(false));
-    let (audio_tx, mut audio_rx): (UnboundedSender<Vec<u8>>, UnboundedReceiver<Vec<u8>>) = unbounded_channel();
-    // the microphone opens first, so nothing said while the connection is made is lost
-    let (name, stop2) = (cfg.mic.clone(), mic_stop.clone());
-    let level2 = level.clone();
-    let boost = cfg.boost_quiet;
-    let rate = tokio::task::spawn_blocking(move || start_mic(name, boost, stop2, audio_tx, level2)).await.map_err(|e| e.to_string())??;
-    struct StopMic(Arc<AtomicBool>);
-    impl Drop for StopMic {
-        fn drop(&mut self) {
-            self.0.store(true, Ordering::Relaxed);
+    // started by the wake phrase: the microphone is already open, and the dictation ends when the speaker stops
+    let voice = handoff.is_some();
+    let (mut audio_rx, mic_stop, level, rate, prefill) = match handoff {
+        Some(h) => (h.audio, h.mic_stop, h.level, h.rate, h.prefill),
+        None => {
+            let level = Arc::new(AtomicU32::new(0));
+            let mic_stop = Arc::new(AtomicBool::new(false));
+            let (audio_tx, audio_rx): (UnboundedSender<Vec<u8>>, UnboundedReceiver<Vec<u8>>) = unbounded_channel();
+            // the microphone opens first, so nothing said while the connection is made is lost
+            let (name, stop2) = (cfg.mic.clone(), mic_stop.clone());
+            let level2 = level.clone();
+            let boost = cfg.boost_quiet;
+            let rate = tokio::task::spawn_blocking(move || start_mic(name, boost, stop2, audio_tx, level2)).await.map_err(|e| e.to_string())??;
+            (audio_rx, mic_stop, level, rate, Vec::new())
         }
-    }
-    let _mic = StopMic(mic_stop.clone());
+    };
+    let _mic = StopMic { flag: mic_stop.clone(), armed: true };
 
-    let (ws, _) = tokio::time::timeout(Duration::from_secs(4), tokio_tungstenite::connect_async(ws_url(&cfg.server, &cfg.token)))
+    let (ws, _) = tokio::time::timeout(Duration::from_secs(4), tokio_tungstenite::connect_async(ws_url(&cfg.server, &cfg.token, "dictate")))
         .await
         .map_err(|_| engine_down.to_string())?
         .map_err(|e| {
@@ -665,6 +704,10 @@ async fn run(app: &AppHandle, cfg: &Config, target: (String, String), command: b
         }
     }
     tx.send(Message::Text(start.to_string().into())).await.map_err(|e| e.to_string())?;
+    // what was said right after the wake phrase goes first
+    for piece in prefill.chunks(RATE as usize / 5 * 2) {
+        tx.send(Message::Binary(piece.to_vec().into())).await.map_err(|_| engine_down.to_string())?;
+    }
 
     // a command's result replaces the selection in one go, so it is always pasted
     let typist = Typist::start(app, cfg.insert == "paste" || command);
@@ -673,6 +716,8 @@ async fn run(app: &AppHandle, cfg: &Config, target: (String, String), command: b
     let t0 = Instant::now();
     let mut stopping: Option<Instant> = None;
     let mut typed = String::new();
+    // hands-free (wake phrase): when the speaker has gone quiet, the dictation ends by itself
+    let mut quiet = Quiet::new();
     loop {
         tokio::select! {
             chunk = audio_rx.recv(), if stopping.is_none() => {
@@ -723,7 +768,19 @@ async fn run(app: &AppHandle, cfg: &Config, target: (String, String), command: b
                 }
                 match stopping {
                     None => {
-                        let _ = app.emit("dictation-level", f32::from_bits(level.load(Ordering::Relaxed)));
+                        let lv = f32::from_bits(level.load(Ordering::Relaxed));
+                        let _ = app.emit("dictation-level", lv);
+                        if voice {
+                            match quiet.hear(lv) {
+                                Heard::Nothing if t0.elapsed() > NOTHING_SAID => {
+                                    // called, then nothing said: let it go quietly
+                                    let _ = tx.send(Message::Text(r#"{"type":"cancel"}"#.into())).await;
+                                    return Ok(None);
+                                }
+                                Heard::Done => stop.store(true, Ordering::Relaxed),
+                                _ => {}
+                            }
+                        }
                         if stop.load(Ordering::Relaxed) || t0.elapsed() > MAX_SESSION {
                             // let the last sound through, then say that the speaker is done
                             mic_stop.store(true, Ordering::Relaxed);
@@ -754,8 +811,16 @@ async fn run(app: &AppHandle, cfg: &Config, target: (String, String), command: b
 }
 
 fn start(app: &AppHandle, locked: bool, command: bool) {
+    start_with(app, locked, command, None);
+}
+
+fn start_with(app: &AppHandle, locked: bool, command: bool, handoff: Option<Handoff>) {
     let st = app.state::<Dictation>();
     let cfg = lock(&st.config).clone();
+    if handoff.is_none() {
+        // the microphone is the dictation's now: the wake phrase listener steps aside until it is over
+        stop_wake(app);
+    }
     let (stop, cancel) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
     {
         let mut s = lock(&st.session);
@@ -770,8 +835,14 @@ fn start(app: &AppHandle, locked: bool, command: bool) {
     emit_state(app, "starting", None);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let result = run(&app, &cfg, target, command, stop, cancel).await;
+        let result = run(&app, &cfg, target, command, stop, cancel, handoff).await;
         *lock(&app.state::<Dictation>().session) = None;
+        // listening for the wake phrase again (once the overlay has gone, so it does not hear the chime)
+        let again = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(600)).await;
+            ensure_wake(&again);
+        });
         hide_spotlight_later(&app, Duration::from_millis(900));
         match result {
             Ok(Some(r)) => {
@@ -854,6 +925,179 @@ fn on_hotkey(app: &AppHandle, state: ShortcutState, command: bool) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------- wake phrase
+
+/// Called by name, then nothing said for this long: the dictation goes away by itself.
+const NOTHING_SAID: Duration = Duration::from_secs(6);
+/// Hands-free, this much quiet after speaking ends the dictation.
+const DONE_AFTER: Duration = Duration::from_millis(1800);
+
+enum Heard {
+    Nothing,
+    Speaking,
+    Done,
+}
+
+/// Is the speaker still talking? The loudness against the room's own noise, which it learns as it goes (a quiet
+/// office and a café are both handled): speech is well above it.
+struct Quiet {
+    floor: f32,
+    said: bool,
+    last_voice: Instant,
+}
+
+impl Quiet {
+    fn new() -> Self {
+        Quiet { floor: 0.004, said: false, last_voice: Instant::now() }
+    }
+
+    fn hear(&mut self, rms: f32) -> Heard {
+        // the floor follows the quietest moments down at once, and creeps up slowly in steady noise
+        self.floor = if rms < self.floor { rms.max(0.0005) } else { self.floor * 1.003 };
+        if rms > (self.floor * 3.0).max(0.01) {
+            self.said = true;
+            self.last_voice = Instant::now();
+        }
+        if !self.said {
+            Heard::Nothing
+        } else if self.last_voice.elapsed() > DONE_AFTER {
+            Heard::Done
+        } else {
+            Heard::Speaking
+        }
+    }
+}
+
+/// End the wake phrase listener, if one is running (its microphone closes).
+fn stop_wake(app: &AppHandle) {
+    if let Some(flag) = lock(&app.state::<Dictation>().wake).take() {
+        flag.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Listen for the wake phrase, if it is on and nothing else has the microphone.
+fn ensure_wake(app: &AppHandle) {
+    let st = app.state::<Dictation>();
+    let on = {
+        let cfg = lock(&st.config);
+        cfg.enabled && cfg.wake
+    };
+    if !on || lock(&st.session).is_some() {
+        return;
+    }
+    let mut slot = lock(&st.wake);
+    if slot.is_some() {
+        return;
+    }
+    let quit = Arc::new(AtomicBool::new(false));
+    *slot = Some(quit.clone());
+    drop(slot);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut wait = Duration::from_secs(2);
+        let handoff = loop {
+            if quit.load(Ordering::Relaxed) {
+                break None;
+            }
+            match listen_for_wake(&app, &quit).await {
+                Ok(h) => break h,
+                Err(e) => {
+                    // the engine is not up yet, or the microphone is busy: try again a little later
+                    log::debug!("wake phrase: {e}; trying again in {}s", wait.as_secs());
+                    let until = Instant::now() + wait;
+                    while Instant::now() < until && !quit.load(Ordering::Relaxed) {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
+                    wait = (wait * 2).min(Duration::from_secs(20));
+                }
+            }
+        };
+        // this listener is done: free its place (unless a newer one has taken it)
+        {
+            let st = app.state::<Dictation>();
+            let mut slot = lock(&st.wake);
+            if slot.as_ref().is_some_and(|f| Arc::ptr_eq(f, &quit)) {
+                *slot = None;
+            }
+        }
+        if let Some(h) = handoff {
+            if active(&app) || quit.load(Ordering::Relaxed) {
+                h.mic_stop.store(true, Ordering::Relaxed);
+                return;
+            }
+            log::info!("dictation: started by the wake phrase");
+            // hands-free: a tap of the keys ends it, letting go of them does not
+            start_with(&app, true, false, Some(h));
+        }
+    });
+}
+
+/// One listening run: the engine first (so the microphone is not opened while it is down), then the microphone,
+/// streamed until the phrase is heard. -> the open microphone and what followed the phrase, or None when told to quit.
+async fn listen_for_wake(app: &AppHandle, quit: &Arc<AtomicBool>) -> Result<Option<Handoff>, String> {
+    let cfg = lock(&app.state::<Dictation>().config).clone();
+    let (ws, _) = tokio::time::timeout(Duration::from_secs(4), tokio_tungstenite::connect_async(ws_url(&cfg.server, &cfg.token, "wake")))
+        .await
+        .map_err(|_| "the voice engine did not answer".to_string())?
+        .map_err(|e| format!("the voice engine is not reachable ({e})"))?;
+    let (mut tx, mut rx) = ws.split();
+
+    let level = Arc::new(AtomicU32::new(0));
+    let mic_stop = Arc::new(AtomicBool::new(false));
+    let (audio_tx, mut audio_rx): (UnboundedSender<Vec<u8>>, UnboundedReceiver<Vec<u8>>) = unbounded_channel();
+    let (name, stop2, level2, boost) = (cfg.mic.clone(), mic_stop.clone(), level.clone(), cfg.boost_quiet);
+    let rate = tokio::task::spawn_blocking(move || start_mic(name, boost, stop2, audio_tx, level2)).await.map_err(|e| e.to_string())??;
+    let mut mic = StopMic { flag: mic_stop.clone(), armed: true };
+    tx.send(Message::Text(serde_json::json!({"type": "start", "sample_rate": rate}).to_string().into()))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // the last few seconds, to hand on what was said after the phrase
+    let keep = rate as usize * 2 * 10;
+    let mut recent: std::collections::VecDeque<u8> = std::collections::VecDeque::with_capacity(keep);
+    let mut total: u64 = 0;
+    let mut ticker = tokio::time::interval(Duration::from_millis(100));
+    loop {
+        tokio::select! {
+            chunk = audio_rx.recv() => {
+                let Some(c) = chunk else { return Err("the microphone stopped".into()) };
+                total += c.len() as u64;
+                recent.extend(c.iter().copied());
+                let extra = recent.len().saturating_sub(keep);
+                recent.drain(..extra);
+                tx.send(Message::Binary(c.into())).await.map_err(|_| "the connection to the voice engine was lost".to_string())?;
+            }
+            msg = rx.next() => {
+                let Some(Ok(msg)) = msg else { return Err("the connection to the voice engine was lost".into()) };
+                let Message::Text(t) = msg else { continue };
+                let Ok(m) = serde_json::from_str::<serde_json::Value>(&t) else { continue };
+                match m.get("type").and_then(|v| v.as_str()) {
+                    Some("wake") => {
+                        // what is still to come arrives on the same channel; what came after the phrase is in `recent`
+                        while let Ok(c) = audio_rx.try_recv() {
+                            total += c.len() as u64;
+                            recent.extend(c.iter().copied());
+                        }
+                        let at = m.get("at").and_then(|v| v.as_u64()).unwrap_or(0) * 2;
+                        let first = total - recent.len() as u64;
+                        let from = (at.saturating_sub(first) as usize).min(recent.len()) & !1;
+                        let prefill: Vec<u8> = recent.range(from..).copied().collect();
+                        mic.armed = false;
+                        return Ok(Some(Handoff { audio: audio_rx, mic_stop: mic_stop.clone(), level, rate, prefill }));
+                    }
+                    Some("error") => return Err(m.get("message").and_then(|v| v.as_str()).unwrap_or("the voice engine reported a problem").to_string()),
+                    _ => {}
+                }
+            }
+            _ = ticker.tick() => {
+                if quit.load(Ordering::Relaxed) {
+                    return Ok(None);
+                }
+            }
+        }
+    }
+}
+
 fn status(app: &AppHandle, hotkey_error: Option<String>) -> Status {
     let st = app.state::<Dictation>();
     let cfg = lock(&st.config);
@@ -890,7 +1134,16 @@ pub fn dictation_configure(app: AppHandle, st: State<Dictation>, config: Config)
     if !config.enabled {
         stop(&app, true);
     }
+    let restart_wake = {
+        let old = lock(&st.config);
+        (old.enabled, old.wake, &old.mic, old.boost_quiet, &old.server, &old.token)
+            != (config.enabled, config.wake, &config.mic, config.boost_quiet, &config.server, &config.token)
+    };
     *lock(&st.config) = config;
+    if restart_wake {
+        stop_wake(&app);
+        ensure_wake(&app);
+    }
     status(&app, error)
 }
 

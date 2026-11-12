@@ -49,13 +49,30 @@ class DictationStore:
                 d = {}
             return {"words": [str(w) for w in d.get("words") or [] if str(w).strip()],
                     "replacements": [r for r in d.get("replacements") or [] if isinstance(r, dict)],
-                    "snippets": [s for s in d.get("snippets") or [] if isinstance(s, dict)]}
+                    "snippets": [s for s in d.get("snippets") or [] if isinstance(s, dict)],
+                    "wake_names": [str(w) for w in d.get("wake_names") or [] if str(w).strip()]}
 
     def _save(self, d: dict) -> dict:
         from .voices import write_json_atomic
         self.path.parent.mkdir(parents=True, exist_ok=True)
         write_json_atomic(self.path, d)
         return d
+
+    def add_wake_names(self, forms: list) -> list[str]:
+        """Forms of "FireVoice" as the speech model hears this user say it ("fireboys"), taught on the Dictation page:
+        the wake phrase accepts them. The newest twelve are kept."""
+        with self._lock:
+            d = self.load()
+            out = [f for f in d["wake_names"] if f not in forms] + [f for f in dict.fromkeys(forms) if f]
+            d["wake_names"] = out[-12:]
+            self._save(d)
+            return d["wake_names"]
+
+    def clear_wake_names(self) -> None:
+        with self._lock:
+            d = self.load()
+            d["wake_names"] = []
+            self._save(d)
 
     def set_words(self, words: list) -> list[str]:
         """Replace the word list (one entry per name or term; duplicates and blanks dropped, order kept)."""

@@ -703,6 +703,14 @@ export interface DictationVocabulary {
   replacements: DictationReplacement[];
   snippets: DictationSnippet[];
 }
+/** Teaching "Hey FireVoice" a voice (Dictation settings). */
+export interface WakeTeaching {
+  active: boolean;
+  /** what the listener heard on each attempt: did it wake it, and how the name came out ("fireboys") */
+  attempts: { heard: string; wakes: boolean; form: string | null }[];
+  /** forms of the name learned from this voice */
+  forms: string[];
+}
 export interface DictationHistoryItem {
   id: string;
   /** epoch seconds */

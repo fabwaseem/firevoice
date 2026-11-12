@@ -37,6 +37,31 @@ from .voices import VoiceLibrary
 from .paths import home  # noqa: E402  (re-exported: other modules import home from here)
 
 
+def _wake_debug():
+    """Tuning the wake phrase on a real voice (development): with a folder ~/.firevoice/wake-debug, each look is
+    logged and its audio kept there (only on this computer; delete the folder to stop)."""
+    import logging
+    import time
+
+    from .paths import home
+    folder = home() / "wake-debug"
+    if not folder.is_dir():
+        return None
+    log = logging.getLogger("firevoice")
+
+    def keep(audio, heard, woke, start=None):
+        log.info("wake look: %s %r", "WAKE" if woke else "no", heard)
+        try:
+            import soundfile as sf
+            name = time.strftime("%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}-{'wake' if woke else 'no'}.wav"
+            sf.write(str(folder / name), audio, 16000)
+            (folder / "looks.txt").open("a", encoding="utf-8").write(f"{name}\t{'WAKE' if woke else 'no'}\t{heard}\n")
+        except Exception:  # noqa: BLE001
+            pass
+
+    return keep
+
+
 class FireVoiceError(Exception):
     """Errors with a stable code the API maps to HTTP status: bad_request 400, not_found 404, conflict 409,
     unavailable 503, internal 500."""
@@ -469,6 +494,76 @@ class FireVoice:
                 from .asr import FasterWhisperAligner
                 self._ml_aligner = FasterWhisperAligner("small", device="cpu", concurrency=2, language=None)
             return self._ml_aligner
+
+    def wake_spotter(self):
+        """A listener for the wake phrase ("Hey FireVoice", wake.py) on the shared speech model, in English."""
+        import importlib
+        import os
+
+        from . import wake
+        # running from a checkout: pick up changes to the listener without restarting the engine
+        try:
+            m = os.path.getmtime(wake.__file__)
+            if getattr(self, "_wake_mtime", m) != m:
+                wake = importlib.reload(wake)
+            self._wake_mtime = m
+        except OSError:
+            pass
+        import weakref
+        a = self.aligner()
+
+        def transcribe(audio):
+            if not hasattr(a, "transcribe_window"):
+                return []
+            # told to expect the name: an accent that makes "Voice" sound like "boys" is still written FireVoice
+            return a.transcribe_window(audio, language="en", hotwords="FireVoice")[0]
+
+        debug = _wake_debug()
+
+        def look(audio, heard, woke, start):
+            if debug:
+                debug(audio, heard, woke, start)
+            t = self._wake_teach
+            if t and time.time() < t["until"]:
+                with self._wake_lock:
+                    # one attempt per stretch of speech: a later look at the same one replaces the earlier
+                    t["attempts"][int(start // 4800)] = {"heard": heard, "wakes": bool(woke), "form": wake.heard_name(heard)}
+
+        sp = wake.WakeSpotter(transcribe, debug=look, learned=self.dictation_store.load()["wake_names"])
+        if not hasattr(self, "_wake_spotters"):
+            self._wake_spotters = weakref.WeakSet()
+        self._wake_spotters.add(sp)
+        return sp
+
+    # teaching the wake phrase your voice: while it runs, the listener reports what it hears instead of waking
+    _wake_teach: Optional[dict] = None
+    _wake_lock = threading.Lock()
+
+    def wake_teaching(self) -> bool:
+        t = self._wake_teach
+        return bool(t and time.time() < t["until"])
+
+    def wake_teach(self, action: str) -> dict:
+        """action "start" (say the phrase a few times), "save" (keep the forms it heard that did not wake it yet),
+        "cancel", or "state". -> {"active", "attempts": [{"heard", "wakes", "form"}], "forms": what is kept}"""
+        if action == "start":
+            self._wake_teach = {"until": time.time() + 180, "attempts": {}}
+        t = self._wake_teach
+        attempts = [v for _, v in sorted((t or {}).get("attempts", {}).items())]
+        if action in ("save", "cancel"):
+            self._wake_teach = None
+            if action == "save":
+                forms = [a["form"] for a in attempts if a["form"] and not a["wakes"]]
+                if forms:
+                    kept = self.dictation_store.add_wake_names(forms)
+                    for sp in list(getattr(self, "_wake_spotters", [])):
+                        sp.learned = list(kept)
+        return {"active": self.wake_teaching(), "attempts": attempts, "forms": self.dictation_store.load()["wake_names"]}
+
+    def wake_forget(self) -> None:
+        self.dictation_store.clear_wake_names()
+        for sp in list(getattr(self, "_wake_spotters", [])):
+            sp.learned = []
 
     # -------------------------------------------------------------------- dictation
     def dictation(self, language: Optional[str] = None, keyterms: Optional[list] = None, commands: bool = True, fillers: bool = True,

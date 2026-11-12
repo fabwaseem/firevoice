@@ -1006,6 +1006,80 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
                 except Exception:  # noqa: BLE001
                     pass
 
+    @app.websocket("/api/v1/wake")
+    async def wake_phrase(ws: WebSocket):
+        """Listens for the wake phrase ("Hey FireVoice", wake.py) on a microphone stream.
+
+        Client: {"type": "start", "sample_rate": 16000}, then binary 16-bit little-endian mono PCM as it comes.
+        Server: {"type": "ready"}; {"type": "wake", "at": samples, "heard": words} once the phrase is said, where "at"
+        counts samples at the client's rate from the start of the stream (where the phrase ended: what follows is the
+        dictation); then the connection closes. {"type": "error", "code", "message"} on failure."""
+        import asyncio
+
+        import numpy as np
+        given = (ws.headers.get("authorization", "").removeprefix("Bearer ").strip() or ws.headers.get("x-api-key") or ws.query_params.get("token"))
+        if token and not _same(given, token):
+            await ws.close(code=4401)
+            return
+        await ws.accept()
+        try:
+            first = await ws.receive_json()
+            if first.get("type") != "start":
+                raise FireVoiceError("bad_request", 'the first message must be {"type": "start"}')
+            rate = int(first.get("sample_rate") or 16000)
+            if not 8000 <= rate <= 96000:
+                raise FireVoiceError("bad_request", "sample_rate must be between 8000 and 96000")
+            spotter = await run_in_threadpool(svc.wake_spotter)
+        except FireVoiceError as err:
+            await ws.send_json({"type": "error", "code": err.code, "message": err.message})
+            await ws.close()
+            return
+        except WebSocketDisconnect:
+            return
+        except Exception as err:  # noqa: BLE001
+            from .service import friendly_error
+            await ws.send_json({"type": "error", "code": "internal", "message": friendly_error(err)})
+            await ws.close()
+            return
+        await ws.send_json({"type": "ready"})
+        from .asr import _resample16k
+        gone = False
+        try:
+            while True:
+                m = await ws.receive()
+                if m.get("type") == "websocket.disconnect":
+                    gone = True
+                    return
+                if not m.get("bytes"):
+                    continue
+                pcm = np.frombuffer(m["bytes"][: len(m["bytes"]) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
+                spotter.feed(_resample16k(pcm, rate))
+                hit = await run_in_threadpool(spotter.step)
+                if hit and svc.wake_teaching():
+                    hit = None                     # teaching: the attempt is reported to the page, nothing starts
+                if hit:
+                    import logging
+                    logging.getLogger("firevoice").info("wake phrase heard: %r", hit["heard"])
+                    await ws.send_json({"type": "wake", "at": int(round(hit["at"] * rate)), "heard": hit["heard"]})
+                    return
+                await asyncio.sleep(0)
+        except (WebSocketDisconnect, RuntimeError):
+            gone = True
+        except Exception as err:  # noqa: BLE001
+            import logging
+            logging.getLogger("firevoice").exception("wake phrase listening failed")
+            from .service import friendly_error
+            try:
+                await ws.send_json({"type": "error", "code": "internal", "message": friendly_error(err)})
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            if not gone:
+                try:
+                    await ws.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
     # ------------------------------------------------------------------ dictation: your words, snippets, history
     @app.get("/api/v1/dictation/assistant", dependencies=deps, tags=["stt"])
     def dictation_assistant():
@@ -1046,6 +1120,28 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         """Your dictation words, replacements and snippets. -> {"words": [...], "replacements": [{id, heard, write}],
         "snippets": [{id, trigger, text}]}"""
         return svc.dictation_store.load()
+
+    @app.get("/api/v1/dictation/wake", dependencies=deps, tags=["stt"])
+    def dictation_wake():
+        """The wake phrase on this voice: {"active": teaching now, "attempts": [...], "forms": forms of the name it
+        has learned ("fireboys")}."""
+        return svc.wake_teach("state")
+
+    @app.post("/api/v1/dictation/wake/teach", dependencies=deps, tags=["stt"])
+    def dictation_wake_teach(body: dict = Body(...)):
+        """Teach the wake phrase this voice: {"action": "start"} then say "Hey FireVoice" a few times (the listener
+        reports each attempt here instead of waking), then {"action": "save"} keeps how the name came out where it
+        did not wake yet, or {"action": "cancel"}. -> as GET /api/v1/dictation/wake"""
+        action = str(body.get("action") or "")
+        if action not in ("start", "save", "cancel"):
+            raise FireVoiceError("bad_request", 'action must be "start", "save" or "cancel"')
+        return svc.wake_teach(action)
+
+    @app.delete("/api/v1/dictation/wake/forms", dependencies=deps, tags=["stt"])
+    def dictation_wake_forget():
+        """Forget what the wake phrase learned of this voice."""
+        svc.wake_forget()
+        return svc.wake_teach("state")
 
     @app.put("/api/v1/dictation/words", dependencies=deps, tags=["stt"])
     def dictation_words(body: dict = Body(...)):

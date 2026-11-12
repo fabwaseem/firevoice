@@ -55,6 +55,7 @@ export const dictation = {
         keyterms: config.keyterms,
         mic: config.mic,
         keep_in_tray: config.keepInTray,
+        wake: config.wake,
         boost_quiet: config.boostQuiet,
         history: config.history,
         command_hotkey: config.commandHotkey,

@@ -24,6 +24,8 @@ export interface DictationConfig {
   mic: string;
   /** closing the window keeps FireVoice in the tray, so the hotkey keeps working */
   keepInTray: boolean;
+  /** say "Hey FireVoice" to start a dictation, hands-free (the microphone stays open while waiting for it) */
+  wake: boolean;
   /** names and terms to spell right */
   keyterms: string[];
   /** whisper mode: quiet speech is brought up to a normal level */
@@ -87,6 +89,7 @@ export const DEFAULT_DICTATION: DictationConfig = {
   sounds: true,
   mic: "",
   keepInTray: true,
+  wake: false,
   keyterms: [],
   boostQuiet: false,
   history: true,
