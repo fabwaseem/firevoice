@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { MotionIcon } from "@/vendor/motion-icons/MotionIcon";
 import { windowClose, windowMaximize, windowMinimize, windowRestore } from "@/vendor/motion-icons";
 import type { IconDef } from "@/vendor/motion-icons/types";
+import { AccountButton } from "@/components/cloud/AccountButton";
 
 /** The window's own controls: FireVoice draws its title bar (the system one is turned off, tauri.conf.json). The bar
  * moves the window when dragged and maximizes it on a double click; close does what the system button did (with
@@ -50,6 +51,8 @@ export function TitleBar({ overlay, scrolled }: { overlay?: boolean; scrolled?: 
         overlay && scrolled && "is-scrolled",
       )}
     >
+      {/* sign in (through the browser), or the account when signed in */}
+      <AccountButton />
       <div className={cn("flex", !focused && "opacity-60")}>
       {/* the kit's window controls: minimize bends into an arrow, maximize opens into corners, restore folds into
           one, close turns a quarter */}

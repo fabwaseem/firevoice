@@ -34,6 +34,7 @@ import { UpdatePill } from "./UpdateGate";
 import { Logo } from "./Logo";
 import { FeedbackDialog } from "@/components/cloud/FeedbackDialog";
 import { inTauri } from "@/lib/backend";
+import { useCloud } from "@/lib/cloud";
 
 type Item = { to: string; label: string; icon: Icon; end?: boolean; badge?: "jobs" };
 
@@ -264,6 +265,7 @@ export function Sidebar() {
   const collapsed = useSettings((s) => s.sidebarCollapsed);
   const set = useSettings((s) => s.set);
   const activeJobs = useActiveJobs();
+  const signedIn = !!useCloud().data?.signedIn;
   const [folded, fold] = useFolded();
   const toggle = () => set({ sidebarCollapsed: !collapsed });
 
@@ -328,7 +330,15 @@ export function Sidebar() {
           <DictationFeature collapsed={collapsed} />
         </div>
         {GROUPS.map((g) => (
-          <Group key={g.title} g={g} collapsed={collapsed} folded={!!folded[g.title]} onToggle={() => fold(g.title)} activeJobs={activeJobs} />
+          <Group
+            key={g.title}
+            // the Account page is there only while signed in
+            g={signedIn ? g : { ...g, items: g.items.filter((i) => i.to !== "/account") }}
+            collapsed={collapsed}
+            folded={!!folded[g.title]}
+            onToggle={() => fold(g.title)}
+            activeJobs={activeJobs}
+          />
         ))}
       </nav>
 

@@ -16,9 +16,9 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 const DEFAULT_URL: &str = "https://firevoice.fabwaseem.com";
 const MAX_QUEUE: usize = 2000;
@@ -119,11 +119,78 @@ fn file(app: &AppHandle, name: &str) -> Option<PathBuf> {
 
 fn save(app: &AppHandle) {
     let st = app.state::<Cloud>();
-    let saved = lock(&st.saved).clone();
+    let mut saved = lock(&st.saved).clone();
+    // the install's token and the account's session are written encrypted (see `seal`)
+    saved.token = saved.token.as_deref().map(seal);
+    saved.session = saved.session.as_deref().map(seal);
     if let Some(p) = file(app, "cloud.json") {
         let _ = std::fs::create_dir_all(p.parent().unwrap_or(&p));
-        let _ = std::fs::write(&p, serde_json::to_vec_pretty(&saved).unwrap_or_default());
+        let tmp = p.with_extension("json.tmp");
+        // written whole, then swapped in, so a crash mid-write never leaves half a file
+        if std::fs::write(&tmp, serde_json::to_vec_pretty(&saved).unwrap_or_default()).is_ok() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
+            }
+            let _ = std::fs::rename(&tmp, &p);
+        }
     }
+}
+
+// ---------------------------------------------------------------- secrets at rest
+
+const SEALED: &str = "dpapi:";
+
+/// Encrypts a secret for this Windows user (DPAPI): another user, or the file copied to another computer, cannot read
+/// it. On other systems it is kept as is, in a file only the user can read.
+fn seal(secret: &str) -> String {
+    #[cfg(windows)]
+    {
+        if let Some(b) = dpapi(secret.as_bytes(), true) {
+            return format!("{SEALED}{}", hex(&b));
+        }
+    }
+    secret.to_string()
+}
+
+fn unseal(stored: &str) -> Option<String> {
+    let Some(h) = stored.strip_prefix(SEALED) else { return Some(stored.to_string()) };
+    #[cfg(windows)]
+    {
+        let bytes: Option<Vec<u8>> = (0..h.len()).step_by(2).map(|i| h.get(i..i + 2).and_then(|x| u8::from_str_radix(x, 16).ok())).collect();
+        return dpapi(&bytes?, false).and_then(|b| String::from_utf8(b).ok());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = h;
+        None
+    }
+}
+
+#[cfg(windows)]
+fn dpapi(data: &[u8], encrypt: bool) -> Option<Vec<u8>> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
+    let entropy = b"FireVoice cloud v1";
+    let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
+    let extra = CRYPT_INTEGER_BLOB { cbData: entropy.len() as u32, pbData: entropy.as_ptr() as *mut u8 };
+    let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    // SAFETY: the input blobs point at live buffers of the stated sizes; the output is allocated by Windows and freed
+    // with LocalFree after it is copied
+    let ok = unsafe {
+        if encrypt {
+            CryptProtectData(&input, std::ptr::null(), &extra, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+        } else {
+            CryptUnprotectData(&input, std::ptr::null_mut(), &extra, std::ptr::null(), std::ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut out)
+        }
+    };
+    if ok == 0 || out.pbData.is_null() {
+        return None;
+    }
+    let v = unsafe { std::slice::from_raw_parts(out.pbData, out.cbData as usize) }.to_vec();
+    unsafe { LocalFree(out.pbData as _) };
+    Some(v)
 }
 
 /// Keeps unsent events for the next run (called as the app quits).
@@ -450,7 +517,21 @@ pub fn start(app: &AppHandle) {
     let st = app.state::<Cloud>();
     if let Some(p) = file(app, "cloud.json") {
         if let Ok(b) = std::fs::read(&p) {
-            *lock(&st.saved) = serde_json::from_slice(&b).unwrap_or_default();
+            let mut saved: Saved = serde_json::from_slice(&b).unwrap_or_default();
+            // a secret that cannot be decrypted (another Windows user, another computer) is dropped: the install
+            // registers again and the person signs in again
+            saved.token = saved.token.as_deref().and_then(unseal);
+            saved.session = saved.session.as_deref().and_then(unseal);
+            if saved.token.is_none() {
+                saved.install_id = None;
+                saved.reported = None;
+            }
+            if saved.session.is_none() {
+                saved.user = None;
+            }
+            *lock(&st.saved) = saved;
+            // re-save at once, so a file from before encryption is encrypted now
+            save(app);
         }
     }
     if let Some(p) = file(app, "cloud-queue.json") {
@@ -568,29 +649,111 @@ pub async fn cloud_erase(app: AppHandle) -> Result<Value, String> {
     Ok(status_value(&app))
 }
 
-fn signed_in(app: &AppHandle, r: &Value) -> Value {
-    let st = app.state::<Cloud>();
-    {
-        let mut s = lock(&st.saved);
-        s.session = r["token"].as_str().map(String::from);
-        s.user = Some(r["user"].clone());
-    }
-    save(app);
-    status_value(app)
+// ---------------------------------------------------------------- signing in (through the browser)
+//
+// The app never sees a password. It asks the server for a short code and a poll secret, opens the site's /link page
+// with the code in the default browser, and waits: the person signs in there (email or Google), checks the code
+// matches the one shown here, and approves. The app then collects its own session with the poll secret, which never
+// leaves this process. A request started by a registered install can only be collected by that install.
+
+#[derive(Default)]
+pub struct Login {
+    /// the running sign-in, so a second click restarts it and Cancel stops it
+    current: Mutex<Option<Arc<AtomicBool>>>,
 }
 
-/// Sign up or sign in. Registers the install first (with sharing on) so the account and install are linked.
+fn emit_login(app: &AppHandle, state: &str, message: Option<&str>) {
+    let _ = app.emit("cloud-login", json!({ "state": state, "message": message, "status": status_value(app) }));
+}
+
+/// Starts signing in: returns the code to show, opens the browser, and polls in the background until the person
+/// approves, declines, or ten minutes pass (the result arrives as a "cloud-login" event).
 #[tauri::command]
-pub async fn cloud_sign_in(app: AppHandle, action: String, email: String, password: String, name: Option<String>) -> Result<Value, String> {
-    ensure_registered(&app).await;
-    let (path, body) = match action.as_str() {
-        "signup" => ("/api/v1/auth/signup", json!({ "email": email, "password": password, "name": name })),
-        "login" => ("/api/v1/auth/login", json!({ "email": email, "password": password })),
-        _ => return Err("Unknown action.".into()),
+pub async fn cloud_login_start(app: AppHandle) -> Result<Value, String> {
+    // linking the install to the account needs the install registered (only when sharing is on)
+    if sharing(&app) {
+        ensure_registered(&app).await;
+    }
+    let device = {
+        #[cfg(windows)]
+        let h = std::env::var("COMPUTERNAME").ok();
+        #[cfg(not(windows))]
+        let h = std::fs::read_to_string("/etc/hostname").ok().map(|s| s.trim().to_string());
+        h.map(|s| s.chars().take(120).collect::<String>())
     };
-    let r = call(&app, reqwest::Method::POST, path, Some(body)).await?;
-    track(&app, if action == "signup" { "account.signup" } else { "account.login" }, Value::Null);
-    Ok(signed_in(&app, &r))
+    let r = call(&app, reqwest::Method::POST, "/api/v1/app-login", Some(json!({ "device": device }))).await?;
+    let code = r["code"].as_str().unwrap_or_default().to_string();
+    let poll = r["pollToken"].as_str().unwrap_or_default().to_string();
+    let valid = code.len() == 9 && code.chars().all(|c| c == '-' || c.is_ascii_alphanumeric());
+    if !valid || poll.len() < 20 {
+        return Err("FireVoice's server gave an unexpected answer. Try again.".into());
+    }
+    let expires = r["expiresIn"].as_u64().unwrap_or(600).min(900);
+    // the address is built here from the known server, never taken from the answer
+    let url = format!("{}/link?code={}", app.state::<Cloud>().base, code);
+
+    let stop = Arc::new(AtomicBool::new(false));
+    if let Some(old) = lock(&app.state::<Login>().current).replace(stop.clone()) {
+        old.store(true, Ordering::Relaxed);
+    }
+    {
+        use tauri_plugin_opener::OpenerExt;
+        if let Err(e) = app.opener().open_url(&url, None::<&str>) {
+            log::warn!("cloud: could not open the browser: {e}");
+        }
+    }
+    let a = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let until = std::time::Instant::now() + Duration::from_secs(expires);
+        loop {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            if stop.load(Ordering::Relaxed) {
+                return;
+            }
+            if std::time::Instant::now() > until {
+                emit_login(&a, "expired", Some("The sign-in took too long. Try again."));
+                return;
+            }
+            match call(&a, reqwest::Method::POST, "/api/v1/app-login/poll", Some(json!({ "pollToken": poll }))).await {
+                Ok(r) if r["status"] == "approved" => {
+                    let token = r["token"].as_str().filter(|t| t.len() >= 20 && t.len() <= 200).map(String::from);
+                    if token.is_none() {
+                        emit_login(&a, "error", Some("FireVoice's server gave an unexpected answer. Try again."));
+                        return;
+                    }
+                    {
+                        let st = a.state::<Cloud>();
+                        let mut s = lock(&st.saved);
+                        s.session = token;
+                        s.user = Some(r["user"].clone());
+                    }
+                    save(&a);
+                    track(&a, "account.login", Value::Null);
+                    emit_login(&a, "approved", None);
+                    if let Some(w) = a.get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+                    return;
+                }
+                Ok(_) => {}
+                // offline for a moment: keep waiting
+                Err(f) if f.status == 0 || f.status == 429 || f.status >= 500 => {}
+                Err(f) => {
+                    emit_login(&a, if f.code == "denied" { "denied" } else { "error" }, Some(&f.message));
+                    return;
+                }
+            }
+        }
+    });
+    Ok(json!({ "code": code, "url": url, "expiresIn": expires }))
+}
+
+#[tauri::command]
+pub fn cloud_login_cancel(app: AppHandle) {
+    if let Some(s) = lock(&app.state::<Login>().current).take() {
+        s.store(true, Ordering::Relaxed);
+    }
 }
 
 #[tauri::command]
@@ -606,7 +769,8 @@ pub async fn cloud_sign_out(app: AppHandle) -> Result<Value, String> {
     Ok(status_value(&app))
 }
 
-/// The account, fresh from the server (and whether it is still signed in).
+/// The account, fresh from the server (and whether it is still signed in: a password change or deletion on the
+/// website signs this app out).
 #[tauri::command]
 pub async fn cloud_me(app: AppHandle) -> Result<Value, String> {
     if lock(&app.state::<Cloud>().saved).session.is_none() {
@@ -629,38 +793,17 @@ pub async fn cloud_me(app: AppHandle) -> Result<Value, String> {
     }
 }
 
-/// Change the name or password (body: name, currentPassword, newPassword).
+/// Opens a page of the website in the browser (only this site's account and privacy pages).
 #[tauri::command]
-pub async fn cloud_update_account(app: AppHandle, body: Value) -> Result<Value, String> {
-    let r = call(&app, reqwest::Method::PATCH, "/api/v1/auth/me", Some(body)).await?;
-    lock(&app.state::<Cloud>().saved).user = Some(r["user"].clone());
-    save(&app);
-    Ok(status_value(&app))
-}
-
-#[tauri::command]
-pub async fn cloud_delete_account(app: AppHandle, password: String) -> Result<Value, String> {
-    call(&app, reqwest::Method::DELETE, "/api/v1/auth/me", Some(json!({ "password": password }))).await?;
-    {
-        let st = app.state::<Cloud>();
-        let mut s = lock(&st.saved);
-        s.session = None;
-        s.user = None;
-    }
-    save(&app);
-    Ok(status_value(&app))
-}
-
-#[tauri::command]
-pub async fn cloud_resend(app: AppHandle) -> Result<(), String> {
-    call(&app, reqwest::Method::POST, "/api/v1/auth/resend", None).await?;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn cloud_forgot(app: AppHandle, email: String) -> Result<(), String> {
-    call(&app, reqwest::Method::POST, "/api/v1/auth/forgot", Some(json!({ "email": email }))).await?;
-    Ok(())
+pub fn cloud_open(app: AppHandle, page: String) -> Result<(), String> {
+    let path = match page.as_str() {
+        "account" => "/account",
+        "privacy" => "/privacy",
+        "signup" => "/signin?mode=signup",
+        _ => return Err("Unknown page.".into()),
+    };
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(format!("{}{}", app.state::<Cloud>().base, path), None::<&str>).map_err(|e| e.to_string())
 }
 
 /// Feedback from the app: sent with this install (and the account, when signed in).
@@ -702,6 +845,20 @@ mod tests {
         assert_eq!(t.len(), 20);
         assert!(t.ends_with('Z') && t.as_bytes()[10] == b'T');
         assert!(t.starts_with("20"));
+    }
+
+    #[test]
+    fn secrets_round_trip_sealed() {
+        let secret = "a-session-token-of-some-length-1234567890";
+        let sealed = seal(secret);
+        #[cfg(windows)]
+        assert!(sealed.starts_with(SEALED) && !sealed.contains(secret));
+        assert_eq!(unseal(&sealed).as_deref(), Some(secret));
+        // a plain value from before encryption still loads
+        assert_eq!(unseal("plain-old-token").as_deref(), Some("plain-old-token"));
+        // a damaged sealed value is dropped, not trusted
+        #[cfg(windows)]
+        assert_eq!(unseal("dpapi:00ff"), None);
     }
 
     #[test]

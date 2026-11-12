@@ -8,8 +8,16 @@ export interface CloudUser {
   id: string;
   email: string;
   name: string | null;
+  avatarUrl?: string | null;
   verified: boolean;
+  google?: boolean;
   createdAt: string;
+}
+
+export interface LoginEvent {
+  state: "approved" | "denied" | "expired" | "error";
+  message: string | null;
+  status: CloudStatus;
 }
 
 export interface CloudStatus {
@@ -42,13 +50,12 @@ export const cloud = {
   me: () => call<CloudStatus>("cloud_me"),
   consent: (on: boolean) => call<CloudStatus>("cloud_consent", { on }),
   erase: () => call<CloudStatus>("cloud_erase"),
-  signIn: (action: "signup" | "login", email: string, password: string, name?: string) =>
-    call<CloudStatus>("cloud_sign_in", { action, email, password, name: name || null }),
+  /** Signing in happens in the browser: this returns the code to compare, and a "cloud-login" event says how it ended. */
+  loginStart: () => call<{ code: string; url: string; expiresIn: number }>("cloud_login_start"),
+  loginCancel: () => call<void>("cloud_login_cancel"),
   signOut: () => call<CloudStatus>("cloud_sign_out"),
-  updateAccount: (body: { name?: string | null; currentPassword?: string; newPassword?: string }) => call<CloudStatus>("cloud_update_account", { body }),
-  deleteAccount: (password: string) => call<CloudStatus>("cloud_delete_account", { password }),
-  resend: () => call<void>("cloud_resend"),
-  forgot: (email: string) => call<void>("cloud_forgot", { email }),
+  /** Opens the website's account, privacy or sign-up page in the browser. */
+  open: (page: "account" | "privacy" | "signup") => call<void>("cloud_open", { page }),
   feedback: (f: { kind: "bug" | "idea" | "praise" | "other"; message: string; email?: string; rating?: number | null }) =>
     call<void>("cloud_feedback", { kind: f.kind, message: f.message, email: f.email || null, rating: f.rating ?? null }),
   license: () => call<License>("cloud_license"),

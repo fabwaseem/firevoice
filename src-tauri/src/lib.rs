@@ -89,6 +89,7 @@ pub fn run() {
         .manage(updater::Updates::default())
         .manage(dictation::Dictation::default())
         .manage(cloud::Cloud::default())
+        .manage(cloud::Login::default())
         .invoke_handler(tauri::generate_handler![
             autostart::autostart_status,
             autostart::autostart_set,
@@ -113,13 +114,11 @@ pub fn run() {
             cloud::cloud_track,
             cloud::cloud_error,
             cloud::cloud_erase,
-            cloud::cloud_sign_in,
+            cloud::cloud_login_start,
+            cloud::cloud_login_cancel,
             cloud::cloud_sign_out,
             cloud::cloud_me,
-            cloud::cloud_update_account,
-            cloud::cloud_delete_account,
-            cloud::cloud_resend,
-            cloud::cloud_forgot,
+            cloud::cloud_open,
             cloud::cloud_feedback,
             cloud::cloud_license,
             cloud::cloud_activate,
