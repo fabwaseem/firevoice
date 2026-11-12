@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { CircleUser, Loader2, X } from "@/components/icons";
 import { Button } from "@/components/ui";
@@ -8,11 +7,14 @@ import { cloud, useCloud, useSetCloud, type LoginEvent } from "@/lib/cloud";
 import { cn } from "@/lib/utils";
 
 /** The person button in the title bar. Signed out: signs in through the browser (the code shown here must match the
- * one on the site). Signed in: their initial, opening the Account page. */
+ * one on the site). Signed in: their initial, opening the Account page.
+ *
+ * The title bar is also drawn on the screens before the app's router exists (starting, first run, updating the
+ * engine), so this must not use router hooks: useNavigate there throws and blanks the whole window. The app routes by
+ * the address's hash (createHashRouter), so setting it opens the Account page from anywhere. */
 export function AccountButton() {
   const status = useCloud();
   const set = useSetCloud();
-  const navigate = useNavigate();
   const [pending, setPending] = useState<{ code: string } | null>(null);
   const [starting, setStarting] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
@@ -68,7 +70,7 @@ export function AccountButton() {
     return (
       <button
         type="button"
-        onClick={() => navigate("/account")}
+        onClick={() => (window.location.hash = "#/account")}
         title={`Account: ${u.email}`}
         aria-label={`Account: ${u.email}`}
         className="mx-1.5 my-auto grid size-[26px] place-items-center overflow-hidden rounded-full bg-gradient-to-br from-fire-2 to-fire text-[12px] font-semibold text-white ring-2 ring-transparent outline-none transition hover:ring-fire/30 focus-visible:ring-fire/50"

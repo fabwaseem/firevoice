@@ -5,6 +5,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { RouteError } from "@/components/shell/RouteError";
 import { UpdateGate } from "@/components/shell/UpdateGate";
 import { StartupGate } from "@/components/onboarding/StartupGate";
+import { AppErrorBoundary } from "@/components/shell/AppErrorBoundary";
 import { HomeView } from "@/views/HomeView";
 
 // Pages load when first opened, so the app starts from a small bundle. Home ships with it.
@@ -72,12 +73,14 @@ const router = createHashRouter([
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <UpdateGate>
-        <StartupGate>
-          <RouterProvider router={router} />
-        </StartupGate>
-      </UpdateGate>
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <UpdateGate>
+          <StartupGate>
+            <RouterProvider router={router} />
+          </StartupGate>
+        </UpdateGate>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 }
