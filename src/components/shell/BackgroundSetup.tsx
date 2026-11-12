@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, Cpu, FileText, Loader2, PackageOpen, RotateCw, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Cpu, FileText, Loader2, PackageOpen, RotateCw, Sparkles } from "@/components/icons";
 import { useJobs } from "@/lib/api/hooks";
 import type { Job } from "@/lib/api/types";
 import { backend, fmtBytes, fmtEta, type ExtrasItem } from "@/lib/backend";

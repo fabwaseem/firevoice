@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Check, Compass, Cpu, FileText, HardDrive, Keyboard, Loader2, Lock, Mic, Play, Rocket, RotateCw,
   Sparkles, Square, Volume2, VolumeX,
-} from "lucide-react";
+} from "@/components/icons";
 import { HotkeyRecorder } from "@/components/dictation/HotkeyRecorder";
 import { useTour } from "@/components/tour/Tour";
 import { startAmbient, stopAmbient } from "./ambient";

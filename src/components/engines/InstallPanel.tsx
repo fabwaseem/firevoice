@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, CircleSlash, Download, FileText, HardDriveDownload, X } from "lucide-react";
+import { Check, CircleSlash, Download, FileText, HardDriveDownload, X } from "@/components/icons";
 import type { Engine } from "@/lib/api/types";
 import { toast } from "sonner";
 import { api, downloadFile, safeFileName } from "@/lib/api/client";

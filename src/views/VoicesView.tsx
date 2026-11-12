@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { FilterX, Library, Plus } from "lucide-react";
+import { FilterX, Library, Plus } from "@/components/icons";
 import { errMessage, useOptions, useVoiceCollections, useVoices } from "@/lib/api/hooks";
 import type { Voice } from "@/lib/api/types";
 import { Button, Chip, EmptyState } from "@/components/ui";

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { AudioLines, Hammer, ImageOff, ImagePlus, Pause, Play, Save, Star, Trash2, Undo2, Wand2 } from "lucide-react";
+import { AudioLines, Hammer, ImageOff, ImagePlus, Pause, Play, Save, Star, Trash2, Undo2, Wand2 } from "@/components/icons";
 import { toast } from "sonner";
 import type { Voice } from "@/lib/api/types";
 import { api } from "@/lib/api/client";

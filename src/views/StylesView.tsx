@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, Palette, Plus } from "lucide-react";
+import { ArrowLeft, Palette, Plus } from "@/components/icons";
 import { errMessage, useStyles } from "@/lib/api/hooks";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";

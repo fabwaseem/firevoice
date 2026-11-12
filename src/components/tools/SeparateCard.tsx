@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, AudioWaveform, Building2, Layers, Mic2, Music, Wind } from "lucide-react";
+import { AlertTriangle, AudioWaveform, Building2, Layers, Mic2, Music, Wind } from "@/components/icons";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useEngines } from "@/lib/api/hooks";

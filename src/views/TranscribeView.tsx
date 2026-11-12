@@ -1,4 +1,4 @@
-import { Ear, Languages, Mic, Square, Tags } from "lucide-react";
+import { Ear, Languages, Mic, Square, Tags } from "@/components/icons";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";

@@ -1,5 +1,5 @@
 import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router";
-import { Home, RotateCcw, TriangleAlert } from "lucide-react";
+import { Home, RotateCcw, TriangleAlert } from "@/components/icons";
 import { Button } from "@/components/ui";
 import { TitleBar } from "./TitleBar";
 

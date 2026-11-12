@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, RotateCw } from "lucide-react";
+import { AlertTriangle, Download, RotateCw } from "@/components/icons";
 import { useHealth } from "@/lib/api/hooks";
 import { apiCompat } from "@/lib/backend";
 import { useBackend } from "@/stores/backend";

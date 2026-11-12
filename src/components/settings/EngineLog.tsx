@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText } from "@/components/icons";
 import { backend, inTauri } from "@/lib/backend";
 import { Button, Dialog } from "@/components/ui";
 

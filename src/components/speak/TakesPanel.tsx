@@ -2,7 +2,7 @@ import { QualityView } from "@/components/tools/QualityReport";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Captions, Gauge, ListOrdered, Lock, LockOpen, PencilLine, Plus, RefreshCw, Scissors, Shuffle } from "lucide-react";
+import { Captions, Gauge, ListOrdered, Lock, LockOpen, PencilLine, Plus, RefreshCw, Scissors, Shuffle } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useKeptRender } from "@/lib/api/hooks";
 import type { KeptRender, QualityReport, RenderChunk, RenderTake, WordTime } from "@/lib/api/types";

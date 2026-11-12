@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Download, Pause, Play, Radio, RotateCcw, RotateCw, Volume1, Volume2, VolumeX, X } from "lucide-react";
+import { Download, Pause, Play, Radio, RotateCcw, RotateCw, Volume1, Volume2, VolumeX, X } from "@/components/icons";
 import { useShallow } from "zustand/react/shallow";
 import { usePlayer } from "@/stores/player";
 import { cn, fmtTime } from "@/lib/utils";

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Check, ClipboardCheck, Download, Layers, Lock, LockOpen, Mic2, Package, Palette, Pause, Play, Plus, RotateCcw, Timer, Trash2, Zap } from "lucide-react";
+import { ArrowLeft, Check, ClipboardCheck, Download, Layers, Lock, LockOpen, Mic2, Package, Palette, Pause, Play, Plus, RotateCcw, Timer, Trash2, Zap } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useEngines, useJob, useProject, useStyles, useVoices } from "@/lib/api/hooks";
 import type { AudiobookCheck, ChapterEdit, Paragraph, ParagraphStatus, Project } from "@/lib/api/types";

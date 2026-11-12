@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Loader2, Mic } from "lucide-react";
+import { AlertTriangle, Loader2, Mic } from "@/components/icons";
 import { onDictation, hotkeyLabels, type DictationStateEvent, type DictationTextEvent } from "@/lib/dictation";
 import { DEFAULT_DICTATION, type DictationConfig, type DictationPhase } from "@/stores/dictation";
 

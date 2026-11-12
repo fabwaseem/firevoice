@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { inTauri } from "@/lib/backend";
 import { cn } from "@/lib/utils";
+import { MotionIcon } from "@/vendor/motion-icons/MotionIcon";
+import { windowClose, windowMaximize, windowMinimize, windowRestore } from "@/vendor/motion-icons";
+import type { IconDef } from "@/vendor/motion-icons/types";
 
 /** The window's own controls: FireVoice draws its title bar (the system one is turned off, tauri.conf.json). The bar
  * moves the window when dragged and maximizes it on a double click; close does what the system button did (with
@@ -48,28 +51,17 @@ export function TitleBar({ overlay, scrolled }: { overlay?: boolean; scrolled?: 
       )}
     >
       <div className={cn("flex", !focused && "opacity-60")}>
-      <Control label="Minimize" onClick={() => void act("min")}>
-        <path d="M2 6h8" />
-      </Control>
-      <Control label={max ? "Restore" : "Maximize"} onClick={() => void act("max")}>
-        {max ? (
-          <>
-            <rect x="2" y="3.5" width="6.5" height="6.5" rx="1.2" />
-            <path d="M4 3.5V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-.5" />
-          </>
-        ) : (
-          <rect x="2.25" y="2.25" width="7.5" height="7.5" rx="1.4" />
-        )}
-      </Control>
-      <Control label="Close" danger onClick={() => void act("close")}>
-        <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
-      </Control>
+      {/* the kit's window controls: minimize bends into an arrow, maximize opens into corners, restore folds into
+          one, close turns a quarter */}
+      <Control label="Minimize" icon={windowMinimize} onClick={() => void act("min")} />
+      <Control label={max ? "Restore" : "Maximize"} icon={max ? windowRestore : windowMaximize} onClick={() => void act("max")} />
+      <Control label="Close" icon={windowClose} danger onClick={() => void act("close")} />
       </div>
     </div>
   );
 }
 
-function Control({ label, danger, onClick, children }: { label: string; danger?: boolean; onClick: () => void; children: React.ReactNode }) {
+function Control({ label, icon, danger, onClick }: { label: string; icon: IconDef; danger?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -81,9 +73,7 @@ function Control({ label, danger, onClick, children }: { label: string; danger?:
         danger ? "hover:bg-[#e5373a] hover:text-white active:bg-[#c42b2e]" : "hover:bg-surface-3 hover:text-ink active:bg-line-strong",
       )}
     >
-      <svg viewBox="0 0 12 12" className="size-[11px]" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        {children}
-      </svg>
+      <MotionIcon icon={icon} size={12} />
     </button>
   );
 }

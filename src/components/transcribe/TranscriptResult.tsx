@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
-import { AudioLines, Captions, Copy, Download, Pause, Play } from "lucide-react";
+import { AudioLines, Captions, Copy, Download, Pause, Play } from "@/components/icons";
 import { toast } from "sonner";
 import type { STTResult } from "@/lib/api/types";
 import { saveBlob } from "@/lib/audio";

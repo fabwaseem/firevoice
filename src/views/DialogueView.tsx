@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Download, FileText, Lightbulb, MessagesSquare, Play, Search, Timer, Users } from "lucide-react";
+import { Download, FileText, Lightbulb, MessagesSquare, Play, Search, Timer, Users } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { errMessage, useStyles, useVoices, useEngines } from "@/lib/api/hooks";
 import type { DialogueResult } from "@/lib/api/types";

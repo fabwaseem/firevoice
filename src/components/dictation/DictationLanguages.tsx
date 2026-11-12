@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { Plus, X } from "@/components/icons";
 import { useQuery } from "@tanstack/react-query";
 import { Select } from "@/components/ui";
 import { api } from "@/lib/api/client";

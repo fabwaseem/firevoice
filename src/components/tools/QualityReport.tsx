@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Gauge } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gauge } from "@/components/icons";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useVoices } from "@/lib/api/hooks";

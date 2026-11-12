@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Mic, Mic2, Square, Upload, Wand2 } from "lucide-react";
+import { Mic, Mic2, Square, Upload, Wand2 } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { errMessage, useVoices } from "@/lib/api/hooks";
 import type { ClipCheck } from "@/lib/api/types";

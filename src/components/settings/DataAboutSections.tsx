@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Compass, Eraser, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
+import { Compass, Eraser, RefreshCw, RotateCcw, Sparkles } from "@/components/icons";
 import { useUpdates } from "@/components/shell/UpdateGate";
 import { useTour } from "@/components/tour/Tour";
 import { toast } from "sonner";

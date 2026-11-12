@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@/components/icons";
 import { useState } from "react";
 import type { Style } from "@/lib/api/types";
 import { Button, Dialog, Input, Label, Select } from "@/components/ui";

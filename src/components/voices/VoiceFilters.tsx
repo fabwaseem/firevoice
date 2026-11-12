@@ -1,4 +1,4 @@
-import { Heart, Search, X } from "lucide-react";
+import { Heart, Search, X } from "@/components/icons";
 import { Chip, Input, Select } from "@/components/ui";
 import { langName } from "@/lib/utils";
 import { GENDER_FILTERS } from "./helpers";

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Clock, Copy, GraduationCap, Languages, Mic, Search, Trash2, Type, Wand2, Zap } from "lucide-react";
+import { ArrowRight, Clock, Copy, GraduationCap, Languages, Mic, Search, Trash2, Type, Wand2, Zap } from "@/components/icons";
 import { toast } from "sonner";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";

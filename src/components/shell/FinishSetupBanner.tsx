@@ -1,4 +1,4 @@
-import { Rocket, X } from "lucide-react";
+import { Rocket, X } from "@/components/icons";
 import { useHealth, useSetupReport } from "@/lib/api/hooks";
 import { useResumeSetup } from "@/stores/firstrun";
 import { Button } from "@/components/ui";

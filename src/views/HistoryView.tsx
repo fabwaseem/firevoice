@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { CheckSquare, History as HistoryIcon, Mic, Search, Sparkles, Trash2, X } from "lucide-react";
+import { CheckSquare, History as HistoryIcon, Mic, Search, Sparkles, Trash2, X } from "@/components/icons";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";

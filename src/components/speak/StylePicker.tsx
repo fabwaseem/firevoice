@@ -24,7 +24,7 @@ import {
   Waves,
   Wind,
   Zap,
-} from "lucide-react";
+} from "@/components/icons";
 import type { Style } from "@/lib/api/types";
 import { Input } from "@/components/ui";
 import { cn } from "@/lib/utils";

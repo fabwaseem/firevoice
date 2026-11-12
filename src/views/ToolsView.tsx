@@ -1,4 +1,4 @@
-import { Gauge, Layers, ShieldCheck } from "lucide-react";
+import { Gauge, Layers, ShieldCheck } from "@/components/icons";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { SeparateTool } from "@/components/tools/SeparateCard";
 import { QualityTool } from "@/components/tools/QualityReport";

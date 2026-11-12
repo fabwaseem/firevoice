@@ -1,5 +1,5 @@
 import { type ComponentType, type ReactNode } from "react";
-import { AudioLines, Check, Languages, Library, MessagesSquare, Mic, Music, ShieldCheck, Wand2 } from "lucide-react";
+import { AudioLines, Check, Languages, Library, MessagesSquare, Mic, Music, ShieldCheck, Wand2 } from "@/components/icons";
 import { Logo } from "@/components/shell/Logo";
 import { TitleBar } from "@/components/shell/TitleBar";
 import { cn } from "@/lib/utils";

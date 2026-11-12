@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { Download, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { Download, Pause, Play, Volume2, VolumeX } from "@/components/icons";
 import { authHeaders } from "@/lib/api/client";
 import { usePlayer } from "@/stores/player";
 import { cn, fmtTime } from "@/lib/utils";

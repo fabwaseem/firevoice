@@ -1,4 +1,4 @@
-import { FileCheck2, Repeat2, ScanSearch, ShieldAlert, ShieldCheck, ShieldQuestion, Scissors, AudioLines } from "lucide-react";
+import { FileCheck2, Repeat2, ScanSearch, ShieldAlert, ShieldCheck, ShieldQuestion, Scissors, AudioLines } from "@/components/icons";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";

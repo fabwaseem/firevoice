@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AudioWaveform, ChevronDown, Dices, FileAudio, Languages, MessageSquareText, Palette, RotateCcw } from "lucide-react";
+import { AudioWaveform, ChevronDown, Dices, FileAudio, Languages, MessageSquareText, Palette, RotateCcw } from "@/components/icons";
 import type { Engine, Style } from "@/lib/api/types";
 import { useShallow } from "zustand/react/shallow";
 import { useStudio } from "@/stores/studio";

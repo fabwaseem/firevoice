@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { AudioLines, Captions, Check, Download, FileText, History, Layers, MessagesSquare, Mic, Music, Pause, Play, Repeat2, Sparkles, Trash2, Waves } from "lucide-react";
+import { AudioLines, Captions, Check, Download, FileText, History, Layers, MessagesSquare, Mic, Music, Pause, Play, Repeat2, Sparkles, Trash2, Waves } from "@/components/icons";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useDeleteHistory, useHistory } from "@/lib/api/hooks";

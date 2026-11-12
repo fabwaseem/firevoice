@@ -1,4 +1,4 @@
-import { Star } from "lucide-react";
+import { Star } from "@/components/icons";
 import type { Voice } from "@/lib/api/types";
 import { Badge, Tooltip } from "@/components/ui";
 

@@ -1,4 +1,4 @@
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "@/components/icons";
 import { Card, CardBody, CardHeader, Label, Segmented, Select, Switch } from "@/components/ui";
 import { useSettings, type Settings, type Theme } from "@/stores/settings";
 

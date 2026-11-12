@@ -1,4 +1,4 @@
-import { Save } from "lucide-react";
+import { Save } from "@/components/icons";
 import { useEffect, useState } from "react";
 import type { PathSettingKey } from "@/lib/api/types";
 import { usePaths, useSaveSettings } from "@/lib/api/hooks";

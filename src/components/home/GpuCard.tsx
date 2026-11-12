@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Cpu, Ear, Loader2, X } from "lucide-react";
+import { Cpu, Ear, Loader2, X } from "@/components/icons";
 import { Badge, Card, CardBody, CardHeader, Skeleton, Tooltip } from "@/components/ui";
 import { useSystem, useUnloadEngine } from "@/lib/api/hooks";
 import { cn, fmtGB } from "@/lib/utils";

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "@/components/icons";
 import { toast } from "sonner";
 import { authHeaders, url } from "@/lib/api/client";
 

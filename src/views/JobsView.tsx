@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ListChecks } from "lucide-react";
+import { ListChecks } from "@/components/icons";
 import { useCancelJob, useDeleteJob, useJob, useJobs, errMessage } from "@/lib/api/hooks";
 import type { Job, JobKind } from "@/lib/api/types";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";

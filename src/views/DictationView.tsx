@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Keyboard, MessageSquareQuote, Mic, Settings2, Sparkles, Square, Wand2, Zap } from "lucide-react";
+import { AlertTriangle, Keyboard, MessageSquareQuote, Mic, Settings2, Sparkles, Square, Wand2, Zap } from "@/components/icons";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { HotkeyRecorder } from "@/components/dictation/HotkeyRecorder";

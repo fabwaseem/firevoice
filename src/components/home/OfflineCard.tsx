@@ -1,4 +1,4 @@
-import { PlugZap, RefreshCw } from "lucide-react";
+import { PlugZap, RefreshCw } from "@/components/icons";
 import { Button, Card } from "@/components/ui";
 import { inTauri } from "@/lib/backend";
 import { useBackend } from "@/stores/backend";

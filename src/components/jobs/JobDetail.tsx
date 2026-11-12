@@ -1,4 +1,4 @@
-import { Download, FileDown, Play, X } from "lucide-react";
+import { Download, FileDown, Play, X } from "@/components/icons";
 import { toast } from "sonner";
 import type { Job } from "@/lib/api/types";
 import { api, downloadFile, safeFileName } from "@/lib/api/client";

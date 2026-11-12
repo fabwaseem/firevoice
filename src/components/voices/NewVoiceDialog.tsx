@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, FileAudio, FolderOpen, Mic, Pause, Play, Plus, Shuffle, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileAudio, FolderOpen, Mic, Pause, Play, Plus, Shuffle, Sparkles, Upload, Wand2, X } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { errMessage, useAddVoice, useDesignVoice, useEngines, useOptions } from "@/lib/api/hooks";
 import type { DesignBatch, Voice } from "@/lib/api/types";

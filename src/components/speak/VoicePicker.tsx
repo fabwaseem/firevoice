@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import * as RP from "@radix-ui/react-popover";
-import { Check, ChevronDown, Heart, Play, Search, Star, Wand2 } from "lucide-react";
+import { Check, ChevronDown, Heart, Play, Search, Star, Wand2 } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { useVoices } from "@/lib/api/hooks";
 import type { Engine, Voice } from "@/lib/api/types";

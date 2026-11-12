@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowRight, Check, Cpu, FileText, Loader2, RotateCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Cpu, FileText, Loader2, RotateCw } from "@/components/icons";
 import { backend } from "@/lib/backend";
 import { Button, Dialog, ProgressBar } from "@/components/ui";
 import { cn } from "@/lib/utils";

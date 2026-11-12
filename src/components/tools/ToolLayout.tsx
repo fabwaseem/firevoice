@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { FileAudio, RefreshCw, UploadCloud, X } from "lucide-react";
+import { FileAudio, RefreshCw, UploadCloud, X } from "@/components/icons";
 import { AudioPlayer, Card } from "@/components/ui";
 import { cn, fmtBytes } from "@/lib/utils";
 import { TrySample, type SampleName } from "./TrySample";

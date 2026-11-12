@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard } from "lucide-react";
+import { Keyboard } from "@/components/icons";
 import { Kbd } from "@/components/ui";
 import { hotkeyFromEvent, hotkeyLabels } from "@/lib/dictation";
 import { cn } from "@/lib/utils";

@@ -1,4 +1,4 @@
-import { Languages } from "lucide-react";
+import { Languages } from "@/components/icons";
 import { Select, Switch } from "@/components/ui";
 import { SPEECH_LANGUAGES, speechLanguageName } from "@/lib/speechLanguages";
 import { useDictation } from "@/stores/dictation";

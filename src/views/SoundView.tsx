@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Dices, Music, PenLine, Sparkles, Timer, Waves } from "lucide-react";
+import { Dices, Music, PenLine, Sparkles, Timer, Waves } from "@/components/icons";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useEngines } from "@/lib/api/hooks";

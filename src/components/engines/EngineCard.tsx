@@ -1,6 +1,6 @@
 import { useState, type ComponentType } from "react";
 import { useNavigate } from "react-router";
-import { AudioLines, Download, Layers, Music, Power, PowerOff, Repeat2, SlidersHorizontal, Trash2, Waves } from "lucide-react";
+import { AudioLines, Download, Layers, Music, Power, PowerOff, Repeat2, SlidersHorizontal, Trash2, Waves } from "@/components/icons";
 import { AnimatePresence, motion } from "motion/react";
 import type { Engine } from "@/lib/api/types";
 import { useLoadEngine, useUnloadEngine } from "@/lib/api/hooks";

@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Lock, Tag } from "lucide-react";
+import { Lock, Tag } from "@/components/icons";
 import type { Style } from "@/lib/api/types";
 import { cn, truncate } from "@/lib/utils";
 import { Skeleton } from "@/components/ui";

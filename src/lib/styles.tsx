@@ -1,7 +1,7 @@
 /** Delivery styles are a Firebrand feature. Firebrand (IndexTTS-2) controls emotion apart from who is speaking, so a
  * style is clearly heard and the voice stays the same; Firestorm takes the same emotion settings. On other engines a
  * style could only nudge the speed and pauses, so the app does not offer styles there. */
-import { Palette } from "lucide-react";
+import { Palette } from "@/components/icons";
 import { useEngines, useOptions } from "@/lib/api/hooks";
 import type { Engine } from "@/lib/api/types";
 import { useStudio } from "@/stores/studio";

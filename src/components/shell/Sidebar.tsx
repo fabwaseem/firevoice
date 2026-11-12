@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from "react";
+import { useState } from "react";
 import { Link, NavLink, useLocation, useMatch, useResolvedPath } from "react-router";
 import {
   AudioLines,
@@ -20,7 +20,8 @@ import {
   Settings,
   Wrench,
   Waves,
-} from "lucide-react";
+  type Icon,
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/stores/settings";
 import { FEATURES_VERSION, useDictation, useDictationLive } from "@/stores/dictation";
@@ -30,7 +31,7 @@ import { ServerStatus } from "./ServerStatus";
 import { UpdatePill } from "./UpdateGate";
 import { Logo } from "./Logo";
 
-type Item = { to: string; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; end?: boolean; badge?: "jobs" };
+type Item = { to: string; label: string; icon: Icon; end?: boolean; badge?: "jobs" };
 
 // a few short lists, each a kind of work; Dictation, the everyday feature, has its own place above them
 const GROUPS: { title: string; items: Item[] }[] = [
@@ -99,7 +100,8 @@ function NavItem({ item, collapsed, count, fresh }: { item: Item; collapsed: boo
           "focus-visible:ring-2 focus-visible:ring-fire/50",
         )}
       >
-        <Icon className="size-[18px] shrink-0 transition-transform duration-150 group-active:scale-90" strokeWidth={isActive ? 2.2 : 1.85} />
+        {/* duotone: the soft fill deepens on hover and on the page you are on */}
+        <Icon variant="duotone" className="size-[18px] shrink-0 transition-transform duration-150 group-active:scale-90" strokeWidth={isActive ? 2 : 1.8} />
         {!collapsed && <span className="truncate">{item.label}</span>}
         {fresh && !count && (
           <span

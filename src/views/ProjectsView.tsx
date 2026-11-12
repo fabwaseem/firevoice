@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BookOpen, FileText, Mic2, Palette, Plus, Type, Upload } from "lucide-react";
+import { BookOpen, FileText, Mic2, Palette, Plus, Type, Upload } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useOptions, useProjects, useStyles, useVoices } from "@/lib/api/hooks";
 import type { ProjectSummary } from "@/lib/api/types";

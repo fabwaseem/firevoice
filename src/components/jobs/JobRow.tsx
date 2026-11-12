@@ -1,4 +1,4 @@
-import { AudioLines, Ban, BookOpen, Download, HardDriveDownload, Languages, Layers, Library, MessagesSquare, Palette, Play, Sparkles, Trash2 } from "lucide-react";
+import { AudioLines, Ban, BookOpen, Download, HardDriveDownload, Languages, Layers, Library, MessagesSquare, Palette, Play, Sparkles, Trash2 } from "@/components/icons";
 import type { Job } from "@/lib/api/types";
 import { errMessage } from "@/lib/api/hooks";
 import { toast } from "sonner";

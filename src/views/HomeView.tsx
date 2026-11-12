@@ -24,7 +24,7 @@ import {
   Type,
   TriangleAlert,
   Zap,
-} from "lucide-react";
+} from "@/components/icons";
 import { useHealth, useStats, useSystem, errMessage } from "@/lib/api/hooks";
 import type { DictationStats, StatGroup, StatRow, Stats } from "@/lib/api/types";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";

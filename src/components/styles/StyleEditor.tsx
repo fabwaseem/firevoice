@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { Copy, FileText, Lock, Play, Save, Sparkles, Trash2 } from "lucide-react";
+import { Copy, FileText, Lock, Play, Save, Sparkles, Trash2 } from "@/components/icons";
 import type { Style } from "@/lib/api/types";
 import { useDeleteStyle, usePutStyle } from "@/lib/api/hooks";
 import { useStudio } from "@/stores/studio";

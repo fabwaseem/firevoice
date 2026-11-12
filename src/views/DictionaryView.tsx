@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AudioLines, BookA, ChevronDown, Download, Eye, Keyboard, Mic, Play, Plus, Search, Trash2, Upload, Volume2, X } from "lucide-react";
+import { AudioLines, BookA, ChevronDown, Download, Eye, Keyboard, Mic, Play, Plus, Search, Trash2, Upload, Volume2, X } from "@/components/icons";
 import { api } from "@/lib/api/client";
 import { errMessage, qk, useDictionary, useOptions } from "@/lib/api/hooks";
 import type { DictRule, DictRuleInput } from "@/lib/api/types";

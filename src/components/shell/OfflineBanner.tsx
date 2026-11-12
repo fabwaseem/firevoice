@@ -1,6 +1,6 @@
 import { useLocation } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { RefreshCw, TriangleAlert } from "lucide-react";
+import { RefreshCw, TriangleAlert } from "@/components/icons";
 import { useHealth } from "@/lib/api/hooks";
 import { inTauri } from "@/lib/backend";
 import { useBackend } from "@/stores/backend";

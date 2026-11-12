@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import { ClipboardPaste, Eraser, FileText, Sparkles } from "lucide-react";
+import { ClipboardPaste, Eraser, FileText, Sparkles } from "@/components/icons";
 import { toast } from "sonner";
 import { Button, Tooltip } from "@/components/ui";
 import { SAMPLE_TEXT, useStudio } from "@/stores/studio";

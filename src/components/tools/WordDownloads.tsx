@@ -1,6 +1,6 @@
 import { useState } from "react";
 import * as DM from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, ListOrdered } from "lucide-react";
+import { ChevronDown, ListOrdered } from "@/components/icons";
 import { toast } from "sonner";
 import { saveBlob } from "@/lib/audio";
 import { errMessage } from "@/lib/api/hooks";

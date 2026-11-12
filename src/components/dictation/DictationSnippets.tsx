@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquareQuote, Pencil, Plus, Trash2 } from "lucide-react";
+import { MessageSquareQuote, Pencil, Plus, Trash2 } from "@/components/icons";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";

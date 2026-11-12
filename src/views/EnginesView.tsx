@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Cpu } from "lucide-react";
+import { Cpu } from "@/components/icons";
 import { useEngines, useSystem, errMessage } from "@/lib/api/hooks";
 import { fmtGB } from "@/lib/utils";
 import { PageHeader, LoadError } from "@/components/shell/PageHeader";

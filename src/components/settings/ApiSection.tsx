@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Check, Copy, FileJson } from "lucide-react";
+import { BookOpen, Check, Copy, FileJson } from "@/components/icons";
 import { toast } from "sonner";
 import { Badge, Button, Card, CardBody, CardHeader, Segmented } from "@/components/ui";
 import { useHealth } from "@/lib/api/hooks";

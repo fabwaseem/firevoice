@@ -1,4 +1,4 @@
-import { ArrowRight, BookA, Hand, History, Languages, MessageSquareQuote, Sparkles, Undo2, Wand2, X } from "lucide-react";
+import { ArrowRight, BookA, Hand, History, Languages, MessageSquareQuote, Sparkles, Undo2, Wand2, X } from "@/components/icons";
 import { Card } from "@/components/ui";
 import { hotkeyLabels } from "@/lib/dictation";
 import { FEATURES_VERSION, useDictation } from "@/stores/dictation";

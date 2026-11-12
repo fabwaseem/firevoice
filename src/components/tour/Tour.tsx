@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { create } from "zustand";
-import { ArrowLeft, ArrowRight, MousePointerClick, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, MousePointerClick, X } from "@/components/icons";
 import { Button, Kbd } from "@/components/ui";
 import { hotkeyLabels } from "@/lib/dictation";
 import { useDictation } from "@/stores/dictation";

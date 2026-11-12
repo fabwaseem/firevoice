@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { FileAudio, Mic, Square, Upload, X } from "lucide-react";
+import { FileAudio, Mic, Square, Upload, X } from "@/components/icons";
 import { Recorder } from "@/lib/audio";
 import { cn, fmtBytes, fmtTime } from "@/lib/utils";
 import { AudioPlayer, Button, Segmented } from "@/components/ui";

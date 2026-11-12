@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 export function TagsInput({ value, onChange, placeholder = "Add a tag and press Enter", disabled, id }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string; disabled?: boolean; id?: string }) {

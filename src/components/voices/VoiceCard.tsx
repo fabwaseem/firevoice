@@ -1,4 +1,4 @@
-import { Heart, Play, Pause, Star } from "lucide-react";
+import { Heart, Play, Pause, Star } from "@/components/icons";
 import { motion } from "motion/react";
 import type { Voice } from "@/lib/api/types";
 import { api } from "@/lib/api/client";

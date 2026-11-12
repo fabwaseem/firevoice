@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, Trash2 } from "lucide-react";
+import { Mic, Square, Trash2 } from "@/components/icons";
 import { Recorder } from "@/lib/audio";
 import { cn, fmtTime } from "@/lib/utils";
 import { AudioPlayer, Button } from "@/components/ui";

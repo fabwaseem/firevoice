@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { create } from "zustand";
-import { AlertTriangle, ArrowDownToLine, Check, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, RotateCw, Sparkles, X } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, Check, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, RotateCw, Sparkles, X } from "@/components/icons";
 import { updates, RELEASES_PAGE, type UpdateCheck, type UpdateStatus } from "@/lib/updates";
 import { openExternal } from "@/lib/external";
 import { fmtBytes, fmtEta, inTauri } from "@/lib/backend";

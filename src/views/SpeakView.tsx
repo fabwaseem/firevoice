@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AudioLines, Clock, Gauge, ListPlus, Mic2, Palette, Repeat, Square, Zap } from "lucide-react";
+import { AudioLines, Clock, Gauge, ListPlus, Mic2, Palette, Repeat, Square, Zap } from "@/components/icons";
 import { useCreateJob, useEngines, useHealth, useOptions, useStyles, useEngineName } from "@/lib/api/hooks";
 import type { TTSRequest } from "@/lib/api/types";
 import { useStudio } from "@/stores/studio";

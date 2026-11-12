@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Download, FileAudio, Globe, Languages, Mic2, Music, Upload, X } from "lucide-react";
+import { Download, FileAudio, Globe, Languages, Mic2, Music, Upload, X } from "@/components/icons";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadFile } from "@/lib/api/client";
