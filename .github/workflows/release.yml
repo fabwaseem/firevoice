@@ -205,7 +205,7 @@ jobs:
           retention-days: 14
 
   publish:
-    name: ${{ inputs.dry_run && 'Collect (dry run)' || 'Publish' }}
+    name: Publish (on a dry run, collect only)
     needs: [plan, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 30

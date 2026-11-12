@@ -81,10 +81,29 @@ def filter_audio(a: np.ndarray, sr: int, af: str) -> np.ndarray:
     return np.frombuffer(raw, dtype="<f4").copy()
 
 
+# soxr where the ffmpeg has it; otherwise ffmpeg's own resampler at its high-quality settings. The ffmpeg that ships
+# with the app (imageio-ffmpeg's "essentials" build) has no soxr, and asking it for soxr fails outright.
+_SOXR = "aresample=resampler=soxr"
+_SWR = "aresample=resampler=swr:filter_size=64:phase_shift=10:cutoff=0.97:linear_interp=1"
+_has_soxr: dict[str, bool] = {}
+
+
+def _resampler(exe: str) -> str:
+    """The best resampler this ffmpeg has (asked once per ffmpeg: its build configuration lists libsoxr when it has it)."""
+    if exe not in _has_soxr:
+        try:
+            p = subprocess.run([exe, "-hide_banner", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+            _has_soxr[exe] = b"--enable-libsoxr" in p.stdout
+        except Exception:
+            _has_soxr[exe] = False
+    return _SOXR if _has_soxr[exe] else _SWR
+
+
 def resample(a: np.ndarray, sr: int, out_sr: int) -> np.ndarray:
     if sr == out_sr or not len(a):
         return a
-    raw = _run([_ffmpeg(), "-v", "error", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0", "-af", "aresample=resampler=soxr",
+    exe = _ffmpeg()
+    raw = _run([exe, "-v", "error", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "pipe:0", "-af", _resampler(exe),
                 "-f", "f32le", "-ar", str(out_sr), "-ac", "1", "pipe:1"], a.astype("<f4").tobytes())
     return np.frombuffer(raw, dtype="<f4").copy()
 

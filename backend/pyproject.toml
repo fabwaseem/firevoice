@@ -22,7 +22,7 @@ asr = ["faster-whisper>=1.2"]                         # GPU Whisper for take val
 server = ["fastapi>=0.110", "uvicorn>=0.29", "websockets>=12", "uv>=0.5", "python-multipart>=0.0.9"]   # the HTTP API (uv: engine installs)
 harvest = ["pyarrow<17", "librosa>=0.10"]             # `firevoice voices harvest` from HF parquet datasets
 bench = ["resemblyzer>=0.1.4", "jiwer>=3", "speechmos>=0.0.1", "py-spy"]   # bake-off scorer
-dev = ["pytest>=8", "httpx"]
+dev = ["pytest>=8", "httpx", "pytest-timeout>=2.3"]
 watermark = ["audioseal>=0.2"]
 dub = ["sentencepiece>=0.2"]                           # local translation for `firevoice dub` (M2M100 via transformers)                         # inaudible "made by FireVoice" mark on every output, and its detector
 # Everything the desktop app's bundled backend runs with (install CUDA torch first, as for `gpu`):
@@ -33,3 +33,5 @@ packages = ["src/firevoice"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# a test that hangs fails after two minutes and names itself, instead of stalling a release build until its time limit
+timeout = 120
