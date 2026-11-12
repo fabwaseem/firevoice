@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useId, useInsertionEffect, useState } from "react";
 import { baseCss, iconCss } from "./motion";
 import { draw, type DrawOptions } from "./render";

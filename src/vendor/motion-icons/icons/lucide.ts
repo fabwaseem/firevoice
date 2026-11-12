@@ -432,6 +432,166 @@ export const messageHeart: IconDef = {
   ...preset("bounce", 2),
 };
 
+export const menu: IconDef = {
+  name: "menu",
+  title: "Menu",
+  category: "navigation",
+  tags: ["menu","hamburger","nav","open"],
+  motionNote: "The lines shuffle.",
+  parts: [{"p":"p0","role":"line","d":"M4 5h16"},{"p":"p1","role":"line","d":"M4 12h16"},{"p":"p2","role":"line","d":"M4 19h16"}],
+  ...preset("wiggle", 3),
+};
+
+export const arrowDown: IconDef = {
+  name: "arrow-down",
+  title: "Arrow down",
+  category: "navigation",
+  tags: ["down","scroll","next"],
+  motionNote: "It steps down.",
+  parts: [{"p":"p0","role":"line","d":"M12 5v14"},{"p":"p1","role":"line","d":"m19 12-7 7-7-7"}],
+  ...preset("nudge-down", 2),
+};
+
+export const bot: IconDef = {
+  name: "bot",
+  title: "Assistant",
+  category: "app",
+  tags: ["bot","assistant","ai","robot"],
+  motionNote: "It bobs.",
+  parts: [{"p":"p0","role":"line","d":"M12 8V4H8"},{"p":"p1","role":"body","d":"M6 8 H18 A2 2 0 0 1 20 10 V18 A2 2 0 0 1 18 20 H6 A2 2 0 0 1 4 18 V10 A2 2 0 0 1 6 8 Z"},{"p":"p2","role":"line","d":"M2 14h2"},{"p":"p3","role":"line","d":"M20 14h2"},{"p":"p4","role":"detail","d":"M15 13v2"},{"p":"p5","role":"detail","d":"M9 13v2"}],
+  ...preset("bounce", 6),
+};
+
+export const wifiOff: IconDef = {
+  name: "wifi-off",
+  title: "Offline",
+  category: "status",
+  tags: ["offline","no internet","local"],
+  motionNote: "It shakes.",
+  parts: [{"p":"p0","role":"line","d":"M12 20h.01"},{"p":"p1","role":"line","d":"M8.5 16.429a5 5 0 0 1 7 0"},{"p":"p2","role":"line","d":"M5 12.859a10 10 0 0 1 5.17-2.69"},{"p":"p3","role":"line","d":"M19 12.859a10 10 0 0 0-2.007-1.523"},{"p":"p4","role":"line","d":"M2 8.82a15 15 0 0 1 4.177-2.643"},{"p":"p5","role":"line","d":"M22 8.82a15 15 0 0 0-11.288-3.764"},{"p":"p6","role":"line","d":"m2 2 20 20"}],
+  ...preset("shake", 7),
+};
+
+export const cloud: IconDef = {
+  name: "cloud",
+  title: "Cloud",
+  category: "status",
+  tags: ["cloud","online","upload"],
+  motionNote: "It drifts.",
+  parts: [{"p":"p0","role":"body","d":"M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"}],
+  ...preset("float", 1),
+};
+
+export const cloudOff: IconDef = {
+  name: "cloud-off",
+  title: "No cloud",
+  category: "status",
+  tags: ["no cloud","local","private","offline"],
+  motionNote: "It shakes.",
+  parts: [{"p":"p0","role":"line","d":"M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"},{"p":"p1","role":"line","d":"M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"},{"p":"p2","role":"line","d":"m2 2 20 20"}],
+  ...preset("shake", 3),
+};
+
+export const laptop: IconDef = {
+  name: "laptop",
+  title: "Laptop",
+  category: "app",
+  tags: ["computer","device","desktop","pc"],
+  motionNote: "It grows a touch.",
+  parts: [{"p":"p0","role":"body","d":"M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z"},{"p":"p1","role":"detail","d":"M20.054 15.987H3.946"}],
+  ...preset("pop", 2),
+};
+
+export const chart: IconDef = {
+  name: "chart",
+  title: "Chart",
+  category: "status",
+  tags: ["stats","chart","bars","progress"],
+  motionNote: "The bars bounce.",
+  parts: [{"p":"p0","role":"line","d":"M3 3v16a2 2 0 0 0 2 2h16"},{"p":"p1","role":"line","d":"M18 17V9"},{"p":"p2","role":"line","d":"M13 17V5"},{"p":"p3","role":"line","d":"M8 17v-3"}],
+  ...preset("bounce", 4),
+};
+
+export const command: IconDef = {
+  name: "command",
+  title: "Shortcut",
+  category: "actions",
+  tags: ["shortcut","hotkey","keyboard","command"],
+  motionNote: "It turns half way.",
+  parts: [{"p":"p0","role":"line","d":"M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"}],
+  ...preset("spin-180", 1),
+};
+
+export const video: IconDef = {
+  name: "video",
+  title: "Video",
+  category: "media",
+  tags: ["video","film","dub","movie"],
+  motionNote: "It rolls forward.",
+  parts: [{"p":"p0","role":"line","d":"m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"},{"p":"p1","role":"body","d":"M4 6 H14 A2 2 0 0 1 16 8 V16 A2 2 0 0 1 14 18 H4 A2 2 0 0 1 2 16 V8 A2 2 0 0 1 4 6 Z"}],
+  ...preset("nudge-right", 2),
+};
+
+export const quote: IconDef = {
+  name: "quote",
+  title: "Quote",
+  category: "app",
+  tags: ["quote","testimonial","words"],
+  motionNote: "It leans in.",
+  parts: [{"p":"p0","role":"body","d":"M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"},{"p":"p1","role":"body","d":"M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"}],
+  ...preset("tilt", 2),
+};
+
+export const mailCheck: IconDef = {
+  name: "mail-check",
+  title: "Mail sent",
+  category: "status",
+  tags: ["mail","sent","inbox","verify"],
+  motionNote: "The tick draws itself.",
+  parts: [{"p":"p0","role":"line","d":"M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8","draw":true},{"p":"p1","role":"line","d":"m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7","draw":true},{"p":"p2","role":"line","d":"m16 19 2 2 4-4","draw":true}],
+  ...preset("draw", 3),
+};
+
+export const shield: IconDef = {
+  name: "shield",
+  title: "Shield",
+  category: "status",
+  tags: ["secure","privacy","protect"],
+  motionNote: "It grows a touch.",
+  parts: [{"p":"p0","role":"body","d":"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"}],
+  ...preset("pop", 1),
+};
+
+export const messageSquare: IconDef = {
+  name: "message-square",
+  title: "Message",
+  category: "app",
+  tags: ["message","chat","comment"],
+  motionNote: "It bounces.",
+  parts: [{"p":"p0","role":"body","d":"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"}],
+  ...preset("bounce", 1),
+};
+
+export const hash: IconDef = {
+  name: "hash",
+  title: "Channel",
+  category: "app",
+  tags: ["channel","hash","tag","slack"],
+  motionNote: "It wiggles.",
+  parts: [{"p":"p0","role":"line","d":"M4 9 L20 9"},{"p":"p1","role":"line","d":"M4 15 L20 15"},{"p":"p2","role":"line","d":"M10 3 L8 21"},{"p":"p3","role":"line","d":"M16 3 L14 21"}],
+  ...preset("wiggle", 4),
+};
+
+export const userPlus: IconDef = {
+  name: "user-plus",
+  title: "Add person",
+  category: "app",
+  tags: ["clone","add voice","new person","user plus"],
+  motionNote: "It grows a touch.",
+  parts: [{"p":"p0","role":"line","d":"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"},{"p":"p1","role":"body","d":"M5 7 A4 4 0 1 0 13 7 A4 4 0 1 0 5 7 Z"},{"p":"p2","role":"line","d":"M19 8 L19 14"},{"p":"p3","role":"line","d":"M22 11 L16 11"}],
+  ...preset("pop", 4),
+};
+
 export const keyboard: IconDef = {
   name: "keyboard",
   title: "Keyboard",
