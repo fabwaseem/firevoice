@@ -18,6 +18,11 @@
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
+  ; FireVoice no longer starts with Windows (src-tauri/src/autostart.rs); an update keeps it
+  ${If} $UpdateMode <> 1
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "FireVoice"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "FireVoice"
+  ${EndIf}
   ${If} $DeleteAppDataCheckboxState = 1
   ${AndIf} $UpdateMode <> 1
     SetShellVarContext current

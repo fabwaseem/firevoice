@@ -3,13 +3,15 @@ import { AppearanceSection, RenderingSection } from "@/components/settings/Prefe
 import { AboutSection, DataSection } from "@/components/settings/DataAboutSections";
 import { PathsSection } from "@/components/settings/PathsSection";
 import { ApiSection } from "@/components/settings/ApiSection";
+import { StartupSection } from "@/components/settings/StartupSection";
 
 export function SettingsView() {
   return (
     <div className="mx-auto max-w-[760px] fade-up">
-      <PageHeader title="Settings" subtitle="Appearance, rendering defaults, where FireVoice keeps its files, and the API for your own tools." />
+      <PageHeader title="Settings" subtitle="Appearance, starting with your computer, rendering defaults, where FireVoice keeps its files, and the API for your own tools." />
       <div className="flex flex-col gap-4">
         <AppearanceSection />
+        <StartupSection />
         <RenderingSection />
         <DataSection />
         <PathsSection />

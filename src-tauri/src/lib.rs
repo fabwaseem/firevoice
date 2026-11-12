@@ -1,3 +1,4 @@
+mod autostart;
 mod backend;
 mod datafolders;
 mod dictation;
@@ -69,6 +70,8 @@ pub fn run() {
         .manage(updater::Updates::default())
         .manage(dictation::Dictation::default())
         .invoke_handler(tauri::generate_handler![
+            autostart::autostart_status,
+            autostart::autostart_set,
             backend::backend_info,
             backend::backend_start,
             backend::backend_stop,
@@ -99,6 +102,11 @@ pub fn run() {
             datafolders::record(app.handle());
             if let Err(e) = tray(app.handle()) {
                 log::warn!("no tray icon: {e}");
+            }
+            // start with the computer (on unless the user turned it off); started that way, stay in the tray
+            autostart::sync(app.handle());
+            if !autostart::started_at_login() {
+                show_main(app.handle());
             }
             Ok(())
         })

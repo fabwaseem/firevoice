@@ -22,7 +22,8 @@
         "resizable": true,
         "decorations": true,
         "transparent": false,
-        "backgroundColor": "#f3f4f8"
+        "backgroundColor": "#f3f4f8",
+        "visible": false
       },
       {
         "label": "dictation",
