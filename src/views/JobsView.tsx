@@ -55,7 +55,7 @@ export function JobsView() {
   const select = (id: string | null) => navigate(id ? `/jobs/${id}` : "/jobs");
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="page-width">
       <PageHeader
         title="Jobs"
         subtitle="Long scripts, batches, voice designs, dubs and installs, with their history kept."

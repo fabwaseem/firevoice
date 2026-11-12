@@ -139,7 +139,7 @@ export function ProjectEditorView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.data?.status, job.data?.progress]);
 
-  if (q.isLoading || !draft) return <div className="mx-auto max-w-[1100px] space-y-3"><Skeleton className="h-12" /><Skeleton className="h-64" /></div>;
+  if (q.isLoading || !draft) return <div className="page-width space-y-3"><Skeleton className="h-12" /><Skeleton className="h-64" /></div>;
   if (q.isError || !p) return <LoadError message={errMessage(q.error)} retry={() => void q.refetch()} />;
 
   const c = (p.counts ?? {}) as Partial<Record<string, number>>;
@@ -260,7 +260,7 @@ export function ProjectEditorView() {
   };
 
   return (
-    <div className="mx-auto max-w-[1100px]">
+    <div className="page-width">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Link to="/projects" className="inline-flex h-8 items-center gap-1.5 rounded-[10px] px-2 text-[13px] text-ink-2 hover:bg-surface-3"><ArrowLeft className="size-4" />Projects</Link>
         <input aria-label="Project title" value={title} onChange={(e) => { setTitle(e.target.value); edit(draft, e.target.value); }}

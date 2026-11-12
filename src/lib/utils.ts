@@ -41,6 +41,20 @@ export function relTime(epochSec: number | null | undefined): string {
   return new Date(epochSec * 1000).toLocaleDateString();
 }
 
+/** The day a moment belongs to, for lists grouped by day: "Today", "Yesterday", "Monday" (this week), "Nov 3", or
+ * "Nov 3, 2025" in another year. */
+export function dayGroup(epochSec: number | null | undefined): string {
+  if (!epochSec) return "Earlier";
+  const d = new Date(epochSec * 1000);
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((start(new Date()) - start(d)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return d.toLocaleDateString(undefined, { weekday: "long" });
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+
 export function titleCase(s: string): string {
   return s.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

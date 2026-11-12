@@ -49,7 +49,7 @@ export function StylesView() {
   };
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="page-width">
       <PageHeader
         title="Styles"
         subtitle="Delivery styles: pacing, pauses, sampling and the instruction given to instruction-following engines."

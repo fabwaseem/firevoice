@@ -84,7 +84,7 @@ export function VoiceChangerView() {
   const vname = (voices.data ?? []).find((v) => v.voice_id === voice)?.name ?? "voice";
 
   return (
-    <div className="mx-auto max-w-[1100px]">
+    <div className="page-width">
       <PageHeader title="Voice changer" subtitle="Record or upload a performance: your words, timing and delivery stay, the voice becomes any library voice." />
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="p-4">

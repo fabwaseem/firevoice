@@ -28,8 +28,9 @@
   --bad-soft: rgba(220, 68, 68, 0.11);
   --info: #3473d6;
   --info-soft: rgba(52, 115, 214, 0.11);
-  /* a top edge that catches light on raised surfaces (dark mode only) */
+  /* a top edge that catches light on raised surfaces, and a faint sheen over them (dark mode only) */
   --edge: inset 0 0 0 0 transparent;
+  --sheen: linear-gradient(transparent, transparent);
   --shadow-sm: 0 1px 2px rgba(17, 19, 24, 0.04), 0 1px 1px rgba(17, 19, 24, 0.02);
   --shadow-md: 0 10px 28px -14px rgba(17, 19, 24, 0.2), 0 2px 6px rgba(17, 19, 24, 0.04);
   --shadow-lg: 0 28px 64px -28px rgba(17, 19, 24, 0.3), 0 8px 20px -10px rgba(17, 19, 24, 0.1);
@@ -44,18 +45,19 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* layered neutrals with a faint cool tint: page < sidebar < card < control < raised control */
-  --bg: #0a0b0f;
-  --bg-elev: #0f1116;
-  --surface: #14161d;
-  --surface-2: #191c24;
-  --surface-3: #21252f;
-  --ink: #f3f4f7;
-  --ink-2: #cdd1db;
-  --muted: #9aa0ae;
-  --faint: #6b7180;
-  --line: rgba(255, 255, 255, 0.065);
-  --line-strong: rgba(255, 255, 255, 0.12);
+  /* layered neutrals with a faint cool tint, each step clearly above the last: page < sidebar < card < control <
+     raised control. Cards stand off the page by their tone and a hairline, as shadows barely show on black. */
+  --bg: #0b0c10;
+  --bg-elev: #0f1015;
+  --surface: #16181f;
+  --surface-2: #1c1f27;
+  --surface-3: #252933;
+  --ink: #f4f5f8;
+  --ink-2: #d2d6df;
+  --muted: #9da3b1;
+  --faint: #6f7584;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
   --fire: #ff6b3d;
   --fire-2: #ff9c5e;
   --fire-soft: rgba(255, 107, 61, 0.14);
@@ -67,13 +69,15 @@
   --bad-soft: rgba(255, 111, 111, 0.14);
   --info: #74aaff;
   --info-soft: rgba(116, 170, 255, 0.14);
-  --edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.045);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 12px 32px -14px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 30px 70px -26px rgba(0, 0, 0, 0.8), 0 8px 22px -10px rgba(0, 0, 0, 0.5);
-  --blob-a: rgba(255, 107, 61, 0.09);
+  /* light catches the top edge of a surface, and a faint sheen fades down it: the depth light mode gets from shadows */
+  --edge: inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  --sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 120px);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 0 0.5px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 14px 34px -14px rgba(0, 0, 0, 0.75), 0 2px 6px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 30px 70px -26px rgba(0, 0, 0, 0.85), 0 8px 22px -10px rgba(0, 0, 0, 0.55);
+  --blob-a: rgba(255, 107, 61, 0.11);
   --blob-b: rgba(61, 208, 143, 0.05);
-  --blob-c: rgba(120, 110, 255, 0.08);
+  --blob-c: rgba(120, 110, 255, 0.09);
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
   --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
   --seq-1: #1a2c45; --seq-2: #184f95; --seq-3: #1c5cab; --seq-4: #2a78d6; --seq-5: #5598e7; --seq-6: #9ec5f4;
@@ -145,6 +149,11 @@
   ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
   ::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: padding-box; border: 3px solid transparent; }
   ::-webkit-scrollbar-track { background: transparent; }
+  /* Every scrolling area keeps the scrollbar's room whether it shows or not: a page that grows tall enough to scroll
+     (content arriving, a list loading more) never shifts sideways when its scrollbar appears or goes. */
+  .main-scroll, .sidebar-scroll, .overflow-y-auto, .overflow-auto { scrollbar-gutter: stable; }
+  /* scrolling a page stays in the page: no bounce or chained scroll into the window around it */
+  .main-scroll { overscroll-behavior: contain; }
   /* the sidebar's scrollbar only shows while the pointer is over it */
   .sidebar-scroll {
     scrollbar-width: thin; scrollbar-color: transparent transparent;
@@ -163,12 +172,12 @@
 
 /* -------------------------------------------------------------- utilities */
 @utility surface {
-  background: var(--surface);
+  background: var(--sheen), var(--surface);
   border: 1px solid var(--line);
   box-shadow: var(--edge), var(--shadow-sm);
 }
 @utility surface-raised {
-  background: var(--surface);
+  background: var(--sheen), var(--surface);
   border: 1px solid var(--line);
   box-shadow: var(--edge), var(--shadow-md);
 }
@@ -187,6 +196,20 @@
   -webkit-backdrop-filter: blur(28px) saturate(1.5);
   border: 1px solid var(--line);
 }
+/* the title bar floating over the page: glass that blurs what scrolls under it; a hairline once something is there */
+@utility titlebar-glass {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 78%, transparent), color-mix(in srgb, var(--bg) 52%, transparent));
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border-bottom: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  &.is-scrolled {
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 86%, transparent), color-mix(in srgb, var(--bg) 66%, transparent));
+    border-bottom-color: var(--line);
+  }
+}
+/* every page is the same width (Home's), centred: one place to change it */
+@utility page-width { width: 100%; max-width: 1300px; margin-inline: auto; }
 @utility tabular { font-variant-numeric: tabular-nums; }
 @utility hairline { box-shadow: inset 0 0 0 1px var(--line); }
 @utility fire-gradient { background-image: linear-gradient(135deg, var(--fire-2), var(--fire)); }

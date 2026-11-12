@@ -2,8 +2,8 @@ import { useEffect, type RefObject } from "react";
 
 /**
  * Every screen eases in part by part, like the Styles list: cards, rows, list items and tiles slide up one after
- * another in page order. It also covers content that arrives later (a list that finishes loading, a new row), each
- * element only once. Uses the Web Animations API with `fill: "backwards"`, so nothing is left transformed afterwards.
+ * another in page order, once, when the page opens. Content that arrives later (a list that finishes loading, a new row)
+ * appears at once in its place. Uses the Web Animations API with `fill: "backwards"`, so nothing is left transformed afterwards.
  */
 const PARTS = [
   "header",
@@ -18,6 +18,7 @@ const PARTS = [
 
 const STEP_MS = 28; // between one part and the next
 const MAX_STEPS = 16; // long lists: the tail arrives together, never late
+const OPENING_MS = 250; // what renders this soon after the page opens is part of its opening
 
 export function useStagger(root: RefObject<HTMLElement | null>, key: string) {
   useEffect(() => {
@@ -59,8 +60,15 @@ export function useStagger(root: RefObject<HTMLElement | null>, key: string) {
       for (const r of records) r.addedNodes.forEach((n) => n instanceof HTMLElement && collect(n));
     });
     mo.observe(el, { childList: true, subtree: true });
+    // Only the opening of the page eases in. What arrives later (numbers replacing their skeleton, a list loading
+    // more, a refresh) appears at once in the place kept for it: sliding each piece in again, one after another,
+    // reads as the page stuttering.
+    const settle = window.setTimeout(() => mo.disconnect(), OPENING_MS);
     // a batch already queued still plays: its parts are marked as entered, so dropping it would leave them unanimated
     // (React runs effects twice in development, cleaning up in between)
-    return () => mo.disconnect();
+    return () => {
+      window.clearTimeout(settle);
+      mo.disconnect();
+    };
   }, [root, key]);
 }

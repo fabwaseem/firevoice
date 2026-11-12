@@ -7,6 +7,7 @@ import { useBackendLifecycle, useManagesEngine } from "@/components/shell/useBac
 import { useDictationBridge } from "@/components/dictation/useDictationBridge";
 import { Logo } from "@/components/shell/Logo";
 import { Onboarding, SetupPanel } from "./Onboarding";
+import { TitleBar } from "@/components/shell/TitleBar";
 import { OnboardingFrame, Waveform } from "./OnboardingLayout";
 
 /** Decides what the window shows before the app: the first-run flow, the engine starting / updating / failing, or the
@@ -48,12 +49,15 @@ export function StartupGate({ children }: { children: ReactNode }) {
 /** Every start: the engine wakes up (a few seconds), shown as calmly as the splash before it. */
 function Starting() {
   return (
-    <div className="onb-hero flex h-full w-full flex-col items-center justify-center gap-6">
-      <div className="rounded-[22px] onb-glow">
-        <Logo size={64} />
+    <div className="onb-hero flex h-full w-full flex-col">
+      <TitleBar />
+      <div data-tauri-drag-region className="flex flex-1 flex-col items-center justify-center gap-6">
+        <div className="rounded-[22px] onb-glow">
+          <Logo size={64} />
+        </div>
+        <Waveform bars={18} className="h-8 opacity-90" />
+        <p className="text-[13.5px] text-muted">Starting FireVoice…</p>
       </div>
-      <Waveform bars={18} className="h-8 opacity-90" />
-      <p className="text-[13.5px] text-muted">Starting FireVoice…</p>
     </div>
   );
 }

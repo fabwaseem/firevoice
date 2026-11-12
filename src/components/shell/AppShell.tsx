@@ -1,9 +1,11 @@
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router";
 import { Toaster } from "sonner";
 import { useSettings, applyTheme } from "@/stores/settings";
 import { useJobFeed } from "@/lib/api/hooks";
 import { TooltipProvider } from "@/components/ui";
+import { inTauri } from "@/lib/backend";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { OfflineBanner } from "./OfflineBanner";
@@ -12,6 +14,7 @@ import { FinishSetupBanner } from "./FinishSetupBanner";
 import { BackgroundSetup } from "./BackgroundSetup";
 import { usePlayer } from "@/stores/player";
 import { useStagger } from "@/lib/stagger";
+import { TitleBar } from "./TitleBar";
 import { Tour } from "@/components/tour/Tour";
 
 export function AppShell() {
@@ -44,6 +47,8 @@ export function AppShell() {
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
+  // the title bar floats over the page: once the page has scrolled under it, it frosts a little more
+  const [scrolled, setScrolled] = useState(false);
 
   return (
     <TooltipProvider>
@@ -51,10 +56,15 @@ export function AppShell() {
         <Sidebar />
         {/* content column: the player floats over it, never over the sidebar */}
         <div className="relative flex min-w-0 flex-1 flex-col">
+          <TitleBar overlay scrolled={scrolled} />
           <main
             ref={mainRef}
             id="main"
-            className="main-scroll relative min-h-0 flex-1 overflow-y-auto px-8 pt-7 pb-6 transition-[padding] duration-300"
+            onScroll={(e) => {
+              const s = e.currentTarget.scrollTop > 2;
+              if (s !== scrolled) setScrolled(s);
+            }}
+            className={cn("main-scroll relative min-h-0 flex-1 overflow-y-auto px-8 pb-6 transition-[padding] duration-300", inTauri() ? "pt-12" : "pt-7")}
             style={{ paddingBottom: hasTrack ? 116 : 28 }}
           >
             <FinishSetupBanner />

@@ -296,10 +296,11 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
     class RuleBody(BaseModel):
         model_config = ConfigDict(extra="forbid")
         match: str = Field(..., min_length=1, max_length=200, description="the written word or phrase")
-        say: str = Field(..., max_length=400, description="how to say it (letters only, as you would type it)")
+        say: str = Field("", max_length=400, description="how the voices say it (letters only, as you would type it); empty: said as written")
         case: bool = Field(False, description="match this exact casing only")
         whole_word: bool = Field(True, description="only whole words (\"cat\" leaves \"concatenate\" alone)")
         note: str = ""
+        heard: list[str] = Field(default_factory=list, description="what speech recognition writes for it by mistake (\"fire voice\"); dictation puts the word instead")
 
     class RulePatch(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -308,6 +309,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
         case: Optional[bool] = None
         whole_word: Optional[bool] = None
         note: Optional[str] = None
+        heard: Optional[list[str]] = None
 
     class RulesBody(BaseModel):
         rules: list[dict[str, Any]]
@@ -1117,9 +1119,11 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     @app.get("/api/v1/dictation/vocabulary", dependencies=deps, tags=["stt"])
     def dictation_vocabulary():
-        """Your dictation words, replacements and snippets. -> {"words": [...], "replacements": [{id, heard, write}],
-        "snippets": [{id, trigger, text}]}"""
-        return svc.dictation_store.load()
+        """The words dictation expects (your dictionary), what it puts instead of a misheard form, and your snippets.
+        -> {"words": [...], "replacements": [{id, heard, write}], "snippets": [{id, trigger, text}]}"""
+        rules = svc.dictionary.rules()
+        repl = [{"id": f"{r['id']}~{h}", "heard": h, "write": r["match"]} for r in rules for h in r["heard"]]
+        return {"words": [r["match"] for r in rules], "replacements": repl, "snippets": svc.dictation_store.load()["snippets"]}
 
     @app.get("/api/v1/dictation/wake", dependencies=deps, tags=["stt"])
     def dictation_wake():
@@ -1145,31 +1149,49 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     @app.put("/api/v1/dictation/words", dependencies=deps, tags=["stt"])
     def dictation_words(body: dict = Body(...)):
-        """Replace the word list: {"words": ["FireVoice", "Kubernetes", ...]}. -> {"words": [...]}"""
+        """Set the words to expect: {"words": ["FireVoice", "Kubernetes", ...]}: missing ones are added to the dictionary,
+        and words that do nothing else (no "say it as", no misheard forms) and are not listed are taken out.
+        -> {"words": [...]}"""
+        want = [str(w).strip() for w in (body.get("words") or []) if str(w).strip()]
         try:
-            return {"words": svc.dictation_store.set_words(list(body.get("words") or []))}
+            for w in want:
+                svc.dictionary.add_word(w)
+            keep = {w.lower() for w in want}
+            for r in svc.dictionary.rules():
+                if not r["say"] and not r["heard"] and r["match"].lower() not in keep:
+                    svc.dictionary.remove(r["id"])
         except ValueError as e:
             raise FireVoiceError("bad_request", str(e))
+        return {"words": svc.dictionary.words()}
 
     @app.post("/api/v1/dictation/words", dependencies=deps, tags=["stt"])
     def dictation_add_word(body: dict = Body(...)):
-        """Add one word: {"word": "FireVoice"}. -> {"words": [...]}"""
+        """Add one word to the dictionary: {"word": "FireVoice"}. -> {"words": [...]}"""
         try:
-            return {"words": svc.dictation_store.add_word(str(body.get("word") or ""))}
+            svc.dictionary.add_word(str(body.get("word") or ""))
         except ValueError as e:
             raise FireVoiceError("bad_request", str(e))
+        return {"words": svc.dictionary.words()}
 
     @app.post("/api/v1/dictation/replacements", dependencies=deps, tags=["stt"])
     def dictation_replacement(body: dict = Body(...)):
-        """Add or change a replacement: {"id"?, "heard": "fire voice", "write": "FireVoice"}. -> the saved one"""
+        """When the speech model writes "heard", dictation puts "write": {"heard": "fire voice", "write": "FireVoice"}
+        (kept in the dictionary, on the word). -> {id, heard, write}"""
+        heard, write = str(body.get("heard") or "").strip(), str(body.get("write") or "").strip()
+        if not heard or not write:
+            raise FireVoiceError("bad_request", "both what it writes (heard) and what you want (write) are needed")
         try:
-            return svc.dictation_store.save_replacement(body)
+            r = svc.dictionary.add_heard(write, heard)
         except ValueError as e:
             raise FireVoiceError("bad_request", str(e))
+        return {"id": f"{r['id']}~{heard}", "heard": heard, "write": r["match"]}
 
     @app.delete("/api/v1/dictation/replacements/{rid}", dependencies=deps, tags=["stt"])
     def dictation_replacement_delete(rid: str):
-        if not svc.dictation_store.delete("replacements", rid):
+        rule_id, _, heard = rid.partition("~")
+        try:
+            svc.dictionary.remove_heard(rule_id, heard)
+        except KeyError:
             raise FireVoiceError("not_found", "no such replacement")
         return {"deleted": rid}
 
@@ -1372,7 +1394,7 @@ def create_app(svc: FireVoice, token: Optional[str] = None, cors_origins: Option
 
     @app.post("/api/v1/dictionary", dependencies=deps, tags=["dictionary"], status_code=201)
     def dictionary_add(body: RuleBody):
-        """Add a rule. A rule with the same match (and casing option) replaces the old one."""
+        """Add a word. The same word again updates it (a new "say" replaces the old one; misheard forms are added)."""
         return svc.dictionary_add(body.model_dump())
 
     @app.put("/api/v1/dictionary", dependencies=deps, tags=["dictionary"])

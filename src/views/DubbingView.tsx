@@ -73,7 +73,7 @@ export function DubbingView() {
   };
 
   return (
-    <div className="mx-auto max-w-[1100px] fade-up">
+    <div className="page-width fade-up">
       <PageHeader title="Dubbing" subtitle="A recording or video in another language, on the original timeline. Speech to text, translation and voices all run on this machine." />
       {langs.isError && (
         <p className="mb-4 rounded-xl bg-warn-soft px-4 py-3 text-[13px] text-warn">

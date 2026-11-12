@@ -44,7 +44,8 @@ def test_a_polished_dictation_applies_corrections_and_is_kept(svc):
     c = TestClient(create_app(svc))
     assert c.post("/api/v1/dictation/replacements", json={"heard": "wazeem", "write": "Waseem"}).status_code == 200
     assert c.post("/api/v1/dictation/snippets", json={"trigger": "sign off", "text": "Best,\nW"}).json()["trigger"] == "sign off"
-    assert c.post("/api/v1/dictation/words", json={"word": "FireVoice"}).json()["words"] == ["FireVoice"]
+    # one dictionary: the replacement's word is a word too
+    assert c.post("/api/v1/dictation/words", json={"word": "FireVoice"}).json()["words"] == ["Waseem", "FireVoice"]
     with c.websocket_connect("/api/v1/dictate") as ws:
         ws.send_json({"type": "start", "language": "en", "sample_rate": 16000, "refine": True, "app": "Slack"})
         assert ws.receive_json() == {"type": "ready"}
@@ -59,7 +60,14 @@ def test_a_polished_dictation_applies_corrections_and_is_kept(svc):
     assert c.get("/api/v1/dictation/history", params={"q": "waseem"}).json()["total"] == 1
     assert c.delete("/api/v1/dictation/history").json()["deleted"] == 1
     v = c.get("/api/v1/dictation/vocabulary").json()
-    assert v["words"] == ["FireVoice"] and v["replacements"][0]["write"] == "Waseem" and v["snippets"][0]["text"] == "Best,\nW"
+    assert v["words"] == ["Waseem", "FireVoice"] and v["replacements"][0]["write"] == "Waseem" and v["snippets"][0]["text"] == "Best,\nW"
+    # it is all in the dictionary, which the voices use too (a word with no "say it as" is not read differently)
+    d = c.get("/api/v1/dictionary").json()["rules"]
+    assert [(r["match"], r["say"], r["heard"]) for r in d] == [("Waseem", "", ["wazeem"]), ("FireVoice", "", [])]
+    assert c.post("/api/v1/dictionary/test", json={"text": "Waseem uses FireVoice"}).json()["spoken"].startswith("Waseem uses")
+    # taking a misheard form away leaves the word
+    assert c.delete(f"/api/v1/dictation/replacements/{v['replacements'][0]['id']}").status_code == 200
+    assert c.get("/api/v1/dictation/vocabulary").json()["replacements"] == []
 
 
 def test_without_a_gpu_other_languages_get_a_multilingual_model(svc, monkeypatch):
@@ -98,3 +106,43 @@ def test_only_certain_languages_teach_the_profile(tmp_path):
     assert st.language_profile() == {"es": 0.5, "en": 0.5}
     st.record("mera naam waseem hai", 3, "ur", language_chosen=True)          # chosen by the speaker: that teaches
     assert st.language_profile()["ur"] > 0
+
+
+def test_dictation_words_and_replacements_move_into_the_dictionary_once(tmp_path):
+    import json
+    from firevoice.dictionary import Dictionary
+    from firevoice.service import FireVoice
+    (tmp_path / "dictation.json").write_text(json.dumps({
+        "words": ["Kubernetes", "Siobhan"],
+        "replacements": [{"id": "a", "heard": "wazeem", "write": "Waseem"}, {"id": "b", "heard": "fire voice", "write": "FireVoice"}],
+        "snippets": [{"id": "s", "trigger": "my email", "text": "me@example.com"}],
+    }), encoding="utf-8")
+    Dictionary(tmp_path / "dictionary.json").add({"match": "Siobhan", "say": "Shi-vawn"})
+    svc = FireVoice.__new__(FireVoice)
+    svc.dictionary = Dictionary(tmp_path / "dictionary.json")
+    svc.dictation_store = DictationStore(tmp_path)
+    svc._fold_dictation_words()
+    rules = {r["match"]: r for r in svc.dictionary.rules()}
+    assert set(rules) == {"Siobhan", "Kubernetes", "Waseem", "FireVoice"}
+    assert rules["Siobhan"]["say"] == "Shi-vawn"                  # what was there is kept
+    assert rules["Waseem"]["heard"] == ["wazeem"] and rules["FireVoice"]["heard"] == ["fire voice"]
+    left = svc.dictation_store.load()
+    assert left["words"] == [] and left["replacements"] == [] and left["snippets"][0]["trigger"] == "my email"
+    svc._fold_dictation_words()                                   # nothing more to move
+    assert len(svc.dictionary.rules()) == 4
+
+
+def test_dictation_is_counted_for_home(tmp_path):
+    import time
+    st = DictationStore(tmp_path)
+    st.record("Hello there this is a test of five", 3.0, "en", app="slack.exe")      # 8 words
+    st.record("Another short one", 2.0, "en", app="C:\Program Files\Code.exe")
+    st.record("Translated words here", 2.0, "ur", app="slack.exe", mode="translation")
+    s = st.stats(30)
+    assert s["count"] == 3 and s["words"] == 14 and s["seconds"] == 7.0
+    assert s["wpm"] == 120                                       # 14 words in 7 seconds
+    assert s["saved_s"] == round(14 / 40 * 60 - 7)              # typing them would take 21 s
+    assert s["apps"][0] == {"key": "Slack", "name": "Slack", "count": 2, "words": 11} and s["apps"][1]["name"] == "VS Code"
+    assert s["translations"] == 1 and s["streak"] == 1 and s["daily"][0]["words"] == 14
+    assert s["all_time"]["count"] == 3 and s["longest_words"] == 8
+    assert DictationStore(tmp_path / "empty").stats(7)["count"] == 0

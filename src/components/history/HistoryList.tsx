@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from "react";
-import { AudioLines, Captions, Download, FileText, History, Layers, MessagesSquare, Mic, Music, Pause, Play, Repeat2, Sparkles, Trash2, Waves } from "lucide-react";
+import { AudioLines, Captions, Check, Download, FileText, History, Layers, MessagesSquare, Mic, Music, Pause, Play, Repeat2, Sparkles, Trash2, Waves } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api/client";
 import { errMessage, useDeleteHistory, useHistory } from "@/lib/api/hooks";
@@ -52,7 +52,7 @@ function safeName(s: string) {
   return (s || "firevoice").replace(/[^\w\- ]+/g, "").trim().slice(0, 60).replace(/\s+/g, "-") || "firevoice";
 }
 
-export function HistoryRow({ item, compact }: { item: HistoryItem; compact?: boolean }) {
+export function HistoryRow({ item, compact, select }: { item: HistoryItem; compact?: boolean; select?: { on: boolean; toggle: () => void } }) {
   const playingId = usePlayer((s) => (s.playing ? s.track?.id : null));
   const load = usePlayer((s) => s.load);
   const toggle = usePlayer((s) => s.toggle);
@@ -84,15 +84,28 @@ export function HistoryRow({ item, compact }: { item: HistoryItem; compact?: boo
   };
 
   return (
-    <div className={cn("group flex items-center gap-3 rounded-xl px-3 transition-colors hover:bg-surface-2", compact ? "py-2" : "py-2.5")}>
-      <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-[10px]", k.tint)}>
-        <Icon className="size-[17px]" />
-      </span>
+    <div
+      className={cn("group flex items-center gap-3 rounded-xl px-3 transition-colors hover:bg-surface-2", compact ? "py-2" : "py-2.5", select?.on && "bg-fire-soft/50 hover:bg-fire-soft/70")}
+      onClick={select ? select.toggle : undefined}
+      role={select ? "checkbox" : undefined}
+      aria-checked={select ? select.on : undefined}
+      tabIndex={select ? 0 : undefined}
+      onKeyDown={select ? (e) => (e.key === " " || e.key === "Enter") && (e.preventDefault(), select.toggle()) : undefined}
+    >
+      {select ? (
+        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-[10px] border-2 transition-colors", select.on ? "border-fire bg-fire text-white" : "border-line-strong bg-surface")}>
+          {select.on && <Check className="size-4" strokeWidth={3} />}
+        </span>
+      ) : (
+        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-[10px]", k.tint)}>
+          <Icon className="size-[17px]" />
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13.5px] font-medium text-ink" title={item.title}>{item.title}</p>
         <p className="truncate text-[12px] text-muted">{subtitle(item)}</p>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className={cn("flex shrink-0 items-center gap-1", select && "invisible")}>
         {tracks(item).map((t) => {
           const on = playingId === `history:${item.id}:${t.stem}`;
           return (
@@ -101,6 +114,8 @@ export function HistoryRow({ item, compact }: { item: HistoryItem; compact?: boo
             </Button>
           );
         })}
+        {/* the rest of the actions show on pointing or focus, so a long list stays easy to read */}
+        <div className={cn("flex items-center gap-1 transition-opacity", !compact && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100")}>
         {item.kind === "transcript" && (
           <>
             <Tooltip content="Download text">
@@ -137,6 +152,7 @@ export function HistoryRow({ item, compact }: { item: HistoryItem; compact?: boo
             <Trash2 className="size-4" />
           </Button>
         </Tooltip>
+        </div>
       </div>
       <ConfirmDialog
         open={confirm}

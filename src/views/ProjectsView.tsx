@@ -42,7 +42,7 @@ export function ProjectsView() {
   };
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="page-width">
       <PageHeader
         title="Projects"
         subtitle="Audiobooks, courses and series: chapters of paragraphs, each with its own takes. Render only what changed, export with chapters."

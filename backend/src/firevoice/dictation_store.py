@@ -28,6 +28,21 @@ from .dictation import SIBLINGS as _SIBLINGS  # noqa: E402
 _SIBLING_CODES = {c for g in _SIBLINGS for c in g}         # entries; the oldest go first past this
 
 
+# an average typist, for "time saved" (words per minute)
+TYPING_WPM = 40
+
+
+def _app_name(app) -> str:
+    """"slack.exe", "C:\\...\\Code.exe", "WINWORD" -> "Slack", "Code", "Word"."""
+    a = str(app or "").replace("\\", "/").rsplit("/", 1)[-1]
+    a = a[:-4] if a.lower().endswith(".exe") else a
+    known = {"winword": "Word", "excel": "Excel", "outlook": "Outlook", "olk": "Outlook", "msedge": "Edge", "chrome": "Chrome",
+             "firefox": "Firefox", "code": "VS Code", "cursor": "Cursor", "notepad": "Notepad", "explorer": "File Explorer",
+             "windowsterminal": "Terminal", "discord": "Discord", "slack": "Slack", "teams": "Teams", "ms-teams": "Teams",
+             "whatsapp": "WhatsApp", "telegram": "Telegram", "obsidian": "Obsidian", "notion": "Notion"}
+    return known.get(a.lower()) or (a[:1].upper() + a[1:] if a else "Other")
+
+
 def _id() -> str:
     return uuid.uuid4().hex[:12]
 
@@ -136,12 +151,24 @@ class DictationStore:
             self._save(d)
             return True
 
-    def rules(self, commands: bool = True, extra_words: Optional[list] = None) -> PhraseRules:
+    def rules(self, commands: bool = True, extra_words: Optional[list] = None, extra_replacements: Optional[list] = None) -> PhraseRules:
         """The phrase rules for a dictation: built-in commands, then your words (any casing -> yours), replacements and
-        snippets (the later ones win where the same words are said)."""
+        snippets (the later ones win where the same words are said). The words and misheard forms now live in the
+        dictionary (dictionary.py), which the caller passes in."""
         d = self.load()
         words = [{"heard": w, "write": w} for w in d["words"] + list(extra_words or [])]
-        return PhraseRules.build(commands=commands, punctuation=commands, replacements=words + d["replacements"], snippets=d["snippets"])
+        repl = d["replacements"] + list(extra_replacements or [])
+        return PhraseRules.build(commands=commands, punctuation=commands, replacements=words + repl, snippets=d["snippets"])
+
+    def take_words(self) -> tuple[list[str], list[dict]]:
+        """Hand the words and replacements over to the dictionary (once): -> what there was, now gone from here."""
+        with self._lock:
+            d = self.load()
+            words, repl = d["words"], d["replacements"]
+            if words or repl:
+                d["words"], d["replacements"] = [], []
+                self._save(d)
+            return words, repl
 
     def hotwords(self) -> list[str]:
         """What the speech model is told to expect: your words, and what your replacements and snippets turn into words."""
@@ -172,6 +199,61 @@ class DictationStore:
                 f.write(json.dumps(e, ensure_ascii=False) + "\n")
             self._maybe_trim()
         return e
+
+    def stats(self, days: Optional[int] = 30) -> dict:
+        """Dictation counted, for Home: over the last `days` (0 or None: all time) and all time.
+
+        Time saved is what typing the same words would have taken (TYPING_WPM, an average typist) less the time spent
+        speaking them."""
+        import collections
+        import datetime as dt
+        rows = self._all()
+        now = time.time()
+        since = now - days * 86400 if days else None
+        sel = [r for r in rows if since is None or float(r.get("at") or 0) >= since]
+
+        def words_of(rs):
+            return sum(int(r.get("words") or 0) for r in rs)
+
+        def secs_of(rs):
+            return sum(float(r.get("seconds") or 0) for r in rs)
+
+        words, secs = words_of(sel), secs_of(sel)
+        saved = max(0.0, words / TYPING_WPM * 60 - secs)
+        apps = collections.Counter(_app_name(r.get("app")) for r in sel if r.get("app"))
+        app_words: collections.Counter = collections.Counter()
+        for r in sel:
+            if r.get("app"):
+                app_words[_app_name(r.get("app"))] += int(r.get("words") or 0)
+        langs = collections.Counter(str(r.get("language")) for r in sel if r.get("language"))
+        modes = collections.Counter(str(r.get("mode") or "dictation") for r in sel)
+        daily: dict[str, dict] = {}
+        for r in sel:
+            d = dt.date.fromtimestamp(float(r.get("at") or 0)).isoformat()
+            e = daily.setdefault(d, {"count": 0, "words": 0})
+            e["count"] += 1
+            e["words"] += int(r.get("words") or 0)
+        # days in a row with a dictation, up to today (or yesterday: today may not have started yet)
+        days_with = {dt.date.fromtimestamp(float(r.get("at") or 0)) for r in rows}
+        streak, day = 0, dt.date.today()
+        if day not in days_with:
+            day -= dt.timedelta(days=1)
+        while day in days_with:
+            streak += 1
+            day -= dt.timedelta(days=1)
+        all_words, all_secs = words_of(rows), secs_of(rows)
+        return {
+            "count": len(sel), "words": words, "seconds": round(secs, 1),
+            "wpm": round(words / (secs / 60)) if secs >= 5 else None, "typing_wpm": TYPING_WPM, "saved_s": round(saved),
+            "apps": [{"key": k, "name": k, "count": c, "words": app_words[k]} for k, c in apps.most_common(6)],
+            "languages": [{"key": k, "count": c} for k, c in langs.most_common(6)],
+            "translations": modes.get("translation", 0), "commands": modes.get("command", 0),
+            "daily": [{"date": d, **v} for d, v in sorted(daily.items())],
+            "longest_words": max((int(r.get("words") or 0) for r in rows), default=0),
+            "streak": streak,
+            "all_time": {"count": len(rows), "words": all_words, "saved_s": round(max(0.0, all_words / TYPING_WPM * 60 - all_secs)),
+                         "first": min((float(r.get("at") or now) for r in rows), default=None)},
+        }
 
     def _all(self) -> list[dict]:
         if not self.hist.exists():

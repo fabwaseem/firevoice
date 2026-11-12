@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, BookA, History as HistoryIcon, Keyboard, MessageSquareQuote, Mic, Settings2, Sparkles, Square, Wand2, Zap } from "lucide-react";
+import { AlertTriangle, Keyboard, MessageSquareQuote, Mic, Settings2, Sparkles, Square, Wand2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { HotkeyRecorder } from "@/components/dictation/HotkeyRecorder";
 import { Badge, Button, Card, CardBody, CardHeader, Kbd, Segmented, Select, Switch } from "@/components/ui";
-import { DictationVocabularyPanel } from "@/components/dictation/DictationVocabulary";
+import { DictionaryLinkCard } from "@/components/dictation/DictationVocabulary";
+import { useNavigate } from "react-router";
 import { DictationSnippetsPanel } from "@/components/dictation/DictationSnippets";
 import { DictationAssistantPanel } from "@/components/dictation/DictationAssistant";
-import { DictationHistoryPanel } from "@/components/dictation/DictationHistory";
 import { DictationLanguages } from "@/components/dictation/DictationLanguages";
 import { DictationTranslate } from "@/components/dictation/DictationTranslate";
 import { DictationWakeTeach } from "@/components/dictation/DictationWakeTeach";
@@ -277,14 +277,16 @@ function SettingsCard() {
 type Tab = DictationTab;
 const TABS: { value: Tab; label: string; icon: typeof Mic }[] = [
   { value: "setup", label: "Setup", icon: Settings2 },
-  { value: "dictionary", label: "Dictionary", icon: BookA },
   { value: "snippets", label: "Snippets", icon: MessageSquareQuote },
   { value: "assistant", label: "Writing assistant", icon: Sparkles },
-  { value: "history", label: "History", icon: HistoryIcon },
 ];
 
 export function DictationView() {
-  const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem("dictation.tab") as Tab) || "setup");
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>(() => {
+    const saved = sessionStorage.getItem("dictation.tab") as Tab | null;
+    return saved && TABS.some((t) => t.value === saved) ? saved : "setup";
+  });
   useEffect(() => {
     try {
       sessionStorage.setItem("dictation.tab", tab);
@@ -297,12 +299,22 @@ export function DictationView() {
     if (useDictation.getState().config.featuresVisited < FEATURES_VERSION) useDictation.getState().set({ featuresVisited: FEATURES_VERSION });
   }, []);
   const open = (t: Tab) => {
+    // your words live in the Dictionary, shared with the voices
+    if (t === "dictionary") {
+      navigate("/dictionary");
+      return;
+    }
+    // and your dictations in History, with everything else you made
+    if (t === "history") {
+      navigate("/history?kind=dictation");
+      return;
+    }
     setTab(t);
     // once the tab has rendered: bring it into view (the card above can be taller than the window)
     setTimeout(() => document.querySelector('[data-tour="dictation-tabs"]')?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
   };
   return (
-    <div className="mx-auto max-w-[860px] fade-up">
+    <div className="page-width fade-up">
       <PageHeader title="Dictation" subtitle="Speak in any program and FireVoice writes what you meant." />
       <div className="flex flex-col gap-4">
         <Stage />
@@ -326,11 +338,14 @@ export function DictationView() {
           ))}
         </nav>
         <div role="tabpanel" key={tab} className="fade-up">
-          {tab === "setup" && <SettingsCard />}
-          {tab === "dictionary" && <DictationVocabularyPanel />}
+          {tab === "setup" && (
+            <div className="flex flex-col gap-4">
+              <SettingsCard />
+              <DictionaryLinkCard />
+            </div>
+          )}
           {tab === "snippets" && <DictationSnippetsPanel />}
           {tab === "assistant" && <DictationAssistantPanel />}
-          {tab === "history" && <DictationHistoryPanel />}
         </div>
       </div>
     </div>

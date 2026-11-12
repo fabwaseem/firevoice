@@ -332,12 +332,16 @@ export interface TTSRequest {
 // ---------------------------------------------------------------- pronunciation dictionary
 export interface DictRuleInput {
   match: string;
-  say: string;
+  /** how the voices say it; empty: as written */
+  say?: string;
   case?: boolean;
   whole_word?: boolean;
   note?: string;
+  /** what speech recognition writes for it by mistake; dictation puts the word instead */
+  heard?: string[];
 }
 export interface DictRule extends Required<DictRuleInput> {
+  /* always present from the server */
   id: string;
   created: number;
 }
@@ -677,10 +681,31 @@ export interface Stats {
   errors: { message: string; count: number }[];
   library: {
     voices: number; cloned: number; designed: number; favorites: number; voice_languages: number; styles: number; custom_styles: number;
-    projects: number; chapters: number; paragraphs: number; project_words: number; dictionary_rules: number; history_items: number;
+    projects: number; chapters: number; paragraphs: number; project_words: number; dictionary_rules: number; snippets?: number; history_items: number;
     kept_renders: number; jobs: number; engines_ready: number; engines_total: number; tools_ready: number;
   };
   storage: { folders: Record<string, number>; data_total: number; home: string };
+  /** dictation over the range and all time (null when it could not be read) */
+  dictation?: DictationStats | null;
+}
+
+export interface DictationStats {
+  count: number;
+  words: number;
+  seconds: number;
+  /** speaking speed, words per minute */
+  wpm: number | null;
+  /** the typing speed time saved is measured against */
+  typing_wpm: number;
+  saved_s: number;
+  apps: { key: string; name: string; count: number; words: number }[];
+  languages: { key: string; count: number }[];
+  translations: number;
+  commands: number;
+  daily: { date: string; count: number; words: number }[];
+  longest_words: number;
+  streak: number;
+  all_time: { count: number; words: number; saved_s: number; first: number | null };
 }
 
 /** Dictation's memory (the server keeps it): names and terms, replacements, snippets. */

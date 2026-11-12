@@ -19,7 +19,7 @@ const TOOLS: { id: ToolId; title: string; detail: string; icon: typeof Layers }[
 export function ToolsView() {
   const [tool, setTool] = useSessionState<ToolId>("tools.open", "separate");
   return (
-    <div className="mx-auto max-w-[1200px]">
+    <div className="page-width">
       <PageHeader title="Tools" subtitle="Clean up, check and verify any recording." />
       <div role="tablist" aria-label="Tools" className="mb-4 grid gap-3 sm:grid-cols-3">
         {TOOLS.map((t) => {

@@ -37,7 +37,7 @@ const FEATURES: { icon: typeof Sparkles; title: string; text: (keys: string) => 
   {
     icon: BookA,
     title: "Your names, spelled right",
-    text: () => "Add the names and terms you use, and fix words FireVoice keeps getting wrong.",
+    text: () => "Add the names and terms you use, and fix words FireVoice keeps getting wrong. One dictionary, for dictation and the voices.",
     tab: "dictionary",
     cta: "Dictionary",
   },
@@ -60,7 +60,7 @@ const FEATURES: { icon: typeof Sparkles; title: string; text: (keys: string) => 
     title: "Every dictation, searchable",
     text: () => "Find anything you dictated, copy it again, and teach FireVoice a word from it.",
     tab: "history",
-    cta: "History",
+    cta: "Your dictations",
   },
 ];
 

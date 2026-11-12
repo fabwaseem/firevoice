@@ -47,7 +47,7 @@ export function SoundView() {
   };
 
   return (
-    <div className="mx-auto max-w-[1000px] fade-up">
+    <div className="page-width fade-up">
       <PageHeader title="Sound" subtitle="Sound effects, ambience and music beds from a description, made on this machine." />
       <Card className="p-5">
         <div className="flex flex-wrap items-center gap-3">

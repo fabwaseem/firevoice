@@ -103,7 +103,7 @@ export function SpeakView() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="page-width">
       <PageHeader
         title="Speak"
         subtitle="Write a script, pick a voice, and render it on your GPU."

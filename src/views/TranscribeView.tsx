@@ -58,7 +58,7 @@ export function TranscribeView() {
   };
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="page-width">
       <PageHeader title="Transcribe" subtitle="Speech to text with word timings, made on your GPU. Every transcript is saved in History." />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[440px_minmax(0,1fr)]">
         <div className="space-y-4">

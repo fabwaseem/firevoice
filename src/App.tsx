@@ -1,6 +1,6 @@
 import { lazy, type ComponentType } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createHashRouter, RouterProvider } from "react-router";
+import { createHashRouter, Navigate, RouterProvider } from "react-router";
 import { AppShell } from "@/components/shell/AppShell";
 import { RouteError } from "@/components/shell/RouteError";
 import { UpdateGate } from "@/components/shell/UpdateGate";
@@ -26,7 +26,6 @@ const SoundView = page(() => import("@/views/SoundView"), "SoundView");
 const ProjectEditorView = page(() => import("@/views/ProjectEditorView"), "ProjectEditorView");
 const SettingsView = page(() => import("@/views/SettingsView"), "SettingsView");
 const HistoryView = page(() => import("@/views/HistoryView"), "HistoryView");
-const StatsView = page(() => import("@/views/StatsView"), "StatsView");
 const ToolsView = page(() => import("@/views/ToolsView"), "ToolsView");
 const DictationView = page(() => import("@/views/DictationView"), "DictationView");
 
@@ -53,7 +52,7 @@ const router = createHashRouter([
       { path: "jobs", element: <JobsView /> },
       { path: "jobs/:jobId", element: <JobsView /> },
       { path: "engines", element: <EnginesView /> },
-      { path: "stats", element: <StatsView /> },
+      { path: "stats", element: <Navigate to="/" replace /> },
       { path: "styles", element: <StylesView /> },
       { path: "styles/:styleName", element: <StylesView /> },
       { path: "dictionary", element: <DictionaryView /> },

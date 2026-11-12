@@ -111,7 +111,7 @@ export function DialogueView() {
   const voiceOf = (id?: string) => (voices.data ?? []).find((v) => v.voice_id === id);
 
   return (
-    <div className="mx-auto max-w-[1300px]">
+    <div className="page-width">
       <PageHeader title="Dialogue" subtitle="One line per turn as “Name: what they say”. Every speaker keeps their own voice; you get one mix, a track per speaker and labelled subtitles." />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <Card className="p-4">

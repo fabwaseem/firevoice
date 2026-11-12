@@ -40,7 +40,7 @@ export function EnginesView() {
   );
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="page-width">
       <PageHeader
         title="Engines"
         subtitle={subtitle}

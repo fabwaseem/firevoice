@@ -1,81 +1,76 @@
-import type { ComponentType } from "react";
-import { Link, NavLink, useMatch, useResolvedPath } from "react-router";
+import { useState, type ComponentType } from "react";
+import { Link, NavLink, useLocation, useMatch, useResolvedPath } from "react-router";
 import {
   AudioLines,
-  BarChart3,
   BookA,
   BookOpen,
+  ChevronRight,
   Cpu,
   History,
   Home,
-  Keyboard,
   Languages,
   Library,
   ListChecks,
   MessagesSquare,
   Mic,
-  Monitor,
-  Moon,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Repeat2,
   Settings,
   Wrench,
-  Sun,
   Waves,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSettings, type Theme } from "@/stores/settings";
-import { FEATURES_VERSION, useDictation } from "@/stores/dictation";
+import { useSettings } from "@/stores/settings";
+import { FEATURES_VERSION, useDictation, useDictationLive } from "@/stores/dictation";
 import { useHealth, useSystem } from "@/lib/api/hooks";
 import { Tooltip } from "@/components/ui";
 import { ServerStatus } from "./ServerStatus";
 import { UpdatePill } from "./UpdateGate";
 import { Logo } from "./Logo";
 
-type Item = { to: string; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; end?: boolean; badge?: "jobs" | "dictation" };
+type Item = { to: string; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; end?: boolean; badge?: "jobs" };
 
-const GROUPS: { title?: string; items: Item[] }[] = [
-  { items: [{ to: "/", label: "Home", icon: Home, end: true }] },
+// a few short lists, each a kind of work; Dictation, the everyday feature, has its own place above them
+const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Create",
     items: [
       { to: "/speak", label: "Speak", icon: AudioLines },
       { to: "/projects", label: "Projects", icon: BookOpen },
       { to: "/dialogue", label: "Dialogue", icon: MessagesSquare },
-      { to: "/changer", label: "Voice changer", icon: Repeat2 },
       { to: "/dub", label: "Dubbing", icon: Languages },
+    ],
+  },
+  {
+    title: "Audio",
+    items: [
+      { to: "/changer", label: "Voice changer", icon: Repeat2 },
       { to: "/sound", label: "Sound", icon: Waves },
       { to: "/transcribe", label: "Transcribe", icon: Mic },
-      { to: "/dictation", label: "Dictation", icon: Keyboard, badge: "dictation" },
       { to: "/tools", label: "Tools", icon: Wrench },
     ],
   },
   {
     title: "Library",
     items: [
-      { to: "/history", label: "History", icon: History },
       { to: "/voices", label: "Voices", icon: Library },
       { to: "/styles", label: "Styles", icon: Palette },
       { to: "/dictionary", label: "Dictionary", icon: BookA },
-    ],
-  },
-  {
-    title: "Manage",
-    items: [
-      { to: "/jobs", label: "Jobs", icon: ListChecks, badge: "jobs" },
-      { to: "/engines", label: "Engines", icon: Cpu },
-      { to: "/stats", label: "Stats", icon: BarChart3 },
+      { to: "/history", label: "History", icon: History },
     ],
   },
 ];
 
-const THEMES: { value: Theme; label: string; icon: ComponentType<{ className?: string }> }[] = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
-];
+GROUPS.push({
+  title: "System",
+  items: [
+    { to: "/jobs", label: "Jobs", icon: ListChecks, badge: "jobs" },
+    { to: "/engines", label: "Engines", icon: Cpu },
+    { to: "/settings", label: "Settings", icon: Settings },
+  ],
+});
 
 /** Jobs queued or running right now, for the badge on Jobs. */
 function useActiveJobs(): number {
@@ -133,50 +128,127 @@ function NavItem({ item, collapsed, count, fresh }: { item: Item; collapsed: boo
   );
 }
 
-function ThemeSwitch({ collapsed }: { collapsed: boolean }) {
-  const theme = useSettings((s) => s.theme);
-  const setTheme = useSettings((s) => s.setTheme);
-  if (collapsed) {
-    const i = THEMES.findIndex((t) => t.value === theme);
-    const cur = THEMES[i] ?? THEMES[2];
-    const next = THEMES[(i + 1) % THEMES.length];
-    const Icon = cur.icon;
-    return (
-      <Tooltip content={`Theme: ${cur.label}`} side="right">
-        <button
-          type="button"
-          onClick={() => setTheme(next.value)}
-          aria-label={`Theme: ${cur.label}. Switch to ${next.label}`}
-          className="mx-auto flex size-10 items-center justify-center rounded-[10px] text-muted transition-colors hover:bg-surface-3/70 hover:text-ink"
+/** Dictation, FireVoice's everyday feature: a nav item like the others, highlighted so it stands out; a quiet dot
+ * while it is listening. */
+function DictationFeature({ collapsed }: { collapsed: boolean }) {
+  const resolved = useResolvedPath("/dictation");
+  const isActive = !!useMatch({ path: resolved.pathname, end: false });
+  const fresh = useDictation((s) => s.config.featuresVisited < FEATURES_VERSION);
+  const phase = useDictationLive((s) => s.phase);
+  const live = phase === "starting" || phase === "listening" || phase === "finishing";
+
+  return (
+    <Tooltip content={live ? "Dictation: listening" : "Dictation"} side="right" disabled={!collapsed}>
+      <Link
+        to="/dictation"
+        data-tour="nav-/dictation"
+        aria-label={collapsed ? "Dictation" : undefined}
+        aria-current={isActive ? "page" : undefined}
+        className={cn(
+          "group relative flex h-10 shrink-0 items-center rounded-[11px] text-[13.5px] font-semibold outline-none transition-[background,box-shadow,color] duration-150 focus-visible:ring-2 focus-visible:ring-fire/50",
+          collapsed ? "mx-auto w-10 justify-center" : "gap-2.5 pr-3 pl-1.5",
+          isActive
+            ? "fire-gradient text-white shadow-[0_8px_20px_-10px_rgba(255,90,45,0.9)]"
+            : "bg-[linear-gradient(135deg,rgba(255,156,94,0.14),rgba(255,90,45,0.05))] text-ink ring-1 ring-fire/15 hover:ring-fire/35",
+        )}
+      >
+        <span
+          className={cn(
+            "relative grid size-7 shrink-0 place-items-center rounded-[8px] transition-colors",
+            isActive ? "bg-white/20 text-white" : "fire-gradient text-white shadow-[0_4px_10px_-4px_rgba(255,90,45,0.8)]",
+          )}
         >
-          <Icon className="size-[18px]" />
-        </button>
-      </Tooltip>
+          <Mic className="size-[15px]" strokeWidth={2.3} />
+        </span>
+        {!collapsed && <span className="truncate">Dictation</span>}
+        {live ? (
+          <span className={cn("flex size-2 rounded-full", isActive ? "bg-white" : "bg-fire", collapsed ? "absolute top-1 right-1" : "ml-auto")} aria-label="Listening">
+            <span className={cn("size-2 animate-ping rounded-full", isActive ? "bg-white" : "bg-fire")} />
+          </span>
+        ) : (
+          fresh && (
+            <span
+              className={cn(
+                "rounded-full font-semibold",
+                isActive ? "bg-white/25 text-white" : "fire-gradient text-white",
+                collapsed ? "absolute top-0.5 right-0.5 size-2" : "ml-auto px-1.5 py-px text-[9.5px] tracking-wide uppercase",
+              )}
+              aria-label="New features"
+            >
+              {!collapsed && "New"}
+            </span>
+          )
+        )}
+      </Link>
+    </Tooltip>
+  );
+}
+
+const FOLD_KEY = "firevoice.sidebar.folded";
+
+function useFolded(): [Record<string, boolean>, (title: string) => void] {
+  const [folded, setFolded] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(FOLD_KEY) ?? "{}") ?? {};
+    } catch {
+      return {};
+    }
+  });
+  const toggle = (title: string) =>
+    setFolded((f) => {
+      const next = { ...f, [title]: !f[title] };
+      try {
+        localStorage.setItem(FOLD_KEY, JSON.stringify(next));
+      } catch {
+        /* not remembered */
+      }
+      return next;
+    });
+  return [folded, toggle];
+}
+
+/** A section of the sidebar that folds: open by default, the user's choice remembered, and never folded over the page
+ * that is shown. Folded, it shows how many jobs are running when it holds Jobs. */
+function Group({ g, collapsed, folded, onToggle, activeJobs }: { g: (typeof GROUPS)[number]; collapsed: boolean; folded: boolean; onToggle: () => void; activeJobs: number }) {
+  const { pathname } = useLocation();
+  const here = g.items.some((i) => pathname === i.to || pathname.startsWith(i.to + "/"));
+  const open = !folded || here;
+  const jobs = g.items.some((i) => i.badge === "jobs") ? activeJobs : 0;
+  if (collapsed) {
+    return (
+      <div className="mt-4">
+        <div className="mx-auto mb-2 h-px w-6 bg-line" aria-hidden />
+        <div className="flex flex-col gap-0.5">
+          {g.items.map((it) => (
+            <NavItem key={it.to} item={it} collapsed count={it.badge === "jobs" ? activeJobs : undefined} />
+          ))}
+        </div>
+      </div>
     );
   }
   return (
-    <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-0.5 rounded-[10px] bg-surface-3/70 p-0.5">
-      {THEMES.map((t) => {
-        const on = t.value === theme;
-        const Icon = t.icon;
-        return (
-          <Tooltip key={t.value} content={t.label} side="top">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={on}
-              aria-label={t.label}
-              onClick={() => setTheme(t.value)}
-              className={cn(
-                "flex h-7 items-center justify-center rounded-[8px] transition-[background,color,box-shadow]",
-                on ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink",
-              )}
-            >
-              <Icon className="size-[15px]" />
-            </button>
-          </Tooltip>
-        );
-      })}
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="group/h mb-1 flex w-full items-center gap-1 rounded-[8px] px-3 py-0.5 text-[10.5px] font-semibold tracking-[0.12em] text-faint uppercase transition-colors hover:text-muted"
+      >
+        {g.title}
+        <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
+        {!open && jobs > 0 && (
+          <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-fire px-1 text-[9.5px] font-semibold tracking-normal text-white tabular" aria-label={`${jobs} jobs running`}>
+            {jobs}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="flex flex-col gap-0.5">
+          {g.items.map((it) => (
+            <NavItem key={it.to} item={it} collapsed={false} count={it.badge === "jobs" ? activeJobs : undefined} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -185,7 +257,7 @@ export function Sidebar() {
   const collapsed = useSettings((s) => s.sidebarCollapsed);
   const set = useSettings((s) => s.set);
   const activeJobs = useActiveJobs();
-  const dictationNew = useDictation((s) => s.config.featuresVisited < FEATURES_VERSION);
+  const [folded, fold] = useFolded();
   const toggle = () => set({ sidebarCollapsed: !collapsed });
 
   return (
@@ -197,7 +269,7 @@ export function Sidebar() {
       aria-label="Primary"
     >
       {/* brand + collapse */}
-      <div className={cn("flex h-16 shrink-0 items-center", collapsed ? "justify-center" : "justify-between pr-2.5 pl-4")}>
+      <div data-tauri-drag-region className={cn("flex h-16 shrink-0 items-center", collapsed ? "justify-center" : "justify-between pr-2.5 pl-4")}>
         {collapsed ? (
           // compact: the logo is the button that opens the sidebar; pointing at it (or focusing it) shows the open icon
           <Tooltip content="Expand sidebar" side="right">
@@ -244,34 +316,18 @@ export function Sidebar() {
         className={cn("sidebar-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-1 pb-3", collapsed ? "no-scrollbar px-0" : "px-2.5")}
         aria-label="Views"
       >
-        {GROUPS.map((g, gi) => (
-          <div key={gi} className={cn(gi > 0 && "mt-4")}>
-            {g.title &&
-              (collapsed ? (
-                <div className="mx-auto mb-2 h-px w-6 bg-line" aria-hidden />
-              ) : (
-                <div className="mb-1 px-3 text-[10.5px] font-semibold tracking-[0.12em] text-faint uppercase">{g.title}</div>
-              ))}
-            <div className="flex flex-col gap-0.5">
-              {g.items.map((it) => (
-                <NavItem
-                  key={it.to}
-                  item={it}
-                  collapsed={collapsed}
-                  count={it.badge === "jobs" ? activeJobs : undefined}
-                  fresh={it.badge === "dictation" && dictationNew}
-                />
-              ))}
-            </div>
-          </div>
+        <div className="flex flex-col gap-2">
+          <NavItem item={{ to: "/", label: "Home", icon: Home, end: true }} collapsed={collapsed} />
+          <DictationFeature collapsed={collapsed} />
+        </div>
+        {GROUPS.map((g) => (
+          <Group key={g.title} g={g} collapsed={collapsed} folded={!!folded[g.title]} onToggle={() => fold(g.title)} activeJobs={activeJobs} />
         ))}
       </nav>
 
-      {/* settings, theme, connection */}
+      {/* updates and the engine's state */}
       <div className={cn("shrink-0 border-t border-line pt-2.5 pb-3", collapsed ? "px-2 space-y-1.5" : "px-2.5 space-y-2.5")}>
         <UpdatePill collapsed={collapsed} />
-        <NavItem item={{ to: "/settings", label: "Settings", icon: Settings }} collapsed={collapsed} />
-        <ThemeSwitch collapsed={collapsed} />
         <ServerStatus compact={collapsed} />
       </div>
     </aside>

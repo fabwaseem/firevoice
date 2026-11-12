@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { api } from "@/lib/api/client";
 import { errMessage } from "@/lib/api/hooks";
 import type { DictationHistoryItem } from "@/lib/api/types";
-import { langName, relTime } from "@/lib/utils";
+import { cn, dayGroup, langName, relTime } from "@/lib/utils";
 import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, Dialog, EmptyState, Input, Tooltip } from "@/components/ui";
 import { VOCAB_KEY } from "./DictationVocabulary";
 
@@ -41,6 +41,7 @@ export function DictationHistoryPanel() {
       setTeach(null);
       toast.success(`From now on “${r.heard}” is written “${r.write}”.`);
       void qc.invalidateQueries({ queryKey: VOCAB_KEY });
+      void qc.invalidateQueries({ queryKey: ["dictionary"] });
     },
     onError: (e) => toast.error(errMessage(e)),
   });
@@ -84,8 +85,8 @@ export function DictationHistoryPanel() {
 
       <Card>
         <CardHeader
-          title="History"
-          description="Everything you dictated, kept on this computer. Select a word in a dictation to teach FireVoice how to write it."
+          title="Your dictations"
+          description="Everything you dictated, ready to copy again. Select a word in one to teach FireVoice how to write it."
           action={
             (d?.total ?? 0) > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setConfirm(true)}>
@@ -104,8 +105,13 @@ export function DictationHistoryPanel() {
             />
           ) : (
             <ul className="divide-y divide-line">
-              {d?.items.map((h) => (
-                <li key={h.id} className="group flex items-start gap-3 py-3">
+              {d?.items.map((h, i) => (
+                <li key={h.id} className="group">
+                  {/* a heading where a new day starts */}
+                  {(i === 0 || dayGroup(d.items[i - 1].at) !== dayGroup(h.at)) && (
+                    <p className={cn("pb-1 text-[11.5px] font-semibold tracking-[0.08em] text-muted uppercase", i > 0 ? "pt-4" : "pt-1")}>{dayGroup(h.at)}</p>
+                  )}
+                  <div className="flex items-start gap-3 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap text-ink select-text">{h.text}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-faint">
@@ -141,6 +147,7 @@ export function DictationHistoryPanel() {
                         <Trash2 className="size-4" />
                       </button>
                     </Tooltip>
+                  </div>
                   </div>
                 </li>
               ))}

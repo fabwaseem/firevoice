@@ -1,6 +1,7 @@
 import { type ComponentType, type ReactNode } from "react";
 import { AudioLines, Check, Languages, Library, MessagesSquare, Mic, Music, ShieldCheck, Wand2 } from "lucide-react";
 import { Logo } from "@/components/shell/Logo";
+import { TitleBar } from "@/components/shell/TitleBar";
 import { cn } from "@/lib/utils";
 
 type Icon = ComponentType<{ className?: string }>;
@@ -82,7 +83,8 @@ export function OnboardingFrame({
 }) {
   return (
     <div className="onb-hero flex h-full w-full flex-col">
-      <header className="flex h-16 shrink-0 items-center gap-4 px-6">
+      <TitleBar />
+      <header data-tauri-drag-region className="flex h-14 shrink-0 items-center gap-4 px-6">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <Logo size={28} />
           <span className="text-[15px] font-semibold tracking-[-0.01em] text-ink">FireVoice</span>

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { api, ApiError, subscribeJobEvents } from "./client";
@@ -27,7 +27,7 @@ export const qk = {
 
 /** Every number for the Stats screen over the last `days` days (0 = all time). */
 export function useStats(days: number) {
-  return useQuery({ queryKey: ["stats", days], queryFn: () => api.stats(days), staleTime: 20_000, refetchInterval: 60_000, retry: 1 });
+  return useQuery({ queryKey: ["stats", days], queryFn: () => api.stats(days), staleTime: 20_000, refetchInterval: 60_000, retry: 1, placeholderData: keepPreviousData });
 }
 
 /** Saved outputs, newest first (all kinds, or the given ones). */

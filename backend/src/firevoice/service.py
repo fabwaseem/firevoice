@@ -195,6 +195,7 @@ class FireVoice:
         self.dictionary = Dictionary(home() / "dictionary.json")
         from .dictation_store import DictationStore
         self.dictation_store = DictationStore(home())
+        self._fold_dictation_words()
         self.renders = RenderStore(home() / "takes")
         from .history import History
         self.history = History(home() / "history")
@@ -495,6 +496,28 @@ class FireVoice:
                 self._ml_aligner = FasterWhisperAligner("small", device="cpu", concurrency=2, language=None)
             return self._ml_aligner
 
+    def _fold_dictation_words(self) -> None:
+        """One dictionary for everything: words and replacements that were kept for dictation alone move into it."""
+        import logging
+        try:
+            words, repl = self.dictation_store.take_words()
+        except Exception:  # noqa: BLE001
+            logging.getLogger("firevoice").exception("could not read the dictation words")
+            return
+        for w in words:
+            try:
+                self.dictionary.add_word(w)
+            except Exception:  # noqa: BLE001
+                logging.getLogger("firevoice").warning("dictation word %r not moved to the dictionary", w)
+        for r in repl:
+            try:
+                if r.get("heard") and r.get("write"):
+                    self.dictionary.add_heard(str(r["write"]), str(r["heard"]))
+            except Exception:  # noqa: BLE001
+                logging.getLogger("firevoice").warning("dictation replacement %r not moved to the dictionary", r)
+        if words or repl:
+            logging.getLogger("firevoice").info("moved %d dictation words and %d replacements into the dictionary", len(words), len(repl))
+
     def wake_spotter(self):
         """A listener for the wake phrase ("Hey FireVoice", wake.py) on the shared speech model, in English."""
         import importlib
@@ -590,19 +613,22 @@ class FireVoice:
             if w not in terms:
                 terms.append(w)
         try:
-            terms += [r["match"] for r in self.dictionary.rules() if r.get("match") and r["match"] not in terms]
-        except Exception:
-            pass
+            entries = self.dictionary.rules()
+        except Exception:  # noqa: BLE001
+            entries = []
+        dict_words = [r["match"] for r in entries if r.get("match")]
+        dict_heard = [{"heard": h, "write": r["match"]} for r in entries for h in r.get("heard") or []]
+        terms += [w for w in dict_words if w not in terms]
         lang = None if not language or language == "auto" else language
         langs = [str(x) for x in (languages or []) if isinstance(x, str) and 1 < len(x) <= 5] or None
         asr = self.dictation_aligner(lang, langs)
         command = mode == "command"
         if command and not dictation_ai.installed():
             raise FireVoiceError("unavailable", "Command mode needs the writing assistant. Install it on the Dictation page.")
-        rules = store.rules(commands=commands and not command)
+        rules = store.rules(commands=commands and not command, extra_words=dict_words, extra_replacements=dict_heard)
         kind = dictation_ai.app_kind(app, app_title)
         style = str((styles or {}).get(kind) or dictation_ai.DEFAULT_STYLES.get(kind, "formal"))
-        words = store.load()["words"]
+        words = store.load()["words"] + dict_words
 
         context = {"selection": selection}       # command mode: the selection can also come with the "stop" message
 
@@ -1221,6 +1247,16 @@ class FireVoice:
         style_titles = {st["name"]: st.get("title") or st["name"] for st in styles}
         for row in s["styles"]:
             row["name"] = style_titles.get(row["key"], row["key"])
+        try:
+            s["dictation"] = self.dictation_store.stats(days)
+        except Exception:  # noqa: BLE001  (a convenience: never fail the screen over it)
+            import logging
+            logging.getLogger("firevoice").exception("dictation stats")
+            s["dictation"] = None
+        try:
+            snippets = len(self.dictation_store.load()["snippets"])
+        except Exception:  # noqa: BLE001
+            snippets = 0
         speech_engines = [e for e in engines if e.get("task", "tts") == "tts"]
         library = {
             "voices": len(voices), "cloned": sum(1 for v in voices if not _is_designed(v)),
@@ -1230,7 +1266,7 @@ class FireVoice:
             "styles": len(styles), "custom_styles": sum(1 for st in styles if not st.get("builtin", True)),
             "projects": len(projects), "chapters": sum(int(p.get("chapters") or 0) for p in projects),
             "paragraphs": sum(int(p.get("paragraphs") or 0) for p in projects), "project_words": sum(int(p.get("words") or 0) for p in projects),
-            "dictionary_rules": rules, "history_items": sum(1 for _ in self.history.root.glob("*/item.json")) if self.history.root.exists() else 0,
+            "dictionary_rules": rules, "snippets": snippets, "history_items": sum(1 for _ in self.history.root.glob("*/item.json")) if self.history.root.exists() else 0,
             "kept_renders": sum(1 for _ in (home() / "takes").glob("*/render.json")), "jobs": len(self.jobs.jobs),
             "engines_ready": sum(1 for e in speech_engines if e.get("ready")), "engines_total": len(speech_engines),
             "tools_ready": sum(1 for e in engines if e.get("task") in ("sfx", "vc", "tool") and e.get("ready")),
@@ -1786,7 +1822,14 @@ class FireVoice:
         asr = self._stt_model()
         t0 = time.perf_counter()
         lang = None if not language or language == "auto" else language
-        hot = ", ".join(str(k).strip() for k in (keyterms or []) if str(k).strip())[:800] or None
+        # your dictionary's words are expected too, after the caller's own terms
+        try:
+            mine = self.dictionary.words()
+        except Exception:  # noqa: BLE001
+            mine = []
+        terms = [str(k).strip() for k in (keyterms or []) if str(k).strip()]
+        terms += [w for w in mine if w not in terms]
+        hot = ", ".join(terms)[:800] or None
         try:
             r = asr.transcribe_full(audio, int(sr), beam_size=beam_size, language=lang, prompt=prompt, hotwords=hot)
         except Exception as e:

@@ -46,7 +46,7 @@ export function VoicesView() {
   const hasAny = (voices.data?.length ?? 0) > 0 || Object.values(filters).some(Boolean);
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="page-width">
       <PageHeader
         title="Voices"
         subtitle={total != null ? `${total} voice${total === 1 ? "" : "s"} in your library. Clone from a clip or design one from a description.` : "Your voice library."}
