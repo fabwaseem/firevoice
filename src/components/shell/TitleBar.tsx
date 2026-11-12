@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { inTauri } from "@/lib/backend";
 import { cn } from "@/lib/utils";
-import { MotionIcon } from "@/vendor/motion-icons/MotionIcon";
-import { windowClose, windowMaximize, windowMinimize, windowRestore } from "@/vendor/motion-icons";
-import type { IconDef } from "@/vendor/motion-icons/types";
+import { KineticIcon } from "kineticons";
+import { windowClose, windowMaximize, windowMinimize, windowRestore } from "@kineticons/core/icons";
+import type { IconDef } from "@kineticons/core";
 import { AccountButton } from "@/components/cloud/AccountButton";
 import { isMac } from "@/lib/platform";
 
@@ -80,7 +80,7 @@ function Control({ label, icon, danger, corner, onClick }: { label: string; icon
         corner && "rounded-tr-[8px]",
       )}
     >
-      <MotionIcon icon={icon} size={12} strokeWidth={2.4} />
+      <KineticIcon icon={icon} size={12} strokeWidth={2.4} />
     </button>
   );
 }

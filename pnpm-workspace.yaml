@@ -1,2 +1,4 @@
 minimumReleaseAgeExclude:
   - '@vitejs/plugin-react@6.3.0'
+  - '@kineticons/core@0.1.0'
+  - kineticons@0.1.0

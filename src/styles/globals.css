@@ -209,7 +209,7 @@
   }
 }
 /* the page you are on: its sidebar icon keeps the deeper duotone fill (the motion still waits for the pointer) */
-[aria-current="page"] svg.mi { --mi-tone: 0.26; }
+[aria-current="page"] svg.ki { --ki-tone: 0.26; }
 /* every page is the same width (Home's), centred: one place to change it */
 @utility page-width { width: 100%; max-width: 1300px; margin-inline: auto; }
 @utility tabular { font-variant-numeric: tabular-nums; }
