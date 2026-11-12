@@ -278,7 +278,7 @@ export function Sidebar() {
       aria-label="Primary"
     >
       {/* brand + collapse */}
-      <div data-tauri-drag-region className={cn("flex h-16 shrink-0 items-center", collapsed ? "justify-center" : "justify-between pr-2.5 pl-4")}>
+      <div data-tauri-drag-region className={cn("sidebar-brand flex h-16 shrink-0 items-center", collapsed ? "justify-center" : "justify-between pr-2.5 pl-4")}>
         {collapsed ? (
           // compact: the logo is the button that opens the sidebar; pointing at it (or focusing it) shows the open icon
           <Tooltip content="Expand sidebar" side="right">

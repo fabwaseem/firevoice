@@ -4,7 +4,8 @@
 //   node scripts/build-linux.mjs <outdir> [--bundles appimage,deb,rpm]
 //
 // The image (docker/linux/Dockerfile) and the caches (Cargo, pnpm, the build folder) are kept between runs, so only
-// the first build is long. The updater signing key is read from %USERPROFILE%\.firevoice-release\ like release.mjs does
+// the first build is long. For trying a Linux build locally; releases build Linux in GitHub Actions. The updater
+// signing key is read from %USERPROFILE%\.firevoice-release\
 // (FIREVOICE_RELEASE_KEYS overrides) and goes to the container as environment variables, never to disk.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";

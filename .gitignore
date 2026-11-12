@@ -10,5 +10,6 @@ src-tauri/gen/schemas
 src-tauri/resources/backend/*
 !src-tauri/resources/backend/.gitkeep
 
-# built releases (scripts/release.mjs)
+# built releases (scripts/ci-release.mjs)
 release/
+release-out/

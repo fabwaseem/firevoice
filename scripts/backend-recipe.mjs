@@ -5,7 +5,9 @@ export const RECIPE = {
   python: "3.12",
   extras: ["desktop"],
   torch: "2.11.0",
-  torch_index: "https://download.pytorch.org/whl/cu128",
+  // CUDA 12.8 on Windows and Linux; the CUDA index has no macOS builds, so a Mac gets the CPU index (which carries the
+  // Apple Silicon wheels, with Metal support). The recipe is written into backend.json by the build on each OS.
+  torch_index: process.platform === "darwin" ? "https://download.pytorch.org/whl/cpu" : "https://download.pytorch.org/whl/cu128",
   // chatterbox-tts pins torch 2.6, which has no RTX 50-series kernels; the backend is tested on these instead
   // resemblyzer asks for webrtcvad, which is published only as source (it needs a C compiler on the user's computer, which
   // most do not have): never install it; webrtcvad-wheels (same module, ready-made for every system) is in the desktop extra

@@ -447,7 +447,20 @@ fn foreground_app() -> Option<(String, String)> {
             Some((exe, title))
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // the frontmost app's name, from Launch Services (no permission needed); macOS keeps window titles private
+        let front = std::process::Command::new("lsappinfo").arg("front").output().ok()?;
+        let asn = String::from_utf8_lossy(&front.stdout).trim().to_string();
+        if asn.is_empty() {
+            return None;
+        }
+        let info = std::process::Command::new("lsappinfo").args(["info", "-only", "name", &asn]).output().ok()?;
+        let text = String::from_utf8_lossy(&info.stdout).to_string();
+        let name = text.split('"').nth(3).map(|s| s.to_string()).unwrap_or_default();
+        Some((name, String::new()))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         // X11: the active window's class and title, through xprop (on most desktops); Wayland does not say
         let id = std::process::Command::new("xprop").args(["-root", "_NET_ACTIVE_WINDOW"]).output().ok()?;
@@ -486,7 +499,11 @@ fn rescue(app: &AppHandle, text: &str, why: &str) {
     log::error!("dictation: could not insert text: {why}");
     let saved = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_string())).is_ok();
     let msg = if saved {
-        "FireVoice could not type into this program. Your text is on the clipboard: paste it with Ctrl+V."
+        if cfg!(target_os = "macos") {
+            "FireVoice could not type into this program. Your text is on the clipboard: paste it with Cmd+V."
+        } else {
+            "FireVoice could not type into this program. Your text is on the clipboard: paste it with Ctrl+V."
+        }
     } else {
         "FireVoice could not type into this program. Your text is in the dictation history."
     };
@@ -506,6 +523,18 @@ impl Typist {
                     Ok(e) => Some(e),
                     Err(e) => {
                         log::error!("dictation: cannot type into other programs: {e}");
+                        // macOS: typing into other apps needs the Accessibility permission; the system has just asked
+                        #[cfg(target_os = "macos")]
+                        {
+                            emit_state(
+                                &app,
+                                "error",
+                                Some("Allow FireVoice to type: System Settings > Privacy & Security > Accessibility, then turn FireVoice on.".into()),
+                            );
+                            let _ = std::process::Command::new("open")
+                                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+                                .spawn();
+                        }
                         None
                     }
                 };
@@ -570,9 +599,11 @@ fn paste_text(enigo: &mut Enigo, text: &str) -> Result<(), String> {
     let before = clip.get_text().ok();
     clip.set_text(text.to_string()).map_err(|e| e.to_string())?;
     thread::sleep(Duration::from_millis(30));
-    enigo.key(Key::Control, Direction::Press).map_err(|e| e.to_string())?;
+    // paste is Cmd+V on macOS, Ctrl+V elsewhere
+    let paste_key = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
+    enigo.key(paste_key, Direction::Press).map_err(|e| e.to_string())?;
     let r = enigo.key(Key::Unicode('v'), Direction::Click).map_err(|e| e.to_string());
-    enigo.key(Key::Control, Direction::Release).map_err(|e| e.to_string())?;
+    enigo.key(paste_key, Direction::Release).map_err(|e| e.to_string())?;
     r?;
     // give the program time to read the clipboard, then put back what was there
     thread::sleep(Duration::from_millis(250));
@@ -596,9 +627,11 @@ fn grab_selection() -> String {
         return String::new();
     }
     let copied = Enigo::new(&Settings::default()).ok().and_then(|mut e| {
-        e.key(Key::Control, Direction::Press).ok()?;
+        // copy is Cmd+C on macOS, Ctrl+C elsewhere
+        let copy_key = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
+        e.key(copy_key, Direction::Press).ok()?;
         let r = e.key(Key::Unicode('c'), Direction::Click);
-        e.key(Key::Control, Direction::Release).ok()?;
+        e.key(copy_key, Direction::Release).ok()?;
         r.ok()
     });
     let mut got = String::new();

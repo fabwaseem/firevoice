@@ -86,14 +86,25 @@ engines yet (AMD's PyTorch for Windows covers only some cards and is not publish
 in the message so it is clear why the processor is used. `FIREVOICE_ACCELERATOR=cpu` forces the processor (a broken driver,
 or a test).
 
-macOS is not built.
+### macOS
+
+Built by the release workflow on Apple Silicon (macOS 11 or newer; no Intel build, torch no longer publishes Intel Mac
+wheels). The engines run on the processor there (no CUDA). Differences from Windows, all in the code:
+
+* the window uses the system's own traffic-light buttons (`src-tauri/tauri.macos.conf.json`, the title bar hides its
+  drawn buttons), and the transparent dictation pill needs `macOSPrivateApi` (the Tauri CLI adds the Cargo feature on
+  a macOS build only);
+* typing into other apps needs **Accessibility** (System Settings > Privacy & Security > Accessibility): on the first
+  dictation macOS asks, and FireVoice says where to turn it on; the microphone prompt uses `src-tauri/Info.plist`;
+* paste and copy use Cmd, the focused app is read with `lsappinfo`, and starting at login is a LaunchAgent in
+  `~/Library/LaunchAgents/com.firevoice.autostart.plist`.
 
 ### Linux builds
 
 `node scripts/build-linux.mjs <folder>` builds the Linux packages in Docker on any computer that runs it (the image is
 `docker/linux/Dockerfile`, Ubuntu 22.04 so the app runs on it and on newer systems): an **AppImage** (what the updater uses; it
-updates itself), a `.deb` and an `.rpm`. `scripts/release.mjs` runs it as part of a release, adds the AppImage to
-`latest.json` (`linux-x86_64`) and publishes all three; `--skip-linux` leaves them out. Dictation's global hotkey and typing
+updates itself), a `.deb` and an `.rpm`. It is for trying a Linux build locally: releases build Linux natively in
+the release workflow, with the same libraries as the image. Dictation's global hotkey and typing
 into other programs work on X11; on Wayland the desktop decides what is allowed.
 
 ## Develop
@@ -129,25 +140,54 @@ node scripts/version.mjs            # show them (fails if they differ)
 node scripts/version.mjs 1.5.0      # set them (or patch / minor / major)
 ```
 
-The release script sets it for you. The bundled backend runtime is rebuilt on a user's computer when the version
+The release workflow sets it for you. The bundled backend runtime is rebuilt on a user's computer when the version
 changes, so a backend change always needs a new version.
 
 ## Release
 
-Releases are built and published from this computer; there is no CI.
+Releases are built and published by GitHub Actions, for Windows, macOS (Apple Silicon) and Linux in one run. The
+workflow (`.github/workflows/release.yml`, steps in `scripts/ci-release.mjs`) only runs when started by hand:
+**Actions > Release > Run workflow** on `main`, or
 
 ```bash
-node scripts/release.mjs patch --notes-file notes.md     # or minor / major / 1.5.0, or --notes "One line"
+gh workflow run release.yml --ref main -f version=patch -f notes="One line of notes"
 ```
 
-It checks the repo is clean and on `main`, runs the type check and backend tests, sets the version, adds the notes to
-`CHANGELOG.md`, commits `Release vX.Y.Z` and tags it, builds the signed installers into `release/vX.Y.Z/`
-(`FireVoice_X.Y.Z_x64-setup.exe` and its `.sig`, the `.msi`, `latest.json`, `SHA256SUMS.txt`), pushes `main` and the
-tag here, publishes the files as a release of `fabwaseem/firevoice-releases`, and confirms the update feed announces
-the new version. If any step fails, fix it and run the same command again: it resumes the same release.
+`version` is `patch`, `minor`, `major` or an exact `X.Y.Z`. For longer notes, leave `notes` empty and commit
+`release-notes.md` to `main` first; the release commit moves its text into `CHANGELOG.md` and deletes it.
 
-`--dry-run` builds everything into `release/vX.Y.Z/` and changes nothing else. `--skip-tests` and `--rebuild` do what
-they say.
+1. **Plan and test** (Linux): works out the version, checks the tag is free, runs the type check and backend tests.
+2. **Build** (Windows, macOS and Linux side by side): sets the version, builds the signed installers, refuses a build
+   that would ship source, and runs the backend tests against the compiled wheel on each OS.
+   * Windows: `FireVoice_X.Y.Z_x64-setup.exe` (updates) and `.msi`
+   * macOS: `FireVoice_X.Y.Z_aarch64.dmg` and `FireVoice_X.Y.Z_aarch64.app.tar.gz` (updates)
+   * Linux: `FireVoice_X.Y.Z_amd64.AppImage` (updates), `.deb` and `.rpm`
+3. **Publish**, only once every build passed: writes `latest.json` (all platforms) and `SHA256SUMS.txt`, commits
+   `Release vX.Y.Z` with the `CHANGELOG.md` entry, tags it, pushes `main` and the tag here, publishes every file as a
+   release of `fabwaseem/firevoice-releases`, and confirms the update feed announces the new version.
+
+Nothing is committed or tagged until all three builds pass. If **Publish** fails, fix the cause and use **Re-run
+failed jobs**: it keeps the builds, keeps a tag it already pushed, and replaces files already on the release. If
+`main` moved while the builds ran, the push is refused; start the release again.
+
+**Dry run** builds everything and publishes nothing; the installers are on the run's page as artifacts. **Skip tests**
+does what it says.
+
+The macOS app is ad-hoc signed, not signed with an Apple Developer ID, so the first open needs right-click > Open (or
+`xattr -cr /Applications/FireVoice.app`). There is no Intel Mac build: torch no longer publishes Intel Mac wheels.
+
+Repository secrets (Settings > Secrets and variables > Actions):
+
+| Secret | What |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | the contents of `updater.key` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the contents of `updater.password` |
+| `RELEASES_TOKEN` | a fine-grained token with Contents: read and write on `fabwaseem/firevoice-releases` only |
+
+Optional, for a macOS build Apple trusts without the right-click (an Apple Developer account): `APPLE_CERTIFICATE`
+(the Developer ID Application certificate, `.p12` as base64), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`
+("Developer ID Application: Name (TEAMID)"), and for notarization `APPLE_ID`, `APPLE_PASSWORD` (an app-specific
+password) and `APPLE_TEAM_ID`. Without them the build is ad-hoc signed, as described above.
 
 ### What ships: no source code
 
@@ -186,7 +226,8 @@ Two rules the compiled backend puts on the code:
 Updates are signed; the app only installs an update whose signature matches the public key built into it
 (`plugins.updater.pubkey` in `src-tauri/tauri.conf.json`). The private key and its password are kept outside the repo
 in `%USERPROFILE%\.firevoice-release\` (`updater.key`, `updater.key.pub`, `updater.password`; or set
-`FIREVOICE_RELEASE_KEYS`). **Back that folder up somewhere safe.** Without it no installed copy can ever update again:
+`FIREVOICE_RELEASE_KEYS`), and their contents are the release workflow's two signing secrets. **Back that folder up
+somewhere safe.** Without it no installed copy can ever update again:
 a new key means everyone reinstalls by hand.
 
 ## Updates

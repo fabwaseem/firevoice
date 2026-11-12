@@ -272,3 +272,9 @@
 .tour-ring { box-shadow: 0 0 0 2px var(--fire), 0 0 0 6px color-mix(in oklab, var(--fire) 28%, transparent); animation: tour-pulse 1.8s ease-in-out infinite; }
 @keyframes tour-pulse { 50% { box-shadow: 0 0 0 2px var(--fire), 0 0 0 11px color-mix(in oklab, var(--fire) 8%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .onb-bar, .onb-in, .onb-rise, .tour-ring { animation: none; } }
+
+/* macOS: the system draws the window buttons over the top left corner; the sidebar's top row moves down below them */
+:root[data-os="mac"] .sidebar-brand {
+  height: 5.25rem;
+  padding-top: 1.75rem;
+}

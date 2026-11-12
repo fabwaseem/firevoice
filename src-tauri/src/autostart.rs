@@ -321,7 +321,69 @@ mod os {
     }
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+/// macOS: a LaunchAgent in the user's own Library (no admin, no system prompt beyond the "background item added" note
+/// macOS shows). It starts FireVoice with --autostart when the person logs in.
+#[cfg(target_os = "macos")]
+mod os {
+    use std::fs;
+    use std::path::PathBuf;
+
+    pub const SUPPORTED: bool = true;
+    const LABEL: &str = "com.firevoice.autostart";
+
+    fn file() -> Option<PathBuf> {
+        let home = std::env::var_os("HOME")?;
+        Some(PathBuf::from(home).join("Library").join("LaunchAgents").join(format!("{LABEL}.plist")))
+    }
+
+    fn xml(s: &str) -> String {
+        s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    }
+
+    fn entry() -> Option<String> {
+        let program = super::program()?;
+        Some(format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n  <key>Label</key><string>{LABEL}</string>\n  <key>ProgramArguments</key>\n  <array>\n    <string>{}</string>\n    <string>{}</string>\n  </array>\n  <key>RunAtLoad</key><true/>\n  <key>ProcessType</key><string>Interactive</string>\n</dict>\n</plist>\n",
+            xml(&program.to_string_lossy()),
+            super::FLAG
+        ))
+    }
+
+    /// macOS turns login items off in System Settings > General > Login Items without touching the file, and does not
+    /// say so to the app: there is nothing to read here.
+    pub fn turned_off_by_user() -> bool {
+        false
+    }
+
+    pub fn allow() {}
+
+    pub fn registered() -> bool {
+        match (file().and_then(|f| fs::read_to_string(f).ok()), entry()) {
+            (Some(have), Some(want)) => have == want,
+            _ => false,
+        }
+    }
+
+    pub fn apply(enabled: bool) -> Result<(), String> {
+        let f = file().ok_or("no home folder")?;
+        if !enabled {
+            return match fs::remove_file(&f) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+                _ => Ok(()),
+            };
+        }
+        let want = entry().ok_or("FireVoice's own path is unknown")?;
+        if fs::read_to_string(&f).ok().as_deref() == Some(want.as_str()) {
+            return Ok(());
+        }
+        if let Some(dir) = f.parent() {
+            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        fs::write(&f, want).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 mod os {
     pub const SUPPORTED: bool = false;
     pub fn turned_off_by_user() -> bool {

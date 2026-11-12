@@ -1,0 +1,233 @@
+# Builds and publishes a FireVoice release for Windows, macOS (Apple Silicon) and Linux. Started by hand only:
+# Actions > Release > Run workflow (on main). See "Release" in README.md and scripts/ci-release.mjs.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "patch, minor, major, or an exact X.Y.Z"
+        required: true
+        default: patch
+      notes:
+        description: "Release notes, one line (leave empty to use release-notes.md from main)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run: build everything, publish nothing (installers are kept on the run's page)"
+        type: boolean
+        default: false
+      skip_tests:
+        description: "Skip the type check and backend tests"
+        type: boolean
+        default: false
+
+# one release at a time; a second run waits instead of racing for the same version
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # the release commit and tag in this repo
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  RELEASE_NOTES: ${{ inputs.notes }}
+  # the backend tests run on CPU torch (small and quick); the installers still ship the recipe's GPU torch
+  FIREVOICE_TORCH_INDEX: https://download.pytorch.org/whl/cpu
+
+jobs:
+  plan:
+    name: Plan and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      sha: ${{ steps.plan.outputs.sha }}
+    steps:
+      - name: Check where it runs and the secrets
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD != '' }}
+          HAS_TOKEN: ${{ secrets.RELEASES_TOKEN != '' }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ] && [ "$DRY" != "true" ]; then echo "::error::Release from main (or tick dry run)"; exit 1; fi
+          if [ "$HAS_KEY" != "true" ]; then echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets"; exit 1; fi
+          if [ "$HAS_TOKEN" != "true" ] && [ "$DRY" != "true" ]; then echo "::error::Add the RELEASES_TOKEN secret (write access to fabwaseem/firevoice-releases)"; exit 1; fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Work out the version
+        id: plan
+        env:
+          HOW: ${{ inputs.version }}
+          DRY: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: node scripts/ci-release.mjs plan "$HOW" $DRY
+
+      - if: ${{ !inputs.skip_tests }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - if: ${{ !inputs.skip_tests }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - if: ${{ !inputs.skip_tests }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pyproject.toml
+
+      - name: Type check
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+
+      - name: Backend tests
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          node scripts/dev-setup.mjs
+          cd backend && .venv/bin/python -m pytest -q
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: plan
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+          - platform: macos
+            os: macos-latest # Apple Silicon; torch has no Intel Mac builds any more
+          - platform: linux
+            os: ubuntu-22.04 # the oldest supported Ubuntu, so the AppImage runs on more systems
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pyproject.toml
+
+      # the same libraries as the Docker image used for local Linux builds (docker/linux/Dockerfile)
+      - name: Linux build libraries
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl wget file pkg-config xz-utils rpm patchelf \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libxdo-dev libasound2-dev \
+            libxcb-xfixes0-dev libxcb-shape0-dev libxcb-render0-dev libx11-dev libxtst-dev libxi-dev \
+            libfuse2 desktop-file-utils squashfs-tools
+          # the AppImage tools run without mounting FUSE
+          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+
+      # macOS: signed with a Developer ID and notarized when the Apple secrets are set; otherwise ad-hoc signed (people
+      # then open it once with right-click > Open, see the download page). Tauri reads these variables itself.
+      - name: Apple signing (optional)
+        if: matrix.platform == 'macos'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            {
+              echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+              echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+              echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+            } >> "$GITHUB_ENV"
+            echo "::notice::macOS build signed with $APPLE_SIGNING_IDENTITY"
+            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+              { echo "APPLE_ID=$APPLE_ID"; echo "APPLE_PASSWORD=$APPLE_PASSWORD"; echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"; } >> "$GITHUB_ENV"
+              echo "::notice::and notarized"
+            fi
+          else
+            echo "::warning::No Apple signing secrets: the macOS app is ad-hoc signed and not notarized"
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Backend test environment
+        if: ${{ !inputs.skip_tests }}
+        run: node scripts/dev-setup.mjs
+
+      - name: Build, check and test
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          SKIP: ${{ inputs.skip_tests && '--skip-tests' || '' }}
+        run: node scripts/ci-release.mjs build "$VERSION" $SKIP
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: release-out/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: ${{ inputs.dry_run && 'Collect (dry run)' || 'Publish' }}
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-out
+          merge-multiple: true
+
+      - name: Commit, tag and publish
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          DRY: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/ci-release.mjs publish "$VERSION" $DRY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FireVoice-${{ needs.plan.outputs.tag }}${{ inputs.dry_run && '-dry-run' || '' }}
+          path: release-out/final/
+          retention-days: 14

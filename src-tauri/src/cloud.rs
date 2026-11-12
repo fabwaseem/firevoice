@@ -226,7 +226,7 @@ fn reg_string(key: &str, name: &str) -> Option<String> {
     Some(String::from_utf16_lossy(&buf[..len.min(buf.len())]).trim().to_string()).filter(|s| !s.is_empty())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn read(path: &str) -> Option<String> {
     std::fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
@@ -236,7 +236,17 @@ fn read(path: &str) -> Option<String> {
 fn device_id() -> String {
     #[cfg(windows)]
     let raw = reg_string("SOFTWARE\\Microsoft\\Cryptography", "MachineGuid");
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let raw = std::process::Command::new("ioreg")
+        .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            let text = String::from_utf8_lossy(&o.stdout).to_string();
+            let line = text.lines().find(|l| l.contains("IOPlatformUUID"))?.to_string();
+            line.split('"').nth(3).map(|s| s.to_string())
+        });
+    #[cfg(not(any(windows, target_os = "macos")))]
     let raw = read("/etc/machine-id").or_else(|| read("/var/lib/dbus/machine-id"));
     let mut h = Sha256::new();
     h.update(b"firevoice-device:");
@@ -256,7 +266,13 @@ fn ram_gb() -> Option<f64> {
         }
         None
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        let out = std::process::Command::new("sysctl").args(["-n", "hw.memsize"]).output().ok()?;
+        let bytes: f64 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
+        Some((bytes / 1_073_741_824.0 * 10.0).round() / 10.0)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         let kb = read("/proc/meminfo")?.lines().find(|l| l.starts_with("MemTotal:"))?.split_whitespace().nth(1)?.parse::<f64>().ok()?;
         Some((kb / 1_048_576.0 * 10.0).round() / 10.0)
@@ -288,7 +304,22 @@ fn device(app: &AppHandle, extra: &Map<String, Value>) -> Value {
         read("/etc/hostname"),
     );
     #[cfg(target_os = "macos")]
-    let (os, os_version, cpu, host): (&str, String, Option<String>, Option<String>) = ("macos", String::new(), None, None);
+    let (os, os_version, cpu, host) = {
+        let cmd = |c: &str, a: &[&str]| {
+            std::process::Command::new(c)
+                .args(a)
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|s| !s.is_empty())
+        };
+        (
+            "macos",
+            cmd("sw_vers", &["-productVersion"]).unwrap_or_default(),
+            cmd("sysctl", &["-n", "machdep.cpu.brand_string"]),
+            cmd("scutil", &["--get", "ComputerName"]),
+        )
+    };
 
     let mut d = json!({
         "appVersion": app.package_info().version.to_string(),

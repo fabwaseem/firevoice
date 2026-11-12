@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "FireVoice",
+        "width": 1380,
+        "height": 880,
+        "minWidth": 980,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 18, "y": 22 },
+        "shadow": true,
+        "transparent": false,
+        "backgroundColor": "#f3f4f8",
+        "visible": false
+      },
+      {
+        "label": "spotlight",
+        "title": "FireVoice guide",
+        "url": "spotlight.html",
+        "width": 800,
+        "height": 600,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "focusable": false
+      },
+      {
+        "label": "dictation",
+        "title": "FireVoice dictation",
+        "url": "overlay.html",
+        "width": 460,
+        "height": 132,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "focusable": false
+      }
+    ]
+  }
+}
