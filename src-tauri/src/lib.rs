@@ -1,5 +1,6 @@
 mod autostart;
 mod backend;
+mod cloud;
 mod datafolders;
 mod dictation;
 mod updater;
@@ -87,6 +88,7 @@ pub fn run() {
         .manage(backend::Backend::default())
         .manage(updater::Updates::default())
         .manage(dictation::Dictation::default())
+        .manage(cloud::Cloud::default())
         .invoke_handler(tauri::generate_handler![
             autostart::autostart_status,
             autostart::autostart_set,
@@ -105,6 +107,22 @@ pub fn run() {
             dictation::dictation_toggle,
             dictation::dictation_cancel,
             dictation::dictation_mics,
+            cloud::cloud_status,
+            cloud::cloud_hello,
+            cloud::cloud_consent,
+            cloud::cloud_track,
+            cloud::cloud_error,
+            cloud::cloud_erase,
+            cloud::cloud_sign_in,
+            cloud::cloud_sign_out,
+            cloud::cloud_me,
+            cloud::cloud_update_account,
+            cloud::cloud_delete_account,
+            cloud::cloud_resend,
+            cloud::cloud_forgot,
+            cloud::cloud_feedback,
+            cloud::cloud_license,
+            cloud::cloud_activate,
         ])
         .on_window_event(|window, event| {
             // with dictation on, closing the main window only hides it: the hotkey keeps working from the tray
@@ -124,6 +142,8 @@ pub fn run() {
             window_frame(app.handle());
             // start with the computer (on unless the user turned it off); started that way, stay in the tray
             autostart::sync(app.handle());
+            // usage sharing, accounts and feedback (FireVoice cloud): loads, counts the launch, sends in the background
+            cloud::start(app.handle());
             if !autostart::started_at_login() {
                 show_main(app.handle());
             }
@@ -135,6 +155,8 @@ pub fn run() {
     app.run(|handle, event| {
         // A backend the app started goes away with the app; one the user started stays up.
         if let tauri::RunEvent::Exit = event {
+            cloud::track(handle, "app.quit", serde_json::Value::Null);
+            cloud::save_queue(handle);
             backend::stop_setup(&handle.state::<backend::Backend>());
             backend::stop(&handle.state::<backend::Backend>());
         }

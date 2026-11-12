@@ -16,6 +16,9 @@ import { usePlayer } from "@/stores/player";
 import { useStagger } from "@/lib/stagger";
 import { TitleBar } from "./TitleBar";
 import { Tour } from "@/components/tour/Tour";
+import { ConsentDialog } from "@/components/cloud/ConsentDialog";
+import { hello, reportError, track } from "@/lib/cloud";
+import { useSystem } from "@/lib/api/hooks";
 
 export function AppShell() {
   const theme = useSettings((s) => s.theme);
@@ -47,6 +50,26 @@ export function AppShell() {
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
+  // usage statistics: which page was opened (its name only), and the computer details only the window knows
+  useEffect(() => track("page.view", { route: `/${pageKey === "home" ? "" : pageKey}` }), [pageKey]);
+  const gpu = useSystem().data?.gpu?.name;
+  useEffect(() => hello(gpu), [gpu]);
+  // errors in the window are reported like crashes (with sharing on)
+  useEffect(() => {
+    const onError = (e: ErrorEvent) => reportError(e.message || "error", e.error instanceof Error ? e.error.stack : undefined);
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const r = e.reason;
+      // a failed request is already shown to the person; only real faults are reported
+      if (r && typeof r === "object" && "status" in r) return;
+      reportError(r instanceof Error ? r.message : String(r), r instanceof Error ? r.stack : undefined);
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
   // the title bar floats over the page: once the page has scrolled under it, it frosts a little more
   const [scrolled, setScrolled] = useState(false);
 
@@ -82,6 +105,7 @@ export function AppShell() {
         {/* torch and the voice libraries still installing after the first run, and engines installing */}
         <BackgroundSetup />
         <Tour />
+        <ConsentDialog />
 
         <Toaster
           position="top-right"

@@ -4,14 +4,16 @@ import { AboutSection, DataSection } from "@/components/settings/DataAboutSectio
 import { PathsSection } from "@/components/settings/PathsSection";
 import { ApiSection } from "@/components/settings/ApiSection";
 import { StartupSection } from "@/components/settings/StartupSection";
+import { PrivacySection } from "@/components/settings/PrivacySection";
 
 export function SettingsView() {
   return (
     <div className="page-width fade-up">
-      <PageHeader title="Settings" subtitle="Appearance, starting with your computer, rendering defaults, where FireVoice keeps its files, and the API for your own tools." />
+      <PageHeader title="Settings" subtitle="Appearance, starting with your computer, privacy, rendering defaults, where FireVoice keeps its files, and the API for your own tools." />
       <div className="flex flex-col gap-4">
         <AppearanceSection />
         <StartupSection />
+        <PrivacySection />
         <RenderingSection />
         <DataSection />
         <PathsSection />

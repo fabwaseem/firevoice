@@ -382,6 +382,56 @@ export const messageCircle: IconDef = {
   ...preset("bounce", 1),
 };
 
+export const circleUser: IconDef = {
+  name: "circle-user",
+  title: "Account",
+  category: "app",
+  tags: ["account","profile","user","person","sign in"],
+  motionNote: "It grows a touch.",
+  parts: [{"p":"p0","role":"detail","d":"M17.925 20.056a6 6 0 0 0-11.851.001"},{"p":"p1","role":"body","d":"M8 11 A4 4 0 1 0 16 11 A4 4 0 1 0 8 11 Z"},{"p":"p2","role":"body","d":"M2 12 A10 10 0 1 0 22 12 A10 10 0 1 0 2 12 Z"}],
+  ...preset("pop", 3),
+};
+
+export const logOut: IconDef = {
+  name: "log-out",
+  title: "Sign out",
+  category: "actions",
+  tags: ["sign out","leave","exit","logout"],
+  motionNote: "It steps out.",
+  parts: [{"p":"p0","role":"line","d":"m16 17 5-5-5-5"},{"p":"p1","role":"line","d":"M21 12H9"},{"p":"p2","role":"line","d":"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"}],
+  ...preset("nudge-right", 3),
+};
+
+export const logIn: IconDef = {
+  name: "log-in",
+  title: "Sign in",
+  category: "actions",
+  tags: ["sign in","enter","login"],
+  motionNote: "It steps in.",
+  parts: [{"p":"p0","role":"line","d":"m10 17 5-5-5-5"},{"p":"p1","role":"line","d":"M15 12H3"},{"p":"p2","role":"line","d":"M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"}],
+  ...preset("nudge-right", 3),
+};
+
+export const bug: IconDef = {
+  name: "bug",
+  title: "Bug",
+  category: "status",
+  tags: ["bug","error","report","problem"],
+  motionNote: "It wriggles.",
+  parts: [{"p":"p0","role":"detail","d":"M12 20v-9"},{"p":"p1","role":"body","d":"M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z"},{"p":"p2","role":"line","d":"M14.12 3.88 16 2"},{"p":"p3","role":"line","d":"M21 21a4 4 0 0 0-3.81-4"},{"p":"p4","role":"line","d":"M21 5a4 4 0 0 1-3.55 3.97"},{"p":"p5","role":"line","d":"M22 13h-4"},{"p":"p6","role":"line","d":"M3 21a4 4 0 0 1 3.81-4"},{"p":"p7","role":"line","d":"M3 5a4 4 0 0 0 3.55 3.97"},{"p":"p8","role":"line","d":"M6 13H2"},{"p":"p9","role":"line","d":"m8 2 1.88 1.88"},{"p":"p10","role":"line","d":"M9 7.13V6a3 3 0 1 1 6 0v1.13"}],
+  ...preset("wiggle", 11),
+};
+
+export const messageHeart: IconDef = {
+  name: "message-heart",
+  title: "Feedback",
+  category: "app",
+  tags: ["feedback","love","review","message"],
+  motionNote: "It bounces.",
+  parts: [{"p":"p0","role":"body","d":"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"},{"p":"p1","role":"detail","d":"M7.5 9.5c0 .687.265 1.383.697 1.844l3.009 3.264a1.14 1.14 0 0 0 .407.314 1 1 0 0 0 .783-.004 1.14 1.14 0 0 0 .398-.31l3.008-3.264A2.77 2.77 0 0 0 16.5 9.5 2.5 2.5 0 0 0 12 8a2.5 2.5 0 0 0-4.5 1.5"}],
+  ...preset("bounce", 2),
+};
+
 export const keyboard: IconDef = {
   name: "keyboard",
   title: "Keyboard",

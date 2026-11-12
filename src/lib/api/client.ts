@@ -4,6 +4,7 @@ import type { ApiErrorBody, AudiobookCheck, ChapterEdit, ClipCheck, ConsentRecor
 import { rememberEngineNames } from "@/lib/engineNames";
 import { saveBlob } from "@/lib/audio";
 import { DEFAULT_SERVER, normaliseServerUrl } from "@/stores/settings";
+import { trackUse } from "@/lib/cloud";
 
 export { normaliseServerUrl };
 
@@ -103,6 +104,8 @@ async function request<T>(path: string, init: RequestOptions = {}, query?: Recor
     throw e;
   }
   if (!res.ok) throw await parseError(res);
+  // usage statistics: which feature was used (the route and engine, never the content)
+  trackUse(path, (rest.method ?? "GET").toUpperCase(), rest.body);
   if (res.status === 204) return undefined as T;
   const ct = res.headers.get("content-type") ?? "";
   if (ct.includes("application/json")) return (await res.json()) as T;

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, NavLink, useLocation, useMatch, useResolvedPath } from "react-router";
 import {
+  CircleUser,
+  MessageSquareHeart,
   AudioLines,
   BookA,
   BookOpen,
@@ -30,6 +32,8 @@ import { Tooltip } from "@/components/ui";
 import { ServerStatus } from "./ServerStatus";
 import { UpdatePill } from "./UpdateGate";
 import { Logo } from "./Logo";
+import { FeedbackDialog } from "@/components/cloud/FeedbackDialog";
+import { inTauri } from "@/lib/backend";
 
 type Item = { to: string; label: string; icon: Icon; end?: boolean; badge?: "jobs" };
 
@@ -70,6 +74,7 @@ GROUPS.push({
     { to: "/jobs", label: "Jobs", icon: ListChecks, badge: "jobs" },
     { to: "/engines", label: "Engines", icon: Cpu },
     { to: "/settings", label: "Settings", icon: Settings },
+    { to: "/account", label: "Account", icon: CircleUser },
   ],
 });
 
@@ -330,8 +335,34 @@ export function Sidebar() {
       {/* updates and the engine's state */}
       <div className={cn("shrink-0 border-t border-line py-1.5", collapsed ? "px-2 space-y-1.5" : "px-2 space-y-1")}>
         <UpdatePill collapsed={collapsed} />
+        <FeedbackButton collapsed={collapsed} />
         <ServerStatus compact={collapsed} />
       </div>
     </aside>
+  );
+}
+
+/** "Send feedback": opens the feedback form (desktop app only: it is sent through the app). */
+function FeedbackButton({ collapsed }: { collapsed: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!inTauri()) return null;
+  return (
+    <>
+      <Tooltip content="Send feedback" side="right" disabled={!collapsed}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={collapsed ? "Send feedback" : undefined}
+          className={cn(
+            "group flex h-8 w-full items-center rounded-[9px] text-[12.5px] font-medium text-muted outline-none transition-colors hover:bg-surface-3/70 hover:text-ink focus-visible:ring-2 focus-visible:ring-fire/50",
+            collapsed ? "mx-auto w-10 justify-center" : "gap-2.5 px-2.5",
+          )}
+        >
+          <MessageSquareHeart className="size-4 shrink-0" />
+          {!collapsed && "Send feedback"}
+        </button>
+      </Tooltip>
+      <FeedbackDialog open={open} onOpenChange={setOpen} />
+    </>
   );
 }

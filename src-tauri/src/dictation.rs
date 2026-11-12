@@ -834,8 +834,31 @@ fn start_with(app: &AppHandle, locked: bool, command: bool, handoff: Option<Hand
     show_overlay(app, cfg.spotlight && !command);
     emit_state(app, "starting", None);
     let app = app.clone();
+    // for usage statistics: which program (its name, not the window title), how it started, how long; never the words
+    let (program, by_wake, began) = (target.0.clone(), handoff.is_some(), Instant::now());
+    let mode = cfg.mode.clone();
     tauri::async_runtime::spawn(async move {
         let result = run(&app, &cfg, target, command, stop, cancel, handoff).await;
+        let ms = began.elapsed().as_millis() as u64;
+        let app_name = program.chars().take(80).collect::<String>();
+        match &result {
+            Ok(Some(r)) => crate::cloud::track(
+                &app,
+                if command { "dictation.command" } else { "dictation.done" },
+                serde_json::json!({
+                    "words": r.text.split_whitespace().count(),
+                    "chars": r.text.chars().count(),
+                    "seconds": r.seconds,
+                    "language": r.language,
+                    "mode": mode,
+                    "wake": by_wake,
+                    "app": app_name,
+                    "ms": ms,
+                }),
+            ),
+            Ok(None) => crate::cloud::track(&app, "dictation.empty", serde_json::json!({ "wake": by_wake, "app": app_name, "ms": ms })),
+            Err(e) => crate::cloud::track(&app, "dictation.error", serde_json::json!({ "error": e.chars().take(200).collect::<String>(), "app": app_name })),
+        }
         *lock(&app.state::<Dictation>().session) = None;
         // listening for the wake phrase again (once the overlay has gone, so it does not hear the chime)
         let again = app.clone();
