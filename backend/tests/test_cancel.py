@@ -64,9 +64,15 @@ def test_group_cancel_and_stop_fail_waiting_work():
     assert errs.count("cancelled") >= 4
     waiting = [pool.submit(f"more {i}", None, {}, i) for i in range(5)]
     pool.stop()
+    failed = 0
     for f in waiting:
-        with pytest.raises(Exception):
-            f.result(timeout=5)                               # never hangs
+        try:
+            f.result(timeout=5)                               # never hangs: every request ends, one way or the other
+        except Exception:
+            failed += 1
+    # what was still queued fails at once; the one request the worker had already taken may finish (on a slower
+    # machine the worker picks up "more 0" before stop() runs)
+    assert failed >= len(waiting) - 1
 
 
 def test_api_errors_stay_json(svc):

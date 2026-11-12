@@ -156,11 +156,26 @@ gh workflow run release.yml --ref main -f version=patch -f notes="One line of no
 `version` is `patch`, `minor`, `major` or an exact `X.Y.Z`. For longer notes, leave `notes` empty and commit
 `release-notes.md` to `main` first; the release commit moves its text into `CHANGELOG.md` and deletes it.
 
-1. **Plan and type check** (Linux): works out the version, checks the tag is free, runs the type check. The full backend
-   test suite is not run in CI (it hung on the GitHub runner while passing on Windows and in a Linux container): run
-   `cd backend && .venv/Scripts/python -m pytest -q` on your computer before releasing.
+**Before starting a release, run the whole backend test suite on your computer** (CI only runs a quick check, which
+saves Actions minutes and cannot stall a build):
+
+```
+cd backend && .venv/Scripts/python -m pytest -q                       # Windows, on the source
+node scripts/bundle-backend.mjs && node scripts/test-bundled-backend.mjs --full   # Windows, on the compiled backend
+```
+
+and on Linux, in Docker, on the same system as GitHub's runner (Ubuntu 22.04 with its own ffmpeg):
+
+```
+docker run --rm -v firevoice-uv-cache:/root/.cache/uv -v "$PWD:/src:ro" ubuntu:22.04 sh /src/scripts/test-linux.sh
+```
+
+(add `-e COMPILED=1` after `--rm` to test the compiled Linux backend, as the Linux installer ships it).
+
+1. **Plan and type check** (Linux): works out the version, checks the tag is free, runs the type check.
 2. **Build** (Windows, macOS and Linux side by side): sets the version, builds the signed installers, refuses a build
-   that would ship source, and runs the backend tests against the compiled wheel on each OS.
+   that would ship source, and gives the compiled backend a quick check on each OS (a few seconds: it loads, its server
+   starts and answers, and it resamples audio with the ffmpeg the app ships).
    * Windows: `FireVoice_X.Y.Z_x64-setup.exe` (updates) and `.msi`
    * macOS: `FireVoice_X.Y.Z_aarch64.dmg` and `FireVoice_X.Y.Z_aarch64.app.tar.gz` (updates)
    * Linux: `FireVoice_X.Y.Z_amd64.AppImage` (updates), `.deb` and `.rpm`
@@ -206,8 +221,8 @@ An installed copy holds no readable source of the app:
 
 The build fails rather than fall back to shipping source: if the compiler is missing, if a module does not compile,
 or if a source file is left in the wheel. A release also refuses a plain wheel or a UI build with source maps, and
-runs the backend tests against the compiled wheel that goes into the installer
-(`node scripts/test-bundled-backend.mjs` does that on its own). Building needs a C compiler; on Windows the Visual
+gives the compiled wheel that goes into the installer a quick check (`node scripts/test-bundled-backend.mjs`; add
+`--full` for the whole test suite against it). Building needs a C compiler; on Windows the Visual
 Studio Build Tools that Rust uses are enough.
 
 What this does not hide: compiled code can still be studied with a disassembler by someone determined, and the names

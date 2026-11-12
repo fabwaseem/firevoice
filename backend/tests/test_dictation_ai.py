@@ -66,6 +66,8 @@ def test_not_installed_is_reported_and_command_mode_refuses(svc, tmp_path, monke
 def test_suits_follows_memory_and_disk(monkeypatch, tmp_path):
     from firevoice import hardware
     monkeypatch.setenv("FIREVOICE_ENGINES_DIR", str(tmp_path / "engines"))
+    # the same answers on every system the tests run on (the assistant itself runs on Windows and Linux only)
+    monkeypatch.setattr(ai, "supported", lambda: True)
     monkeypatch.setattr(hardware, "detect", lambda gpu=None: {"ram_gb": 16.0, "disk_free_gb": 200.0})
     assert ai.suits() == (True, "")
     monkeypatch.setattr(hardware, "detect", lambda gpu=None: {"ram_gb": 4.0, "disk_free_gb": 200.0})
@@ -74,6 +76,12 @@ def test_suits_follows_memory_and_disk(monkeypatch, tmp_path):
     monkeypatch.setattr(hardware, "detect", lambda gpu=None: {"ram_gb": 16.0, "disk_free_gb": 2.0})
     ok, why = ai.suits()
     assert not ok and "disk" in why
+
+
+def test_a_system_without_the_assistant_is_told_so(monkeypatch):
+    monkeypatch.setattr(ai, "supported", lambda: False)
+    ok, why = ai.suits()
+    assert not ok and "Windows and Linux" in why
 
 
 @pytest.mark.parametrize("text, lang, ok", [

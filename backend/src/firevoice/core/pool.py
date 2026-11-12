@@ -42,9 +42,15 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         if os.name == "nt":
             subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
         else:
+            # the worker leads its own process group (start_new_session in _Worker.start), so this takes down it and
+            # its children only; never our own group, which would kill this process (and the app) with it
             try:
                 import signal
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                pgid = os.getpgid(proc.pid)
+                if pgid != os.getpgid(0):
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    proc.kill()
             except Exception:
                 proc.kill()
     except Exception:
@@ -122,7 +128,9 @@ class _Worker:
         except OSError:
             pass
         self._logf = open(self.log, "a", encoding="utf-8", errors="replace")
-        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._logf, text=True, encoding="utf-8", bufsize=1, cwd=str(spec.cwd) if spec.cwd else None, env=env)
+        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._logf, text=True, encoding="utf-8", bufsize=1, cwd=str(spec.cwd) if spec.cwd else None, env=env,
+                                     # its own process group on macOS and Linux, so stopping it can kill its whole tree
+                                     start_new_session=os.name != "nt")
         self.voices.clear()
         ready = self._read(timeout=self.pool.spec.start_timeout)
         if not ready or ready.get("event") != P.READY:
