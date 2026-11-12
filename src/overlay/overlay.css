@@ -22,13 +22,14 @@ body,
 }
 
 .ov-glass {
-  background: rgba(15, 16, 21, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(30, 31, 39, 0.96), rgba(13, 14, 18, 0.97));
+  border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow:
-    0 18px 40px -18px rgba(0, 0, 0, 0.85),
-    0 2px 8px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px);
+    0 20px 44px -18px rgba(0, 0, 0, 0.9),
+    0 2px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(140%);
 }
 
 /* the words, above the pill */
@@ -50,16 +51,79 @@ body,
   color: rgba(243, 244, 247, 0.5);
 }
 
+/* the pill: dark glass with a warm glow that follows the voice (--lvl, 0..1, set while listening). Its width is set
+   for each moment (getting ready, listening, writing it out, done) and moves between them. */
 .ov-pill {
+  --lvl: 0;
+  position: relative;
   display: flex;
   height: 44px;
-  min-width: 232px;
+  min-width: 44px;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   border-radius: 999px;
   padding: 0 16px 0 7px;
+  overflow: hidden;
   color: #f3f4f7;
-  transition: min-width 0.25s var(--ease-out-quart, ease-out);
+  transition:
+    width 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+    padding 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+    background 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    opacity 0.22s ease,
+    transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.ov-pill > * {
+  animation: ov-fade 0.2s ease both;
+}
+.ov-pill.ov-listening {
+  border-color: rgba(255, 132, 84, calc(0.16 + 0.3 * var(--lvl)));
+  box-shadow:
+    0 0 calc(10px + 22px * var(--lvl)) calc(-4px + 4px * var(--lvl)) rgba(255, 96, 48, calc(0.18 + 0.4 * var(--lvl))),
+    0 20px 44px -18px rgba(0, 0, 0, 0.9),
+    0 2px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition:
+    width 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+    padding 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+    border-color 0.12s linear,
+    box-shadow 0.12s linear;
+}
+
+/* done: the pill draws in to a green circle and the tick writes itself */
+.ov-pill.ov-done {
+  padding: 0;
+  justify-content: center;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: linear-gradient(160deg, #2fcf86, #12925a);
+  box-shadow:
+    0 0 0 0 rgba(47, 207, 134, 0.5),
+    0 14px 30px -12px rgba(18, 146, 90, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  animation: ov-done-pulse 0.9s ease-out 0.25s both;
+}
+.ov-tick {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+.ov-tick path {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: ov-draw 0.36s cubic-bezier(0.65, 0, 0.35, 1) 0.22s forwards;
+}
+.ov-pill.ov-out {
+  /* the entry animation holds the pill's transform, so it has to let go for the exit to play */
+  animation: none;
+  opacity: 0;
+  transform: scale(0.7);
 }
 
 .ov-dot {
@@ -72,7 +136,10 @@ body,
   justify-content: center;
   border-radius: 999px;
   color: #fff;
-  background-image: linear-gradient(135deg, #ff9c5e, #ff5a2d);
+  background-image: linear-gradient(145deg, #ffa86a, #ff5a2d 60%, #e8431c);
+  box-shadow:
+    0 4px 12px -3px rgba(255, 90, 45, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .ov-dot.listening::after {
   content: "";
@@ -85,26 +152,28 @@ body,
 .ov-dot.bad {
   background-image: none;
   background: #dc4444;
-}
-.ov-dot.ok {
-  background-image: none;
-  background: #17935f;
+  box-shadow: 0 4px 12px -3px rgba(220, 68, 68, 0.7);
 }
 
 .ov-bars {
   display: flex;
   height: 26px;
   flex: 1;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   gap: 3px;
+  /* the wave fades out at its ends */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
 }
 .ov-bars i {
   display: block;
   width: 3px;
   height: 100%;
   border-radius: 2px;
-  background: linear-gradient(180deg, #ff9c5e, #ff5a2d);
+  background: linear-gradient(180deg, #ffb27a, #ff5a2d);
+  box-shadow: 0 0 6px rgba(255, 110, 60, 0.35);
   transform: scaleY(0.12);
   transform-origin: center;
   will-change: transform;
@@ -122,7 +191,9 @@ body,
   color: rgba(243, 244, 247, 0.72);
 }
 .ov-time {
+  flex: none;
   font-size: 12px;
+  letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
   color: rgba(243, 244, 247, 0.6);
 }
@@ -145,6 +216,29 @@ body,
     opacity: 0;
   }
 }
+@keyframes ov-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ov-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ov-done-pulse {
+  to {
+    box-shadow:
+      0 0 0 12px rgba(47, 207, 134, 0),
+      0 14px 30px -12px rgba(18, 146, 90, 0.75),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+@keyframes ov-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
 @keyframes ov-spin {
   to {
     transform: rotate(360deg);
@@ -161,10 +255,30 @@ body,
   }
 }
 
+/* "Writing it out…": a light passes over the words while the text is made */
+.ov-shimmer {
+  background: linear-gradient(90deg, rgba(243, 244, 247, 0.55) 0%, rgba(243, 244, 247, 0.55) 40%, #fff 50%, rgba(243, 244, 247, 0.55) 60%, rgba(243, 244, 247, 0.55) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  animation: ov-shimmer 1.4s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ov-dot.listening::after,
-  .ov-in {
+  .ov-in,
+  .ov-pill > *,
+  .ov-shimmer,
+  .ov-pill.ov-done {
     animation: none;
+  }
+  .ov-tick path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .ov-pill {
+    transition-duration: 1ms;
   }
 }
 

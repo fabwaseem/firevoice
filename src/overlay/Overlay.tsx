@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Loader2, Mic } from "lucide-react";
+import { AlertTriangle, Loader2, Mic } from "lucide-react";
 import { onDictation, hotkeyLabels, type DictationStateEvent, type DictationTextEvent } from "@/lib/dictation";
 import { DEFAULT_DICTATION, type DictationConfig, type DictationPhase } from "@/stores/dictation";
 
@@ -59,6 +59,8 @@ function tipsFor(cfg: DictationConfig): string[] {
 
 /** The tip for the dictation that is starting, or null once enough dictations have shown one. */
 function nextTip(cfg: DictationConfig): string | null {
+  // the first dictation has the guide around the pill instead, which says what to do
+  if (!cfg.spotlightDone) return null;
   try {
     const n = Number(localStorage.getItem(TIP_KEY) ?? "0") || 0;
     if (n >= TIP_DICTATIONS) return null;
@@ -82,9 +84,13 @@ export function Overlay() {
   const [seconds, setSeconds] = useState(0);
   const [config, setConfig] = useState(savedConfig);
   const [tip, setTip] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const bars = useRef<HTMLDivElement>(null);
+  const pill = useRef<HTMLDivElement>(null);
   const levels = useRef<number[]>(Array(BARS).fill(0));
   const phaseRef = useRef(phase);
+  // the dictation that is ending put text in (the shell sends the result just before it goes idle)
+  const inserted = useRef(false);
   phaseRef.current = phase;
 
   useEffect(() => {
@@ -93,6 +99,7 @@ export function Overlay() {
         const cfg = savedConfig();
         const was = phaseRef.current;
         if (e.state === "starting") {
+          inserted.current = false;
           setConfig(cfg);
           setTip(nextTip(cfg));
           setText("");
@@ -103,8 +110,17 @@ export function Overlay() {
         if (cfg.sounds && e.state === "listening") chime(true);
         if (cfg.sounds && e.state === "finishing") chime(false);
         setMessage(e.message);
-        // a dictation that ends with text shows "Inserted" for a moment before the window goes
+        // a dictation that put text in becomes a green tick for a moment before the window goes; one that put
+        // nothing in just fades
+        if (e.state === "idle" && was === "finishing" && !inserted.current) {
+          setLeaving(true);
+          return;
+        }
+        setLeaving(false);
         setPhase(e.state === "idle" && was === "finishing" ? "done" : e.state);
+      }),
+      onDictation<{ text: string }>("dictation-result", (e) => {
+        inserted.current = !!e.text?.trim();
       }),
       onDictation<DictationTextEvent>("dictation-text", (e) => {
         setText(e.text);
@@ -130,6 +146,9 @@ export function Overlay() {
     const shown = Array(BARS).fill(0.12);
     const draw = () => {
       const el = bars.current?.children;
+      // the glow around the pill follows the voice
+      const avg = levels.current.slice(-6).reduce((a, b) => a + b, 0) / 6;
+      pill.current?.style.setProperty("--lvl", Math.min(1, avg * 1.4).toFixed(3));
       if (el) {
         for (let i = 0; i < BARS; i++) {
           // the middle of the row moves most, like a voice print
@@ -152,10 +171,19 @@ export function Overlay() {
     return () => clearInterval(id);
   }, [phase]);
 
+  // the tick has its moment, then the pill goes (the shell hides the window just after)
+  useEffect(() => {
+    if (phase !== "done") return;
+    const id = setTimeout(() => setLeaving(true), 780);
+    return () => clearTimeout(id);
+  }, [phase]);
+
   if (phase === "idle") return null;
   const keys = hotkeyLabels(config.hotkey).join(" + ");
   const hint = config.activation === "hold" ? "Release to finish" : `${keys} to finish`;
-  const showText = (phase === "listening" || phase === "finishing" || phase === "done") && (text || tentative);
+  const showText = (phase === "listening" || phase === "finishing") && (text || tentative);
+  // the pill takes the width each moment needs, and moves between them smoothly
+  const width = { starting: 184, listening: 252, finishing: 196, done: 44 }[phase as string];
 
   return (
     <div className="ov-stage" role="status" aria-live="polite">
@@ -169,36 +197,45 @@ export function Overlay() {
           </span>
         </div>
       )}
-      <div className="ov-glass ov-pill ov-in">
-        <span className={`ov-dot ${phase === "listening" ? "listening" : ""} ${phase === "error" ? "bad" : ""} ${phase === "done" ? "ok" : ""}`}>
-          {phase === "error" ? (
-            <AlertTriangle size={15} />
-          ) : phase === "done" ? (
-            <Check size={16} strokeWidth={2.6} />
-          ) : phase === "listening" ? (
-            <Mic size={15} strokeWidth={2.2} />
-          ) : (
-            <Loader2 size={15} className="ov-spin" />
-          )}
-        </span>
-        {phase === "listening" ? (
-          <>
-            <div className="ov-bars" ref={bars} aria-hidden>
-              {Array.from({ length: BARS }, (_, i) => (
-                <i key={i} />
-              ))}
-            </div>
-            <span className="ov-time" title={hint}>
-              {fmt(seconds)}
-            </span>
-          </>
+      <div
+        ref={pill}
+        className={`ov-glass ov-pill ov-in ov-${phase} ${leaving ? "ov-out" : ""}`}
+        style={width ? { width } : undefined}
+      >
+        {phase === "done" ? (
+          <svg className="ov-tick" viewBox="0 0 24 24" aria-label="Inserted">
+            <path d="M5.5 12.5l4.2 4.2L18.5 7.5" />
+          </svg>
         ) : (
-          <span className={`ov-label ${phase === "error" ? "" : "muted"}`}>
-            {phase === "starting" && "Getting ready…"}
-            {phase === "finishing" && (config.mode === "onstop" ? "Writing it out…" : "Finishing…")}
-            {phase === "done" && "Inserted"}
-            {phase === "error" && "Dictation could not start"}
-          </span>
+          <>
+            <span className={`ov-dot ${phase === "listening" ? "listening" : ""} ${phase === "error" ? "bad" : ""}`}>
+              {phase === "error" ? (
+                <AlertTriangle size={15} />
+              ) : phase === "listening" ? (
+                <Mic size={15} strokeWidth={2.2} />
+              ) : (
+                <Loader2 size={15} className="ov-spin" />
+              )}
+            </span>
+            {phase === "listening" ? (
+              <>
+                <div className="ov-bars" ref={bars} aria-hidden>
+                  {Array.from({ length: BARS }, (_, i) => (
+                    <i key={i} />
+                  ))}
+                </div>
+                <span className="ov-time" title={hint}>
+                  {fmt(seconds)}
+                </span>
+              </>
+            ) : (
+              <span className={`ov-label ${phase === "error" ? "" : "muted"} ${phase === "finishing" ? "ov-shimmer" : ""}`}>
+                {phase === "starting" && "Getting ready…"}
+                {phase === "finishing" && (config.mode === "onstop" ? "Writing it out…" : "Finishing…")}
+                {phase === "error" && "Dictation could not start"}
+              </span>
+            )}
+          </>
         )}
       </div>
     </div>

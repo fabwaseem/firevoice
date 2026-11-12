@@ -21,7 +21,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_tungstenite::tungstenite::Message;
@@ -60,6 +60,8 @@ pub struct Config {
     pub history: bool,
     /// command mode: select text, press this, say what to do with it ("" = off)
     pub command_hotkey: String,
+    /// the first-dictation guide: the screen dims around the pill, with a word on what to do (until one has worked)
+    pub spotlight: bool,
     /// more start options for the server, passed on as they are (the writing assistant: "polish", "styles")
     pub extra: serde_json::Value,
     pub server: String,
@@ -83,6 +85,7 @@ impl Default for Config {
             boost_quiet: false,
             history: true,
             command_hotkey: String::new(),
+            spotlight: false,
             extra: serde_json::Value::Null,
             server: "http://127.0.0.1:8787".into(),
             token: String::new(),
@@ -165,8 +168,42 @@ fn emit_state(app: &AppHandle, state: &'static str, message: Option<String>) {
 
 // ---------------------------------------------------------------------------------------------- overlay window
 
-/// Show the overlay at the bottom centre of the screen the mouse is on, without taking the keyboard focus.
-fn show_overlay(app: &AppHandle) {
+/// Where the spotlight's centre is, in the spotlight window's own (CSS) pixels.
+#[derive(Serialize, Clone)]
+struct Spot {
+    x: f64,
+    y: f64,
+}
+
+/// The first-dictation guide: a see-through window over the whole screen that dims everything but a circle around
+/// the pill. It never takes the mouse or the keyboard, and it sits under the pill (it is shown first).
+fn show_spotlight(app: &AppHandle, m: &tauri::Monitor, cx: i32, cy: i32) {
+    let Some(s) = app.get_webview_window("spotlight") else { return };
+    let _ = s.set_ignore_cursor_events(true);
+    let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
+    let _ = s.set_position(PhysicalPosition::new(pos.x, pos.y));
+    let _ = s.set_size(PhysicalSize::new(size.width, size.height));
+    let _ = s.set_position(PhysicalPosition::new(pos.x, pos.y));
+    let _ = app.emit_to("spotlight", "spotlight", Spot { x: (cx - pos.x) as f64 / scale, y: (cy - pos.y) as f64 / scale });
+    let _ = s.show();
+}
+
+/// Take the guide away once its fade-out has played (the page fades itself when listening ends).
+fn hide_spotlight_later(app: &AppHandle, after: Duration) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(after).await;
+        if lock(&app.state::<Dictation>().session).is_none() {
+            if let Some(s) = app.get_webview_window("spotlight") {
+                let _ = s.hide();
+            }
+        }
+    });
+}
+
+/// Show the overlay at the bottom centre of the screen the mouse is on, without taking the keyboard focus; with
+/// `spotlight`, the first-dictation guide comes up around it.
+fn show_overlay(app: &AppHandle, spotlight: bool) {
     let Some(w) = app.get_webview_window("dictation") else { return };
     let _ = w.set_ignore_cursor_events(true);
     let monitor = app
@@ -174,11 +211,23 @@ fn show_overlay(app: &AppHandle) {
         .ok()
         .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
         .or_else(|| w.primary_monitor().ok().flatten());
-    if let (Some(m), Ok(size)) = (monitor, w.outer_size()) {
+    if let (Some(m), Ok(now), Ok(scale_now)) = (monitor, w.outer_size(), w.scale_factor()) {
+        // the window's size on the screen it is going to: screens can have different scaling (150 % and 100 %),
+        // and the size it has now belongs to the screen it was last on, which would put it off centre
+        let logical = now.to_logical::<f64>(scale_now);
+        let size = PhysicalSize::new((logical.width * m.scale_factor()).round() as u32, (logical.height * m.scale_factor()).round() as u32);
         let area = m.work_area();
         let x = area.position.x + (area.size.width as i32 - size.width as i32) / 2;
         let y = area.position.y + area.size.height as i32 - size.height as i32 - (28.0 * m.scale_factor()) as i32;
+        // moving to a screen with other scaling makes Windows resize the window on the way: size it for the new
+        // screen, and put it in place again after
         let _ = w.set_position(PhysicalPosition::new(x, y));
+        let _ = w.set_size(size);
+        let _ = w.set_position(PhysicalPosition::new(x, y));
+        if spotlight {
+            // the pill sits at the bottom of the overlay window: 12 px of padding, then half of its 44 px
+            show_spotlight(app, &m, x + size.width as i32 / 2, y + size.height as i32 - (34.0 * m.scale_factor()) as i32);
+        }
     }
     let _ = w.show();
 }
@@ -412,7 +461,7 @@ fn rescue(app: &AppHandle, text: &str, why: &str) {
     } else {
         "FireVoice could not type into this program. Your text is in the dictation history."
     };
-    show_overlay(app);
+    show_overlay(app, false);
     emit_state(app, "error", Some(msg.into()));
     hide_overlay_later(app, Duration::from_millis(4500));
 }
@@ -717,17 +766,19 @@ fn start(app: &AppHandle, locked: bool, command: bool) {
     }
     // which program the words go to: read before the overlay appears (it never takes the focus, but be sure)
     let target = foreground_app().unwrap_or_default();
-    show_overlay(app);
+    show_overlay(app, cfg.spotlight && !command);
     emit_state(app, "starting", None);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let result = run(&app, &cfg, target, command, stop, cancel).await;
         *lock(&app.state::<Dictation>().session) = None;
+        hide_spotlight_later(&app, Duration::from_millis(900));
         match result {
             Ok(Some(r)) => {
                 let _ = app.emit("dictation-result", r);
                 emit_state(&app, "idle", None);
-                hide_overlay_later(&app, Duration::from_millis(900));
+                // the pill turns into a green tick and fades (about a second), then the window goes
+                hide_overlay_later(&app, Duration::from_millis(1150));
             }
             Ok(None) => {
                 emit_state(&app, "idle", None);

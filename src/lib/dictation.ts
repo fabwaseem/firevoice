@@ -58,6 +58,8 @@ export const dictation = {
         boost_quiet: config.boostQuiet,
         history: config.history,
         command_hotkey: config.commandHotkey,
+        // the first-dictation guide, until one dictation has gone in
+        spotlight: !config.spotlightDone,
         // passed on to the server as they are
         // the computer's own language list: a hint for automatic language when no languages are listed
         extra: { polish: config.polish, styles: config.styles, languages: config.languages, language_hints: systemLanguages(), translate_to: config.translateTo || null },
@@ -71,7 +73,7 @@ export const dictation = {
 };
 
 /** Listen to one of the shell's dictation events; -> a function that stops listening. */
-export async function onDictation<T>(event: "dictation" | "dictation-level" | "dictation-text" | "dictation-result", fn: (payload: T) => void) {
+export async function onDictation<T>(event: "dictation" | "dictation-level" | "dictation-text" | "dictation-result" | "spotlight", fn: (payload: T) => void) {
   const { listen } = await import("@tauri-apps/api/event");
   return listen<T>(event, (e) => fn(e.payload));
 }

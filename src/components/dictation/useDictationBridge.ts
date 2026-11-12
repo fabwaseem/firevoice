@@ -68,7 +68,10 @@ export function useDictationBridge() {
       }),
       onDictation<DictationTextEvent>("dictation-text", (e) => live.set({ text: e.text, tentative: e.tentative })),
       onDictation<DictationResultEvent>("dictation-result", (e) => {
-        useDictation.getState().add({ text: e.text.trim(), seconds: e.seconds, language: e.language, mode: e.mode });
+        const d = useDictation.getState();
+        d.add({ text: e.text.trim(), seconds: e.seconds, language: e.language, mode: e.mode });
+        // the first dictation went in: the guide around the pill has done its job
+        if (e.text.trim() && e.mode !== "command" && !d.config.spotlightDone) d.set({ spotlightDone: true });
         void qc.invalidateQueries({ queryKey: ["dictation-history"] });
       }),
     ];

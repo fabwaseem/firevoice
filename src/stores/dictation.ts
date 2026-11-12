@@ -46,6 +46,8 @@ export interface DictationConfig {
   featuresVisited: number;
   /** ...and has closed the "What's new" card for */
   featuresSeen: number;
+  /** a dictation has gone in, so the first-dictation guide (the screen dimmed around the pill) is not shown again */
+  spotlightDone: boolean;
 }
 
 /** Raise when dictation gains features worth pointing out: the sidebar says "New" and the page shows what came. */
@@ -96,6 +98,7 @@ export const DEFAULT_DICTATION: DictationConfig = {
   translateTo: "",
   featuresVisited: 0,
   featuresSeen: 0,
+  spotlightDone: false,
 };
 
 const KEEP = 100;

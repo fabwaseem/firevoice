@@ -26,6 +26,22 @@
         "visible": false
       },
       {
+        "label": "spotlight",
+        "title": "FireVoice guide",
+        "url": "spotlight.html",
+        "width": 800,
+        "height": 600,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "focusable": false
+      },
+      {
         "label": "dictation",
         "title": "FireVoice dictation",
         "url": "overlay.html",

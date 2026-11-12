@@ -36,8 +36,8 @@ export default defineConfig({
     // Loaded from disk inside the desktop shell, so one larger bundle is fine.
     chunkSizeWarningLimit: 1500,
     rolldownOptions: {
-      // two pages: the app, and the small dictation window that floats over other programs
-      input: { main: fileURLToPath(new URL("./index.html", import.meta.url)), overlay: fileURLToPath(new URL("./overlay.html", import.meta.url)) },
+      // three pages: the app, the small dictation window that floats over other programs, and the first-dictation guide
+      input: { main: fileURLToPath(new URL("./index.html", import.meta.url)), overlay: fileURLToPath(new URL("./overlay.html", import.meta.url)), spotlight: fileURLToPath(new URL("./spotlight.html", import.meta.url)) },
       // Release builds name their files by content hash only, so the file names say nothing about the code inside.
       output: process.env.TAURI_ENV_DEBUG
         ? undefined
