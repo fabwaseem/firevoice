@@ -215,9 +215,20 @@ async function publish() {
     if (existsSync(join(root, NOTES_FILE))) run("git", ["rm", "-q", NOTES_FILE]);
     run("git", ["commit", "-m", `Release ${tag}`]);
     run("git", ["tag", "-a", tag, "-m", `FireVoice ${version}`]);
-    // fails if main moved on while the builds ran: then start the release again from the new main
-    run("git", ["push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`]);
-    info(`pushed Release ${tag} to main`);
+    const pushed = spawnSync("git", ["push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`], { stdio: "inherit" }).status === 0;
+    if (pushed) info(`pushed Release ${tag} to main`);
+    else {
+      // main moved on while the builds ran (someone pushed): the tag stays on the source the installers were built
+      // from, and the release commit (version files, changelog) goes on top of the new main
+      info("main moved on while the builds ran: putting the release commit on top of it");
+      const release = out("git", ["rev-parse", "HEAD"]);
+      run("git", ["fetch", "--quiet", "origin", "main"]);
+      run("git", ["checkout", "--quiet", "--detach", "FETCH_HEAD"]);
+      if (spawnSync("git", ["cherry-pick", release], { stdio: "inherit" }).status !== 0)
+        fail(`Release ${tag} does not apply on top of the new main (the version files or the changelog changed there). Nothing was pushed: start the release again from main`);
+      run("git", ["push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${tag}`]);
+      info(`pushed Release ${tag} on top of the new main; the tag is on the built source`);
+    }
   }
 
   // the public release
