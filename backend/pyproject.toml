@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "firevoice"
-version = "1.9.0"
+version = "2.0.0"
 description = "Local expressive text-to-speech and speech-to-text engine: many open models behind one service and one HTTP API (for the FireVoice desktop app)."
 readme = "README.md"
 requires-python = ">=3.10"
