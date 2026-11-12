@@ -352,6 +352,9 @@ pub fn backend_start(app: AppHandle, st: State<Backend>, port: Option<u16>) -> R
         cmd.env_remove("PYTHONPATH").env_remove("PYTHONHOME");
         // engine installs use the torch wheels the app downloaded instead of fetching them again
         cmd.env("FIREVOICE_WHEELS", wheels_dir(&app));
+        // and the same Python rules as the runtime: only Pythons uv downloads itself, kept in FireVoice's own folder
+        // (an engine on Python 3.11 would otherwise land in uv's shared folder, or on a Python the user installed)
+        cmd.env("UV_PYTHON_INSTALL_DIR", runtime_dir(&app).join("python")).env("UV_PYTHON_PREFERENCE", "only-managed");
     }
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -513,13 +516,15 @@ fn step_lines(app: &AppHandle, step: u32, steps: u32, label: &str) -> OnLine {
     })
 }
 
-/// uv, set up to build the runtime: its Python downloads go into the runtime folder, and it ignores the user's venv.
+/// uv, set up to build the runtime: it uses only a Python it downloaded itself, into the runtime folder (never one the
+/// user installed, which could be removed or upgraded under FireVoice), and it ignores the user's venv.
 fn uv_cmd(res: &Path, rt: &Path, args: &[&str]) -> Command {
     let uv = res.join(exe("uv"));
     let uv = if uv.exists() { uv } else { PathBuf::from(exe("uv")) };
     let mut c = Command::new(uv);
     c.args(args)
         .env("UV_PYTHON_INSTALL_DIR", rt.join("python"))
+        .env("UV_PYTHON_PREFERENCE", "only-managed")
         .env("UV_LINK_MODE", "hardlink")
         .env_remove("VIRTUAL_ENV")
         .env_remove("PYTHONPATH");
