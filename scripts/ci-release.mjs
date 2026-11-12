@@ -175,7 +175,9 @@ async function publish() {
     }
     if (existsSync(join(d, "platforms.json"))) Object.assign(platforms, JSON.parse(readFileSync(join(d, "platforms.json"), "utf8")));
   }
-  for (const p of ["windows-x86_64", "darwin-aarch64", "linux-x86_64"]) if (!platforms[p]) fail(`no ${p} build in release-out/`);
+  // every platform, always; only a dry run may leave macOS out (SKIP_MACOS, to save its 10x minutes)
+  const need = ["windows-x86_64", "darwin-aarch64", "linux-x86_64"].filter((p) => !(dry && process.env.SKIP_MACOS && p.startsWith("darwin")));
+  for (const p of need) if (!platforms[p]) fail(`no ${p} build in release-out/`);
 
   const final = join(OUT, "final");
   rmSync(final, { recursive: true, force: true });
