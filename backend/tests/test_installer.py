@@ -44,7 +44,8 @@ def test_install_writes_marker_and_detects_changes(engines, monkeypatch):
     steps = [c[1] if c[0] == "uv" else "py" for c in engines]
     assert steps[:3] == ["venv", "pip", "pip"]
     torch_cmd = engines[1]
-    assert "torch==2.11.0" in torch_cmd and installer.TORCH_INDEX in torch_cmd
+    # the CUDA build with an NVIDIA card, the CPU build otherwise (CI runners have no graphics card)
+    assert "torch==2.11.0" in torch_cmd and installer.torch_index() in torch_cmd
     assert seen[-1][2] == "installed" and seen[-1][0] == seen[-1][1]
     m = installer.MANIFESTS["voxcpm2"]
     assert installer.venv_state(m) == "ok" and installer.plan("voxcpm2")["installed"]
@@ -55,6 +56,14 @@ def test_install_writes_marker_and_detects_changes(engines, monkeypatch):
     # a changed pin marks the venv outdated
     monkeypatch.setattr(m, "packages", m.packages + ["newthing==1.0"])
     assert installer.venv_state(m) == "outdated"
+
+
+def test_torch_index_follows_the_graphics_card(monkeypatch):
+    from firevoice import hardware
+    monkeypatch.setattr(hardware, "detect", lambda: {"accelerator": "cuda"})
+    assert installer.torch_index() == installer.TORCH_INDEX
+    monkeypatch.setattr(hardware, "detect", lambda: {"accelerator": "none"})
+    assert installer.torch_index() == installer.TORCH_INDEX_CPU
 
 
 def test_interrupted_install_is_not_ok(engines, monkeypatch):

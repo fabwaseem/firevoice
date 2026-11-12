@@ -80,7 +80,7 @@ function Control({ label, icon, danger, corner, onClick }: { label: string; icon
         corner && "rounded-tr-[8px]",
       )}
     >
-      <MotionIcon icon={icon} size={12} />
+      <MotionIcon icon={icon} size={12} strokeWidth={2.4} />
     </button>
   );
 }

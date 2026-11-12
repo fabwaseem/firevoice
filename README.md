@@ -156,7 +156,9 @@ gh workflow run release.yml --ref main -f version=patch -f notes="One line of no
 `version` is `patch`, `minor`, `major` or an exact `X.Y.Z`. For longer notes, leave `notes` empty and commit
 `release-notes.md` to `main` first; the release commit moves its text into `CHANGELOG.md` and deletes it.
 
-1. **Plan and test** (Linux): works out the version, checks the tag is free, runs the type check and backend tests.
+1. **Plan and type check** (Linux): works out the version, checks the tag is free, runs the type check. The full backend
+   test suite is not run in CI (it hung on the GitHub runner while passing on Windows and in a Linux container): run
+   `cd backend && .venv/Scripts/python -m pytest -q` on your computer before releasing.
 2. **Build** (Windows, macOS and Linux side by side): sets the version, builds the signed installers, refuses a build
    that would ship source, and runs the backend tests against the compiled wheel on each OS.
    * Windows: `FireVoice_X.Y.Z_x64-setup.exe` (updates) and `.msi`
