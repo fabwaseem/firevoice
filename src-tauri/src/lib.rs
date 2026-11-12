@@ -17,6 +17,24 @@ fn show_main(app: &AppHandle) {
     }
 }
 
+/// FireVoice draws its own title bar, so Windows would otherwise give the window a 1-pixel border line along the top
+/// and square corners: ask for Windows 11's rounded corners and no border colour (older Windows ignores both).
+#[cfg(windows)]
+fn window_frame(app: &AppHandle) {
+    use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND};
+    let Some(w) = app.get_webview_window("main") else { return };
+    let Ok(hwnd) = w.hwnd() else { return };
+    let hwnd = hwnd.0 as windows_sys::Win32::Foundation::HWND;
+    unsafe {
+        let round = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE as u32, (&round as *const i32).cast(), 4);
+        let none: u32 = DWMWA_COLOR_NONE;
+        DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR as u32, (&none as *const u32).cast(), 4);
+    }
+}
+#[cfg(not(windows))]
+fn window_frame(_app: &AppHandle) {}
+
 /// The tray icon: FireVoice stays reachable while its window is closed (dictation keeps working from there).
 fn tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open FireVoice", true, None::<&str>)?;
@@ -103,6 +121,7 @@ pub fn run() {
             if let Err(e) = tray(app.handle()) {
                 log::warn!("no tray icon: {e}");
             }
+            window_frame(app.handle());
             // start with the computer (on unless the user turned it off); started that way, stay in the tray
             autostart::sync(app.handle());
             if !autostart::started_at_login() {

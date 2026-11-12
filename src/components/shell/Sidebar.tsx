@@ -328,7 +328,7 @@ export function Sidebar() {
       </nav>
 
       {/* updates and the engine's state */}
-      <div className={cn("shrink-0 border-t border-line pt-2.5 pb-3", collapsed ? "px-2 space-y-1.5" : "px-2.5 space-y-2.5")}>
+      <div className={cn("shrink-0 border-t border-line py-1.5", collapsed ? "px-2 space-y-1.5" : "px-2 space-y-1")}>
         <UpdatePill collapsed={collapsed} />
         <ServerStatus compact={collapsed} />
       </div>

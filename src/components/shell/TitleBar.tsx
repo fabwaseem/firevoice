@@ -55,13 +55,13 @@ export function TitleBar({ overlay, scrolled }: { overlay?: boolean; scrolled?: 
           one, close turns a quarter */}
       <Control label="Minimize" icon={windowMinimize} onClick={() => void act("min")} />
       <Control label={max ? "Restore" : "Maximize"} icon={max ? windowRestore : windowMaximize} onClick={() => void act("max")} />
-      <Control label="Close" icon={windowClose} danger onClick={() => void act("close")} />
+      <Control label="Close" icon={windowClose} danger corner={!max} onClick={() => void act("close")} />
       </div>
     </div>
   );
 }
 
-function Control({ label, icon, danger, onClick }: { label: string; icon: IconDef; danger?: boolean; onClick: () => void }) {
+function Control({ label, icon, danger, corner, onClick }: { label: string; icon: IconDef; danger?: boolean; corner?: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -71,6 +71,8 @@ function Control({ label, icon, danger, onClick }: { label: string; icon: IconDe
       className={cn(
         "grid w-[46px] place-items-center text-muted outline-none transition-[color,background,opacity] duration-100 focus-visible:bg-surface-3",
         danger ? "hover:bg-[#e5373a] hover:text-white active:bg-[#c42b2e]" : "hover:bg-surface-3 hover:text-ink active:bg-line-strong",
+        // the window's own rounded corner (Windows 11: 8 px), so the red never pokes out of it; square when maximized
+        corner && "rounded-tr-[8px]",
       )}
     >
       <MotionIcon icon={icon} size={12} />

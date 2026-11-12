@@ -42,21 +42,21 @@ export function ServerStatus({ compact }: { compact?: boolean }) {
       </Tooltip>
     );
   }
+  // one line: the state, the card, and how full its memory is as a small bar with the number beside it
   return (
     <Tooltip content={label} side="right">
-      <Link to="/engines" aria-label={label} className="block rounded-[10px] px-3 py-2 transition-colors hover:bg-surface-3/70">
-        <span className="flex items-center gap-2">
-          {dot}
-          <span className="text-[12px] font-medium text-ink-2">{state}</span>
-          {gpuName && <span className="ml-auto truncate text-[11px] text-faint">{gpuName}</span>}
-        </span>
-        {bar && (
-          <span className="mt-2 flex items-center gap-2">
-            {bar}
+      <Link to="/engines" aria-label={label} className="flex h-8 items-center gap-2 rounded-[9px] px-2.5 transition-colors hover:bg-surface-3/70">
+        {dot}
+        <span className="shrink-0 text-[12px] font-medium text-ink-2">{state}</span>
+        {bar ? (
+          <span className="ml-auto flex min-w-0 items-center gap-1.5">
+            <span className="w-10 shrink-0">{bar}</span>
             <span className="shrink-0 text-[10.5px] text-faint tabular">
               {used != null ? used.toFixed(1) : "–"}/{total?.toFixed(0)} GB
             </span>
           </span>
+        ) : (
+          gpuName && <span className="ml-auto truncate text-[11px] text-faint">{gpuName}</span>
         )}
       </Link>
     </Tooltip>
