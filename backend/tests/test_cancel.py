@@ -109,3 +109,18 @@ def test_stop_a_generation_mid_take():
         assert len(ok) > 0
     finally:
         pool.stop()
+
+
+def test_dictation_before_its_speech_model_is_installed_says_so(svc, monkeypatch):
+    """The first setup installs the speech model's packages in its second part. Until then, warming dictation up must
+    answer a clean 503 the app can show, not crash (an unhandled error also lost its CORS header: a "network error")."""
+    import sys
+
+    from fastapi.testclient import TestClient
+
+    from firevoice.server import create_app
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)    # importing it now fails, as before it is installed
+    svc._aligner = None
+    c = TestClient(create_app(svc), raise_server_exceptions=False)
+    r = c.post("/api/v1/dictate/warm")
+    assert r.status_code == 503 and "still setting them up" in r.json()["error"]["message"]

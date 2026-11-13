@@ -480,7 +480,15 @@ class FireVoice:
         with self._aligner_lock:
             if self._aligner is None:
                 from .asr import FasterWhisperAligner
-                self._aligner = FasterWhisperAligner(self.asr_model, device=self.asr_device, concurrency=2)
+                try:
+                    self._aligner = FasterWhisperAligner(self.asr_model, device=self.asr_device, concurrency=2)
+                except ImportError as e:
+                    # the first setup installs the speech model's packages in its second part: until then, say so
+                    # (a clean 503 the app shows) rather than crash the request with a traceback
+                    raise FireVoiceError(
+                        "unavailable",
+                        "Dictation and transcription are not ready yet: FireVoice is still setting them up. Try again once setup has finished.",
+                    ) from e
             return self._aligner
 
     def dictation_aligner(self, language: Optional[str], languages: Optional[list]):
