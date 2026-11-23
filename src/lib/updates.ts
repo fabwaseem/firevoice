@@ -22,7 +22,7 @@ export interface UpdateStatus {
 }
 
 /** Where people can download FireVoice by hand if updating in the app keeps failing. */
-export const RELEASES_PAGE = "https://github.com/fabwaseem/firevoice-releases/releases/latest";
+export const RELEASES_PAGE = "https://github.com/fabwaseem/firevoice/releases/latest";
 
 async function call<T>(cmd: string): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");

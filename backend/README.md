@@ -407,5 +407,5 @@ Develop: `pytest` (CPU only, null engine, about 2 minutes; covers the service an
 
 ## License
 
-Proprietary: all rights reserved (see `LICENSE`). The code may not be copied, changed, shared or sold. Model weights
+MIT (see `LICENSE` at the repo root). Model weights
 carry their own licences (table above); non-commercial engines are for personal use.

@@ -1,58 +1,21 @@
-FireVoice Proprietary License
+MIT License
 
-Copyright (c) 2026 Waseem Anjum. All rights reserved.
+Copyright (c) 2026 Waseem Anjum
 
-FireVoice (the desktop application, its backend, and all source code, compiled code, designs, documentation and
-other materials in this repository or shipped with the application: "the Software") is the property of Waseem Anjum
-("the Owner"). The Software is licensed, not sold. No rights are granted except those stated here.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. What you may do
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-   You may install and run unmodified copies of the Software, obtained from the Owner or from a source the Owner has
-   approved, on computers you own or control, for your own personal or internal business use. Audio you make with the
-   Software is yours, subject to the licences of the speech models you choose to install and to the law.
-
-2. What you may not do
-
-   Unless the Owner has given you permission in writing, you may not:
-
-   a. copy the Software, or any part of it, other than as needed to install and run it as allowed above;
-   b. modify, adapt, translate or make derivative works of the Software;
-   c. distribute, publish, sublicense, rent, lease, lend, host or otherwise make the Software available to anyone else;
-   d. sell the Software, or offer it, or anything made from its code, as or inside a product or service;
-   e. reverse engineer, decompile or disassemble the Software, or try to obtain its source code, except where the law
-      gives you that right and does not allow it to be waived;
-   f. remove or change any copyright, trademark or licence notice;
-   g. use the name FireVoice or its logo to identify another product or service.
-
-3. Source code
-
-   Having access to the source code, however you came by it, gives you no right to use, copy, modify or share it.
-   The source code is confidential.
-
-4. Third-party components
-
-   The Software uses third-party software and speech models. Each remains under its own licence, which applies to it
-   in place of this one. Speech models are downloaded on your request and their licences (some of which forbid
-   commercial use) are yours to follow.
-
-5. Ownership
-
-   The Owner keeps all rights, title and interest in the Software, including all intellectual property rights.
-
-6. Termination
-
-   This licence ends automatically if you break any of its terms. When it ends you must stop using the Software and
-   delete every copy you have.
-
-7. No warranty
-
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING THE WARRANTIES OF
-   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
-
-8. Limit of liability
-
-   TO THE EXTENT THE LAW ALLOWS, THE OWNER IS NOT LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE
-   SOFTWARE OR ITS USE, WHETHER IN CONTRACT, TORT OR OTHERWISE.
-
-For permissions beyond this licence, contact the Owner.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

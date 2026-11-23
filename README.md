@@ -6,7 +6,7 @@ Built with **Tauri 2** (Rust shell, system WebView2), **React 19 + Vite 8 + Tail
 (a FastAPI HTTP API) that the app bundles and runs.
 
 ```
-firevoice/                 this repo (private: github.com/fabwaseem/firevoice)
+firevoice/                 this repo (github.com/fabwaseem/firevoice)
   backend/                 the voice engine: Python package, HTTP API, tests (a standalone project)
   src/                     the app's UI
   src-tauri/               the native shell: runs the backend, required updates
@@ -14,7 +14,8 @@ firevoice/                 this repo (private: github.com/fabwaseem/firevoice)
   release/                 built releases (not in git)
 ```
 
-Installers and the update feed are published to the public **github.com/fabwaseem/firevoice-releases**.
+FireVoice is open source under the MIT license. Installers and the update feed are published as this repo's releases:
+only the newest version is kept there (older releases are removed when a new one goes out; their git tags stay).
 
 ## Where things live
 
@@ -60,7 +61,7 @@ problem says so) with a **Try again** button.
 **The voice library pack.** `backend/.venv/Scripts/python.exe scripts/build-voices-pack.py` builds
 `release/voices/FireVoice-voices-N.zip` from your voices folder and rewrites `backend/src/firevoice/voicepack.json`
 (version, URL, size, SHA-256, the ids, the default voice). Only the ids listed in that committed file ever ship. Publish
-the zip once, before the release that needs it: `gh release create voices-N <zip> --repo fabwaseem/firevoice-releases`
+the zip once, before the release that needs it: `gh release create voices-N <zip> --repo fabwaseem/firevoice --latest=false`
 (the script prints the command). Add voices with `--all` (every voice in the folder) and publish the new version.
 
 `FIREVOICE_RUNTIME_DIR` builds the runtime in another folder, `FIREVOICE_VOICES_URL` points the voice pack download at
@@ -181,7 +182,7 @@ docker run --rm -v firevoice-uv-cache:/root/.cache/uv -v "$PWD:/src:ro" ubuntu:2
    * Linux: `FireVoice_X.Y.Z_amd64.AppImage` (updates), `.deb` and `.rpm`
 3. **Publish**, only once every build passed: writes `latest.json` (all platforms) and `SHA256SUMS.txt`, commits
    `Release vX.Y.Z` with the `CHANGELOG.md` entry, tags it, pushes `main` and the tag here, publishes every file as a
-   release of `fabwaseem/firevoice-releases`, and confirms the update feed announces the new version.
+   release of this repo, confirms the update feed announces the new version, and removes the older app releases.
 
 Nothing is committed or tagged until all three builds pass. If **Publish** fails, fix the cause and use **Re-run
 failed jobs**: it keeps the builds, keeps a tag it already pushed, and replaces files already on the release. If
@@ -199,7 +200,6 @@ Repository secrets (Settings > Secrets and variables > Actions):
 |---|---|
 | `TAURI_SIGNING_PRIVATE_KEY` | the contents of `updater.key` |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the contents of `updater.password` |
-| `RELEASES_TOKEN` | a fine-grained token with Contents: read and write on `fabwaseem/firevoice-releases` only |
 
 Optional, for a macOS build Apple trusts without the right-click (an Apple Developer account): `APPLE_CERTIFICATE`
 (the Developer ID Application certificate, `.p12` as base64), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`
@@ -252,7 +252,7 @@ a new key means everyone reinstalls by hand.
 Updates never block the app (`src-tauri/src/updater.rs`, `src/components/shell/UpdateGate.tsx`). A few seconds after
 start, every 30 minutes, and whenever its window comes back into view (from the tray) or the connection returns (at
 most once every 5 minutes), the app asks the feed
-(`https://github.com/fabwaseem/firevoice-releases/releases/latest/download/latest.json`) for the newest version.
+(`https://github.com/fabwaseem/firevoice/releases/latest/download/latest.json`) for the newest version.
 Settings > Check for updates asks right away.
 
 * **Newer version:** a card in the bottom-right corner says so, with what's new. If the window is hidden in the tray or
@@ -340,5 +340,4 @@ src-tauri/        Rust shell, capabilities, icons
 
 ## License
 
-Proprietary: all rights reserved (see `LICENSE`). The code may not be copied, changed, shared or sold without written
-permission. The speech models a user installs keep their own licences.
+MIT (see `LICENSE`). The speech models a user installs keep their own licences.

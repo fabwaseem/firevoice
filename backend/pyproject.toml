@@ -8,7 +8,7 @@ version = "2.0.1"
 description = "Local expressive text-to-speech and speech-to-text engine: many open models behind one service and one HTTP API (for the FireVoice desktop app)."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Proprietary. All rights reserved. See LICENSE." }
+license = { text = "MIT" }
 dependencies = [
   "numpy>=1.26",
   "soundfile>=0.12",

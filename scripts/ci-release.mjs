@@ -9,14 +9,15 @@
 //   node scripts/ci-release.mjs publish <X.Y.Z> [--dry-run]
 //        gathers release-out/*/, writes latest.json and SHA256SUMS.txt, then (not in a dry run) commits
 //        "Release vX.Y.Z" with the CHANGELOG entry, tags it, pushes main and the tag here, publishes every file as a
-//        release of the public releases repo, and confirms the update feed announces the new version.
+//        release of this repo, confirms the update feed announces the new version, then removes the older app
+//        releases (only the newest is kept; their tags stay, and voice-pack releases "voices-N" are left alone).
 //        Safe to run again: a tag already pushed is kept, and files already on the release are replaced.
 //
 // Release notes: the workflow's "notes" input (one line), or else release-notes.md at the repo root (removed by the
 // release commit, its text moves into CHANGELOG.md).
 //
 // Environment: TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD (build), GH_TOKEN with write access
-// to the releases repo (publish), RELEASE_NOTES (the workflow input, may be empty).
+// to this repo's contents (publish; the workflow's own token), RELEASE_NOTES (the workflow input, may be empty).
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -24,7 +25,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { compare, currentVersion, isPlain, nextVersion, root, setVersion, VERSION_FILES } from "./version.mjs";
 
-const RELEASES_REPO = "fabwaseem/firevoice-releases";
+const RELEASES_REPO = "fabwaseem/firevoice";
 const FEED = `https://github.com/${RELEASES_REPO}/releases/latest/download/latest.json`;
 const NOTES_FILE = "release-notes.md";
 const OUT = join(root, "release-out");
@@ -175,7 +176,7 @@ async function publish() {
     }
     if (existsSync(join(d, "platforms.json"))) Object.assign(platforms, JSON.parse(readFileSync(join(d, "platforms.json"), "utf8")));
   }
-  // every platform, always; only a dry run may leave macOS out (SKIP_MACOS, to save its 10x minutes)
+  // every platform, always; only a dry run may leave macOS out (SKIP_MACOS)
   const need = ["windows-x86_64", "darwin-aarch64", "linux-x86_64"].filter((p) => !(dry && process.env.SKIP_MACOS && p.startsWith("darwin")));
   for (const p of need) if (!platforms[p]) fail(`no ${p} build in release-out/`);
 
@@ -248,6 +249,16 @@ async function publish() {
     }
   }
   if (seen !== version) fail(`the update feed says ${seen ?? "nothing"}, not ${version}. Check https://github.com/${RELEASES_REPO}/releases`);
+
+  // only the newest app release stays up (the git tags stay); voice packs ("voices-N") are downloaded by the app and
+  // stay. A failure here does not undo a release that is already live.
+  const older = out("gh", ["release", "list", "--repo", RELEASES_REPO, "--limit", "200", "--json", "tagName", "-q", ".[].tagName"])
+    .split("\n")
+    .filter((t) => /^v\d/.test(t) && t !== tag);
+  for (const t of older) {
+    const gone = spawnSync("gh", ["release", "delete", t, "--repo", RELEASES_REPO, "--yes"], { stdio: "inherit" }).status === 0;
+    info(gone ? `removed the older release ${t}` : `could not remove the older release ${t}; remove it by hand`);
+  }
   info(`done: FireVoice ${version} is live for Windows, macOS and Linux.`);
 }
 

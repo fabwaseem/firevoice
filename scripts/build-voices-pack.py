@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INFO = ROOT / "backend" / "src" / "firevoice" / "voicepack.json"
-RELEASES = "fabwaseem/firevoice-releases"
+RELEASES = "fabwaseem/firevoice"
 FILES = ("meta.json", "ref.wav", "ref.txt", "preview.mp3", "avatar.png")
 STAMP = (2026, 1, 1, 0, 0, 0)
 
@@ -84,8 +84,8 @@ def main() -> int:
     INFO.write_text(json.dumps(info, indent=1) + "\n", encoding="utf-8")
     print(f"{zp}  {zp.stat().st_size / 1e6:.1f} MB  sha256 {sha[:16]}...  {len(ids)} voices, default {default}")
     print(f"voicepack.json updated (version {version}).")
-    print("To publish it (puts the file on the public releases repo):")
-    print(f'  gh release create voices-{version} "{zp}" --repo {RELEASES} --title "FireVoice voice library {version}" '
+    print("To publish it (a release of this repo, never marked latest: the update feed reads the latest release):")
+    print(f'  gh release create voices-{version} "{zp}" --repo {RELEASES} --latest=false --title "FireVoice voice library {version}" '
           f'--notes "The voice library FireVoice downloads during setup. Not meant to be downloaded by hand."')
     return 0
 
