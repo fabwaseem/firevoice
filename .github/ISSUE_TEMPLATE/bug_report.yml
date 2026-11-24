@@ -1,0 +1,51 @@
+name: Bug report
+description: Something in FireVoice doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Speak
+        2. Choose the voice ...
+        3. Press Render
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: FireVoice version
+      description: Settings > About
+      placeholder: "2.0.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple silicon)
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card
+      placeholder: "NVIDIA RTX 4070 (12 GB), or none"
+  - type: textarea
+    id: log
+    attributes:
+      label: Engine log
+      description: If something failed, paste the end of the log from Settings > About > View engine log.
+      render: text

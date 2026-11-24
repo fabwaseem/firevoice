@@ -6,7 +6,7 @@
 //                                                                  starts and answers, and it resamples audio with
 //                                                                  the ffmpeg the app ships
 //   node scripts/test-bundled-backend.mjs --full [pytest args]     the whole test suite against it (run before a release,
-//                                                                  on Windows and in Linux: see the README)
+//                                                                  on Windows and in Linux: see docs/DEVELOPMENT.md)
 //
 // It also checks the staged wheel is the protected one (no Python source in it). The tests run in backend/.venv
 // (node scripts/dev-setup.mjs) with the unpacked wheel ahead of everything else on the import path.
