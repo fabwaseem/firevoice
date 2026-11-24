@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.2 (2026-11-24)
+
+FireVoice is now open source, under the MIT license: the code is at github.com/fabwaseem/firevoice.
+
+- **Downloads and updates move to github.com/fabwaseem/firevoice.** This version checks for updates there. If you have 2.0.1 or older, download this version once from the FireVoice website; after that it updates by itself again.
+- **Dictation waits for setup.** Starting dictation while FireVoice is still setting it up now says so, instead of failing with a network error.
+
 ## 2.0.1 (2026-11-12)
 
 A fix for 2.0.0, which could open to an empty dark window.

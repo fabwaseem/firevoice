@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "FireVoice",
   "mainBinaryName": "FireVoice",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "identifier": "app.fabwaseem.firevoice",
   "build": {
     "frontendDist": "../dist",
